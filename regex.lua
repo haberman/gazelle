@@ -41,7 +41,7 @@ function FA:states()
   return breadth_first_traversal(self.start, function (s) return s:child_states() end)
 end
 
-dofile("regex_debug.lua")
+dofile("sketches/regex_debug.lua")
 
 function nfa_concat(nfa1, nfa2)
   if nfa1 == nil and nfa2 == nil then return nil end
@@ -82,40 +82,4 @@ function nfa_char(char)
   new_nfa.start.transitions[char] = {new_nfa.final}
   return new_nfa
 end
-
-function parse_regex(regex)
-  local nfa = nil
-  local last_nfa = nil
-  local stack = {}
-  local stack_depth = 0
-  for i=1, #regex do
-    char = regex:sub(i, i)
-    if char == "(" then
-      nfa = nfa_concat(nfa, last_nfa)
-      stack[stack_depth + 1] = nfa
-      stack_depth = stack_depth + 1
-      nfa, last_nfa = nil, nil
-    elseif char == ")" then
-      last_nfa = nfa_concat(nfa, last_nfa)
-      if stack_depth < 1 then
-        print("Error: unmatched right paren")
-        return nil
-      end
-      nfa = stack[stack_depth]
-      stack_depth = stack_depth - 1
-    elseif char == "*" then
-      last_nfa = nfa_kleene(last_nfa)
-    else
-      nfa = nfa_concat(nfa, last_nfa)
-      last_nfa = nfa_char(char)
-    end
-  end
-  return nfa_concat(nfa, last_nfa)
-end
-
-nfa = parse_regex("(1*01*0)*1*")
-statenum = 0
-dfa = nfa_to_dfa(nfa)
--- print(nfa:dump_dot())
-print(dfa:dump_dot())
 

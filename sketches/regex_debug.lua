@@ -1,5 +1,5 @@
 
-dofile("/Users/joshua/code/lua/pp.lua")
+dofile("sketches/pp.lua")
 
 -- function NFA:dump_dot()
 --   local str = "digraph untitled {\n"
@@ -42,7 +42,7 @@ function FA:dump_dot()
     str = str .. string.format('  "%s" [label="%s"];\n', tostring(state), label)
     for char,tostates in pairs(state.transitions) do
       --for i,tostate in pairs(tostates) do
-        str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostates), char)
+        str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostates), string.char(char))
       --end
     end
   end

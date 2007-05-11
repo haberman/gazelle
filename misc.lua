@@ -7,23 +7,46 @@ function newobject(class)
   return obj
 end
 
-function map(list, func)
-  local newlist = {}
-  for i,elem in ipairs(list) do table.insert(newlist, func(elem)) end
-  return newlist
+-- Queue
+Queue = {}
+function Queue:new(init)
+  local obj = newobject(self)
+  obj.first = 0
+  obj.last  = -1
+  if init then obj:enqueue(init) end
+  return obj
 end
 
-function inject(tab, func, val)
-  for k,v in pairs(tab) do val = func(val, k, v) end
+function Queue:enqueue(val)
+  self.last = self.last + 1
+  self[self.last] = val
+end
+
+function Queue:dequeue()
+  if self:isempty() then error("Tried to dequeue an empty queue") end
+  local val = self[self.first]
+  self[self.first] = nil
+  self.first = self.first + 1
   return val
 end
 
-function new_table_with_default(func_or_value)
-  if type(func_or_value) == 'function' then
-    setmetatable(table, {__index = func_or_value})
-  else
-    setmetatable(table, {__index = function () return func_or_value end})
-  end
+function Queue:isempty()
+  return self.first > self.last
+end
+
+-- Stack
+Stack = {}
+function Stack:new(init)
+  local obj = newobject(self)
+  return obj
+end
+
+function Stack:push(val)
+  table.insert(self, val)
+end
+
+function Stack:pop()
+  return table.remove(self)
 end
 
 -- Set
@@ -82,6 +105,24 @@ function Set:hash_key()
   return str
 end
 
+-- TokenStream
+TokenStream = {}
+function TokenStream:new(string)
+  obj = newobject(self)
+  obj.string = string
+  return obj
+end
+
+function TokenStream:lookahead(amount)
+  return obj.string:sub(amount, amount)
+end
+
+function TokenStream:get()
+  char = obj.string:sub(1, 1)
+  obj.string = obj.string:sub(2, -1)
+  return char
+end
+
 function set_or_array_each(set_or_array)
   if set_or_array.class == Set then
     return set_or_array:each()
@@ -96,19 +137,17 @@ end
 
 function breadth_first_traversal(obj, children_func)
   local seen = Set:new{obj}
-  local list = {obj}
   local queue = Queue:new(obj)
-  while not queue:empty() do
+  while not queue:isempty() do
     local node = queue:dequeue()
     children = children_func(node) or {}
     for child_node in set_or_array_each(children) do
       if seen:contains(child_node) == false then
         seen:add(child_node)
-        table.insert(list, child_node)
         queue:enqueue(child_node)
       end
     end
   end
-  return list
+  return seen
 end
 
