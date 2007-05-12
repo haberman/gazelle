@@ -37,14 +37,15 @@ function FA:dump_dot()
   table.sort(states, function (a, b) return a.statenum < b.statenum end)
   for i,state in ipairs(states) do
     if state.class ~= FAState then print("NO") end
-    local label = state.statenum
+    local label = ""
     local peripheries = 1
-    if state == self.start then label = "Begin"
-    elseif state == self.final or state.final then
+    if state == self.start then label = "Begin" end
+    if state == self.final or state.final then
+      if label ~= "" then label = label .. "/" end
       if state.final then
-        label = state.final
+        label = label .. state.final
       else
-        label = "Final"
+        label = label .. "Final"
       end
       peripheries = 2
     end

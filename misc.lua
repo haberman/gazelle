@@ -81,7 +81,7 @@ function Set:add_array(arr)
 end
 
 function Set:remove(x)
-  self.elements[x] = false
+  self.elements[x] = nil
 end
 
 function Set:to_array()
@@ -94,6 +94,15 @@ end
 
 function Set:each()
   return pairs(self.elements)
+end
+
+function Set:isempty()
+  local empty = true
+  for elem in self:each() do
+    empty = false
+    break
+  end
+  return empty
 end
 
 function Set:hash_key()

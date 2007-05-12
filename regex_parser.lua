@@ -160,5 +160,6 @@ while true do
 end
 
 dfa = nfas_to_dfa(nfas)
-print(dfa:dump_dot())
+minimal_dfa = expensive_minimize(dfa)
+print(minimal_dfa:dump_dot())
 
