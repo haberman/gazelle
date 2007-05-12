@@ -38,12 +38,32 @@ function FA:dump_dot()
   for i,state in ipairs(states) do
     if state.class ~= FAState then print("NO") end
     local label = state.statenum
-    if state == self.start then label = "Begin" end
-    str = str .. string.format('  "%s" [label="%s"];\n', tostring(state), label)
+    local peripheries = 1
+    if state == self.start then label = "Begin"
+    elseif state == self.final or state.final then
+      if state.final then
+        label = state.final
+      else
+        label = "Final"
+      end
+      peripheries = 2
+    end
+    str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
     for char,tostates in pairs(state.transitions) do
-      --for i,tostate in pairs(tostates) do
-        str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostates), string.char(char))
-      --end
+      if tostates.class == FAState then tostates = {tostates} end
+      for i,tostate in ipairs(tostates) do
+        local print_char
+        if char == "e" then
+          print_char = "ep"
+        elseif char == "(" then
+          print_char = "start capture"
+        elseif char == ")" then
+          print_char = "end capture"
+        else
+          print_char = string.char(char)
+        end
+        str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
+      end
     end
   end
   str = str .. "}"

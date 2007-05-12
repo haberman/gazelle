@@ -31,10 +31,13 @@ end
 -- and strings describing each token.  So:
 -- { {nfa1, "token string 1"},
 --   {nfa2, "token string 2", etc} }
-function nfas_to_dfa(nfas)
+function nfas_to_dfa(nfa_string_pairs)
   -- First we need to mark all final states and capture groups with the token string
-  for i, nfa_string_pair in ipairs(nfas) do
-    nfa, token_string = unpack(nfa_string_pair)
+  local nfas = {}
+
+  for i, nfa_string_pair in ipairs(nfa_string_pairs) do
+    local nfa, token_string = unpack(nfa_string_pair)
+    table.insert(nfas, nfa)
 
     -- We assign capture groups in order of the left parentheses we encounter
     capture_group_num = 0
@@ -56,15 +59,7 @@ function nfas_to_dfa(nfas)
   end
 
   -- Now combine all the nfas with alternation
-  local final_nfa = FA:new()
-  final_nfa.start["e"] = {}
-
-  for i, nfa_string_pairs in ipairs(nfas) do
-    nfa, token_string = unpack(nfa_string_pair)
-    table.insert(final_nfa.start["e"], nfa.start)
-    nfa.final["e"] = final_nfa.final
-  end
-
+  local final_nfa = nfa_alt(nfas)
   return nfa_to_dfa(final_nfa)
 end
 
@@ -75,8 +70,8 @@ function new_dfa_state(nfa_states, begin_groups, end_groups)
   -- (appropriately labeled) final state for the dfa
   for nfa_state in nfa_states:each() do
     if nfa_state.final then
-      dfa_state.final = dfa_state.final or {}
-      table.insert(dfa_state.final, nfa_state.final)
+      if dfa_state.final then print("Ambiguous finality not supported yet!!") end
+      dfa_state.final = nfa_state.final
     end
   end
 
@@ -98,9 +93,7 @@ function nfa_to_dfa(nfa)
 
   while not queue:isempty() do
     local nfa_states = queue:dequeue()
-    print("NFA states " .. nfa_states:hash_key())
     local dfa_state = dfa_states[nfa_states:hash_key()]
-    print("DFA state " .. tostring(dfa_state))
 
     -- Generate a list of symbols that transition out of this set of NFA states.
     -- We could skip this and just iterate over the entire symbol (character) space

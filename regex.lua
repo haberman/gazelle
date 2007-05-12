@@ -11,7 +11,7 @@ FAState = {}
 statenum = 1
 function FAState:new(init)
   local obj = newobject(self)
-  obj.transitions = {}
+  obj.transitions = init or {}
   obj.statenum = statenum
   statenum = statenum + 1
   return obj
@@ -57,9 +57,19 @@ function nfa_capture(nfa)
   return new_nfa
 end
 
-function nfa_alt(nfa1, nfa2)
-  local new_nfa = FA:new{start = {nfa1.start, nfa2.start}}
-  nfa1.final.transitions["e"], nfa2.final.transitions["e"] = {new_nfa.final}, {new_nfa.final}
+function nfa_alt2(nfa1, nfa2)
+  return nfa_alt({nfa1, nfa2})
+end
+
+function nfa_alt(nfas)
+  local new_nfa = FA:new()
+  new_nfa.start.transitions["e"] = {}
+
+  for i=1,#nfas do
+    table.insert(new_nfa.start.transitions["e"], nfas[i].start)
+    nfas[i].final.transitions["e"] = {new_nfa.final}
+  end
+
   return new_nfa
 end
 
@@ -81,5 +91,9 @@ function nfa_char(char)
   local new_nfa = FA:new()
   new_nfa.start.transitions[char] = {new_nfa.final}
   return new_nfa
+end
+
+function nfa_epsilon()
+  return nfa_char("e")
 end
 
