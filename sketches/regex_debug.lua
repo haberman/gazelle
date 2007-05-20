@@ -31,7 +31,7 @@ dofile("sketches/pp.lua")
 --   return str
 -- end
 
-function FA:dump_dot()
+function FA:__tostring()
   local str = "digraph untitled {\n"
   states = self:states():to_array()
   table.sort(states, function (a, b) return a.statenum < b.statenum end)
@@ -60,6 +60,8 @@ function FA:dump_dot()
           print_char = "start capture"
         elseif char == ")" then
           print_char = "end capture"
+        elseif type(char) == 'table' and char.class == IntSet then
+          print_char = char:tostring(function (x) return string.char(x) end)
         else
           print_char = string.char(char)
         end

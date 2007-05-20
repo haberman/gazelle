@@ -1,5 +1,27 @@
 
-dofile('regex.lua')
+dofile("data_structures.lua")
+dofile("misc.lua")
+dofile("thompson_nfa_construct.lua")
+
+-- TokenStream
+TokenStream = {}
+  function TokenStream:new(string)
+    local obj = newobject(self)
+    obj.string = string
+    return obj
+  end
+
+  function TokenStream:lookahead(amount)
+    return self.string:sub(amount, amount)
+  end
+
+  function TokenStream:get()
+    local char = self.string:sub(1, 1)
+    self.string = self.string:sub(2, -1)
+    return char
+  end
+-- class TokenStream
+
 
 -- regex ::= frag
 -- regex ::= regex "|" frag
@@ -94,59 +116,43 @@ function parse_prim(chars)
       elseif char == "r" then char = "\r"
       end
     end
-    char = nfa_char(char:byte())
+    int_set = IntSet:new()
+    int_set:add(Range:new(char:byte(), char:byte()))
+    char = nfa_char(int_set)
     return char
   end
 end
 
 function parse_char_class(chars)
   local leftbrace = chars:get()
-  local negated = false
+  local int_set = IntSet:new()
   if chars:lookahead(1) == "^" then
-    negated = true
+    int_set.negated = true
     chars:get()
   end
 
-  local char_list = {}
   while true do
     local char = chars:get()
     if char == "]" then break end
     if chars:lookahead(1) == "-" and chars:lookahead(2) ~= "]" then
       chars:get()
       local high_char = chars:get()
-      table.insert(char_list, {char:byte(), high_char:byte()})
+      int_set:add(Range:new(char:byte(), high_char:byte()))
     else
-      table.insert(char_list, char:byte())
+      int_set:add(Range:new(char:byte(), char:byte()))
     end
   end
 
-  local nfa
-  if negated == true then
-    print("Negations not supported yet!\n")
-  else
-    local nfas = {}
-    for char in set_or_array_each(char_list) do
-      if type(char) == "table" then
-        range_nfas = {}
-        low_char, high_char = unpack(char)
-        for i=low_char, high_char do
-          table.insert(range_nfas, nfa_char(i))
-        end
-        table.insert(nfas, nfa_alt(range_nfas))
-      else
-        table.insert(nfas, nfa_char(char))
-      end
-    end
-    nfa = nfa_alt(nfas)
-  end
-
-  return nfa
+  return nfa_char(int_set)
 end
 
 -- nfa = parse_regex(TokenStream:new("(1*01*0)*1*"))
 -- dfa = nfa_to_dfa(nfa)
 -- -- print(nfa:dump_dot())
 -- print(dfa:dump_dot())
+
+dofile("nfa_to_dfa.lua")
+dofile("sketches/regex_debug.lua")
 
 statenum = 0
 nfas = {}
@@ -155,11 +161,13 @@ while true do
   line = io.read()
   if line == nil then break end
   nfa = parse_regex(TokenStream:new(line))
+  print(nfa)
   table.insert(nfas, {nfa, "Regex" .. tostring(linenum)})
   linenum = linenum + 1
 end
 
 dfa = nfas_to_dfa(nfas)
-minimal_dfa = expensive_minimize(dfa)
-print(minimal_dfa:dump_dot())
+print(dfa)
+-- minimal_dfa = expensive_minimize(dfa)
+-- print(minimal_dfa:dump_dot())
 
