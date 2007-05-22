@@ -153,6 +153,7 @@ end
 
 dofile("nfa_to_dfa.lua")
 dofile("sketches/regex_debug.lua")
+dofile("minimize.lua")
 
 statenum = 0
 nfas = {}
@@ -161,13 +162,12 @@ while true do
   line = io.read()
   if line == nil then break end
   nfa = parse_regex(TokenStream:new(line))
-  print(nfa)
   table.insert(nfas, {nfa, "Regex" .. tostring(linenum)})
   linenum = linenum + 1
 end
 
 dfa = nfas_to_dfa(nfas)
 print(dfa)
--- minimal_dfa = expensive_minimize(dfa)
--- print(minimal_dfa:dump_dot())
+minimal_dfa = hopcroft_minimize(dfa)
+print(minimal_dfa)
 

@@ -13,16 +13,28 @@ function FAState:child_states()
   children = Set:new()
   for int_set, child_states in pairs(self.transitions) do
     if child_states.class == FAState then children:add(child_states)
-    else children:add_array(child_states) end
+    else children:add_collection(child_states) end
   end
   return children
 end
 
-function FAState:transition_for(int)
-  for int_set, child_states in pairs(self.transitions) do
-    if type(int_set) == "table" and int_set:contains(int) then return child_states end
+function FAState:add_transition(int_set, state)
+  for existing_int_set, existing_state in pairs(self.transitions) do
+    if state == existing_state then
+      existing_int_set:add_intset(int_set)
+      return
+    end
   end
-  return nil
+  self.transitions[int_set] = state
+end
+
+function FAState:transition_for(int)
+  local transitions = transitions_for(self.transitions, int):to_array()
+  if #transitions == 0 then
+    return nil
+  else
+    return transitions[1]
+  end
 end
 
 FA = {}

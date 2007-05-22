@@ -61,7 +61,7 @@ function FA:__tostring()
         elseif char == ")" then
           print_char = "end capture"
         elseif type(char) == 'table' and char.class == IntSet then
-          print_char = char:tostring(function (x) return string.char(x) end)
+          print_char = char:toasciistring()
         else
           print_char = string.char(char)
         end

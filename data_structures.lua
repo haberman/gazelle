@@ -52,10 +52,8 @@ Set = {}
   function Set:new(init)
     local obj = newobject(self)
     obj.elements = {}
-    if type(init) == "table" then
-      for i,elem in pairs(init) do
-        obj:add(elem)
-      end
+    if init then
+      obj:add_collection(init)
     end
     return obj
   end
@@ -72,8 +70,8 @@ Set = {}
     self.elements[x] = true
   end
 
-  function Set:add_array(arr)
-    for i, elem in ipairs(arr) do
+  function Set:add_collection(arr)
+    for elem in each(arr) do
       self:add(elem)
     end
   end
@@ -103,6 +101,14 @@ Set = {}
     return empty
   end
 
+  function Set:num_elements()
+    local num = 0
+    for elem in pairs(self.elements) do
+      num = num + 1
+    end
+    return num
+  end
+
   function Set:hash_key()
     local arr = {}
     for elem in pairs(self.elements) do table.insert(arr, tostring(elem)) end
@@ -117,7 +123,7 @@ Set = {}
 -- The Range is *inclusive* at both ends.
 Range = {}
   function Range:new(low, high)
-    if high ~= "Infinity" then assert(low <= high) end
+    assert(low <= high)
 
     local obj = newobject(self)
     obj.low = low
@@ -133,10 +139,40 @@ Range = {}
     if self.low == other.low then return true end
 
     if self.low > other.low then
-      return (other.high == "Infinity") or (self.low <= other.high)
+      return self.low <= other.high
     else
-      return (self.high == "Infinity") or (other.low <= self.high)
+      return other.low <= self.high
     end
+  end
+
+  function Range.intersection(a, b)
+    local low  = math.max(a.low, b.low)
+    local high = math.min(a.high, b.high)
+    if low > high then
+      return nil
+    else
+      return Range:new(low, high)
+    end
+  end
+
+  function Range.overlapping_or_adjacent(a, b)
+    return math.max(a.low, b.low) <= (math.min(a.high, b.high)+1)
+  end
+
+  function Range.union(a, b)
+    if Range.overlapping_or_adjacent(a, b) then
+      return {Range:new(math.min(a.low, b.low), math.max(a.high, b.high))}
+    else
+      if a.high < b.high then
+        return {a, b}
+      else
+        return {b, a}
+      end
+    end
+  end
+
+  function Range:is_superset(other)
+    return (self.low <= other.low) and (self.high >= other.high)
   end
 
   function Range:contains(int)
@@ -164,13 +200,29 @@ IntSet = {}
   end
 
   function IntSet:add(new_range)
+    local intersecting = {}
+    local nonintersecting = {}
     for range in each(self.list) do
-      if new_range:intersects(range) then
-        error(string.format("Tried to add range %s that overlaps with range %s", tostring(new_range), tostring(range)))
+      if new_range:overlapping_or_adjacent(range) then
+        table.insert(intersecting, range)
+      else
+        table.insert(nonintersecting, range)
       end
     end
 
-    table.insert(self.list, new_range)
+    local superrange = new_range
+    for range in each(intersecting) do
+      superrange = superrange:union(range)[1]
+    end
+
+    self.list = nonintersecting
+    table.insert(self.list, superrange)
+  end
+
+  function IntSet:add_intset(intset)
+    for range in each(intset.list) do
+      self:add(range)
+    end
   end
 
   function IntSet:contains(int)
@@ -178,6 +230,40 @@ IntSet = {}
       if range:contains(int) then return true end
     end
     return false
+  end
+
+  function IntSet:intersects(range)
+    for my_range in each(self.list) do
+      if my_range:intersects(range) then return true end
+    end
+    return false
+  end
+
+  function IntSet:sampleint()
+    if self.negated then
+      error("sampleint for non-negated sets only, please")
+    end
+
+    if #self.list == 0 then
+      return nil
+    else
+      return self.list[1].low
+    end
+  end
+
+  function IntSet:is_superset(other)
+    for range in each(other.list) do
+      local superset = false
+      for my_range in each(self.list) do
+        if my_range:is_superset(range) then
+          superset = true
+          break
+        end
+      end
+      if superset == false then return false end
+    end
+
+    return true
   end
 
   function IntSet:invert()
@@ -191,28 +277,32 @@ IntSet = {}
       if offset <= range.low-1 then
         new_intset:add(Range:new(offset, range.low-1))
       end
-
-      if range.high == "Infinity" then
-        offset = "Infinity"
-      else
-        offset = range.high+1
-      end
+      offset = range.high+1
     end
 
-    if offset ~= "Infinity" then
-      new_intset:add(Range:new(offset, "Infinity"))
+    if offset ~= math.huge then
+      new_intset:add(Range:new(offset, math.huge))
     end
 
     return new_intset
   end
 
   function IntSet:tostring(display_val_func)
-    local str = ""
-    if self.negated then str = "^" end
+    local obj = self
 
-    table.sort(self.list)
+    for range in each(obj.list) do
+      if range.high == math.huge then
+        obj = obj:invert()
+        break
+      end
+    end
+
+    local str = ""
+    if obj.negated then str = "^" end
+
+    table.sort(obj.list)
     local first = true
-    for range in each(self.list) do
+    for range in each(obj.list) do
       if first then
         first = false
       else
@@ -223,6 +313,23 @@ IntSet = {}
     end
 
     return str
+  end
+
+  function IntSet:toasciistring()
+    local convert_func = function (x)
+      if x == math.huge then
+        return "del"
+      elseif x < 33 then
+        return string.format("\\%3o", x)
+      else
+        return string.char(x)
+      end
+    end
+    return self:tostring(convert_func)
+  end
+
+  function IntSet:tointstring()
+    return self:tostring(function (x) return tostring(x) end)
   end
 -- class IntSet
 

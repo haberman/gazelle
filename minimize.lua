@@ -1,82 +1,116 @@
 
 dofile("data_structures.lua")
 
-function expensive_minimize(dfa)
-  local initial_partitions = {}
+function hopcroft_minimize(dfa)
+  -- first create the alphabet, which we define as the set of equivalent int sets
+  -- across all states in the dfa.  Also, create an inverse transition table.
+  local all_int_sets = {}
+  local inverse_transitions = {}
+
   for state in each(dfa:states()) do
-    finality = state.final or "NONE"
-    initial_partitions[finality] = initial_partitions[finality] or {}
-    table.insert(initial_partitions[finality], state)
-  end
-
-  local partitions = Set:new()
-  local work_queue = Queue:new()
-  for regex, states in pairs(initial_partitions) do
-    local partition = Set:new(states)
-    for i=0,256 do
-      work_queue:enqueue({i, partition})
+    for int_set, dest_state in pairs(state.transitions) do
+      table.insert(all_int_sets, int_set)
+      inverse_transitions[dest_state] = inverse_transitions[dest_state] or {}
+      inverse_transitions[dest_state][int_set] = state
     end
-    partitions:add(partition)
   end
 
-  while true do
-    if work_queue:isempty() then break end
-    local symbol, partition = unpack(work_queue:dequeue())
+  local alphabet = equivalence_classes(all_int_sets)
 
-    local new_partitions = Set:new()
-    local remove_partitions = Set:new()
+  -- Create initial blocks, grouped by finality.
+  local initial_blocks = {}
+  for state in each(dfa:states()) do
+    local finality = state.final or "NONE"
+    initial_blocks[finality] = initial_blocks[finality] or {}
+    table.insert(initial_blocks[finality], state)
+  end
 
-    for source_part in partitions:each() do
-      local leads_in = Set:new()
-      local leads_not_in = Set:new()
-      for part_state in source_part:each() do
-        if partition:contains(part_state.transitions[symbol]) then
-          leads_in:add(part_state)
-        else
-          leads_not_in:add(part_state)
+  local blocks = Set:new()
+  local work_queue = Queue:new()
+  local work_queue_set = Set:new()
+  for finality, states in pairs(initial_blocks) do
+    local block = Set:new(states)
+    blocks:add(block)
+    for state in each(states) do
+      state.block = block
+    end
+    for int_set in each(alphabet) do
+      work_queue:enqueue({block, int_set})
+      work_queue_set:add(tostring(block) .. tostring(int_set))
+    end
+  end
+
+  while (not work_queue:isempty()) do
+    local block, int_set = unpack(work_queue:dequeue())
+    work_queue_set:remove(tostring(block) .. tostring(int_set))
+
+    -- determine what blocks need to be split
+    local states_to_split = Set:new()
+    for state in each(block) do
+      if inverse_transitions[state] then
+        states_to_split:add_collection(transitions_for(inverse_transitions[state], int_set:sampleint()))
+      end
+    end
+
+    -- split blocks
+    local new_twins = {}
+    for state_to_split in each(states_to_split) do
+      for state in each(state_to_split.block) do
+        local dest_state = state:transition_for(int_set:sampleint())
+        if not (dest_state and dest_state.block == block) then
+          if not new_twins[state.block] then
+            local new_twin = Set:new()
+            blocks:add(new_twin)
+            new_twins[state.block] = new_twin
+          end
+          new_twins[state.block]:add(state)
         end
       end
-
-      if (not leads_in:isempty()) and (not leads_not_in:isempty()) then
-        new_partitions:add(leads_in)
-        new_partitions:add(leads_not_in)
-        remove_partitions:add(source_part)
-      end
     end
 
-    for new_part in new_partitions:each() do
-      partitions:add(new_part)
-      for i=0,256 do
-        work_queue:enqueue({i, new_part})
+    -- fix work queue according to splits
+    for old_block, new_twin in pairs(new_twins) do
+      for state in each(new_twin) do
+        state.block:remove(state)
+        state.block = new_twin
       end
-    end
 
-    for remove_partition in remove_partitions:each() do
-      partitions:remove(remove_partition)
+      local smaller_block
+      if old_block:num_elements() < new_twin:num_elements() then
+        smaller_block = old_block
+      else
+        smaller_block = new_twin
+      end
+
+      for alphabet_int_set in each(alphabet) do
+        if work_queue_set:contains(tostring(old_block) .. tostring(alphabet_int_set)) then
+          work_queue:enqueue({new_twin, alphabet_int_set})
+          work_queue_set:add(tostring(new_twin) .. tostring(alphabet_int_set))
+        else
+          work_queue:enqueue({smaller_block, alphabet_int_set})
+          work_queue_set:add(tostring(smaller_block) .. tostring(alphabet_int_set))
+        end
+      end
     end
   end
 
-  -- partitions are the new states
-  -- find the partition that has our original "begin" state in it
-  local begin_partition = nil
+  -- the blocks are the new states
   local states = {}
-  local partition_map = {}
-  for partition in partitions:each() do
-    states[partition] = FAState:new()
-    for state in partition:each() do
-      partition_map[state] = partition
+  for block in blocks:each() do
+    states[block] = FAState:new()
+    for state in each(block) do
       if state.final then
-        states[partition].final = state.final
+        states[block].final = state.final
       end
     end
   end
 
   local minimal_dfa = FA:new()
-  minimal_dfa.start = states[partition_map[dfa.start]]
-  for partition in partitions:each() do
-    for state in partition:each() do
-      for char, dest_state in pairs(state.transitions) do
-        states[partition].transitions[char] = states[partition_map[dest_state]]
+  minimal_dfa.start = states[dfa.start.block]
+  for block in blocks:each() do
+    for state in each(block) do
+      for int_set, dest_state in pairs(state.transitions) do
+        states[block]:add_transition(int_set, states[dest_state.block])
       end
     end
   end

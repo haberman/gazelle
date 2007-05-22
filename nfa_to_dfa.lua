@@ -106,7 +106,6 @@ function nfa_to_dfa(nfa)
     for nfa_state in nfa_states:each() do
       for symbol_set, new_state in pairs(nfa_state.transitions) do
         if type(symbol_set) == "table" then
-          print("Pre symbol set: " .. symbol_set:tostring(function (x) return string.char(x) end))
           symbol_sets:add(symbol_set)
         end
       end
@@ -116,7 +115,6 @@ function nfa_to_dfa(nfa)
     -- For each output symbol, generate the list of destination NFA states that
     -- recognizing this symbol could put you in (including epsilon transitions).
     for symbol_set in each(symbol_sets) do
-      print("Post symbol set: " .. tostring(symbol_set))
       local dest_nfa_states = Set:new()
       for nfa_state in nfa_states:each() do
         -- equivalence classes dictate that this character represents what will
@@ -126,7 +124,7 @@ function nfa_to_dfa(nfa)
         if target_states then
           for target_state in each(target_states) do
             dest_nfa_states:add(target_state)
-            dest_nfa_states:add_array(epsilon_closure(target_state):to_array())
+            dest_nfa_states:add_collection(epsilon_closure(target_state):to_array())
           end
         end
       end
