@@ -59,15 +59,15 @@ Set = {}
   end
 
   function Set:contains(x)
-    if self.elements[x] == nil then
-      return false
-    else
-      return true
-    end
+    return self.elements[x] ~= nil
   end
 
   function Set:add(x)
     self.elements[x] = true
+  end
+
+  function Set:remove(x)
+    self.elements[x] = nil
   end
 
   function Set:add_collection(arr)
@@ -76,20 +76,16 @@ Set = {}
     end
   end
 
-  function Set:remove(x)
-    self.elements[x] = nil
+  function Set:each()
+    return pairs(self.elements)
   end
 
   function Set:to_array()
     local arr = {}
-    for elem in pairs(self.elements) do
+    for elem in self:each() do
       table.insert(arr, elem)
     end
     return arr
-  end
-
-  function Set:each()
-    return pairs(self.elements)
   end
 
   function Set:isempty()
@@ -103,18 +99,21 @@ Set = {}
 
   function Set:num_elements()
     local num = 0
-    for elem in pairs(self.elements) do
+    for _ in self:each() do
       num = num + 1
     end
     return num
   end
 
   function Set:hash_key()
-    local arr = {}
-    for elem in pairs(self.elements) do table.insert(arr, tostring(elem)) end
+    local arr = self:to_array()
+    for i=1,#arr do
+      arr[i] = tostring(arr[i])
+    end
+
     table.sort(arr)
-    str = ""
-    for i,elem in ipairs(arr) do str = str .. tostring(elem) end
+
+    str = "" for elem in each(arr) do str = str .. elem end
     return str
   end
 -- class Set
@@ -131,48 +130,12 @@ Range = {}
     return obj
   end
 
-  function Range.__lt(a, b)
-    return a.low < b.low
-  end
-
-  function Range:intersects(other)
-    if self.low == other.low then return true end
-
-    if self.low > other.low then
-      return self.low <= other.high
-    else
-      return other.low <= self.high
-    end
-  end
-
-  function Range.intersection(a, b)
-    local low  = math.max(a.low, b.low)
-    local high = math.min(a.high, b.high)
-    if low > high then
-      return nil
-    else
-      return Range:new(low, high)
-    end
-  end
-
-  function Range.overlapping_or_adjacent(a, b)
-    return math.max(a.low, b.low) <= (math.min(a.high, b.high)+1)
-  end
-
   function Range.union(a, b)
-    if Range.overlapping_or_adjacent(a, b) then
-      return {Range:new(math.min(a.low, b.low), math.max(a.high, b.high))}
+    if math.max(a.low, b.low) <= (math.min(a.high, b.high)+1) then
+      return Range:new(math.min(a.low, b.low), math.max(a.high, b.high))
     else
-      if a.high < b.high then
-        return {a, b}
-      else
-        return {b, a}
-      end
+      return nil
     end
-  end
-
-  function Range:is_superset(other)
-    return (self.low <= other.low) and (self.high >= other.high)
   end
 
   function Range:contains(int)
@@ -200,25 +163,31 @@ IntSet = {}
   end
 
   function IntSet:add(new_range)
-    local intersecting = {}
-    local nonintersecting = {}
+    local newlist = {}
     for range in each(self.list) do
-      if new_range:overlapping_or_adjacent(range) then
-        table.insert(intersecting, range)
+      local union = new_range:union(range)
+      if union then
+        new_range = union
       else
-        table.insert(nonintersecting, range)
+        table.insert(newlist, range)
       end
     end
 
-    local superrange = new_range
-    for range in each(intersecting) do
-      superrange = superrange:union(range)[1]
-    end
-
-    self.list = nonintersecting
-    table.insert(self.list, superrange)
+    table.insert(newlist, new_range)
+    self.list = newlist
   end
 
+  function IntSet:get_non_negated()
+    if self.negated then
+      return self:invert()
+    else
+      return self
+    end
+  end
+
+  -- This is O(n^2) right now, and can probably
+  -- be made O(n lg n) with a little thought, but n's
+  -- are so small right now that I won't worry.
   function IntSet:add_intset(intset)
     for range in each(intset.list) do
       self:add(range)
@@ -226,51 +195,28 @@ IntSet = {}
   end
 
   function IntSet:contains(int)
-    for range in each(self.list) do
+    local obj = self:get_non_negated()
+    for range in each(obj.list) do
       if range:contains(int) then return true end
     end
     return false
   end
 
-  function IntSet:intersects(range)
-    for my_range in each(self.list) do
-      if my_range:intersects(range) then return true end
-    end
-    return false
-  end
-
   function IntSet:sampleint()
-    if self.negated then
-      error("sampleint for non-negated sets only, please")
-    end
+    local obj = self:get_non_negated()
 
-    if #self.list == 0 then
+    if #obj.list == 0 then
       return nil
     else
-      return self.list[1].low
+      return obj.list[1].low
     end
-  end
-
-  function IntSet:is_superset(other)
-    for range in each(other.list) do
-      local superset = false
-      for my_range in each(self.list) do
-        if my_range:is_superset(range) then
-          superset = true
-          break
-        end
-      end
-      if superset == false then return false end
-    end
-
-    return true
   end
 
   function IntSet:invert()
     local new_intset = IntSet:new()
     new_intset.negated = not self.negated
 
-    table.sort(self.list)
+    table.sort(self.list, function (a, b) return a.low < b.low end)
     local offset = 0
 
     for range in each(self.list) do
@@ -288,21 +234,12 @@ IntSet = {}
   end
 
   function IntSet:tostring(display_val_func)
-    local obj = self
-
-    for range in each(obj.list) do
-      if range.high == math.huge then
-        obj = obj:invert()
-        break
-      end
-    end
-
     local str = ""
-    if obj.negated then str = "^" end
+    if self.negated then str = "^" end
 
-    table.sort(obj.list)
+    table.sort(self.list, function (a, b) return a.low < b.low end)
     local first = true
-    for range in each(obj.list) do
+    for range in each(self.list) do
       if first then
         first = false
       else
