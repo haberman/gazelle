@@ -61,10 +61,12 @@ function FA:__tostring()
         elseif char == ")" then
           print_char = "end capture"
         elseif type(char) == 'table' and char.class == IntSet then
+          if char:isunbounded() then char = char:invert() end
           print_char = char:toasciistring()
         else
           print_char = string.char(char)
         end
+        print_char = print_char:gsub("[\"\\]", "\\%1")
         str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
       end
     end

@@ -233,6 +233,15 @@ IntSet = {}
     return new_intset
   end
 
+  function IntSet:isunbounded()
+    for range in each(self.list) do
+      if range.high == math.huge then
+        return true
+      end
+    end
+    return false
+  end
+
   function IntSet:tostring(display_val_func)
     local str = ""
     if self.negated then str = "^" end
@@ -257,7 +266,7 @@ IntSet = {}
       if x == math.huge then
         return "del"
       elseif x < 33 then
-        return string.format("\\%3o", x)
+        return string.format("\\%03o", x)
       else
         return string.char(x)
       end

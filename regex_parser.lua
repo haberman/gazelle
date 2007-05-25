@@ -71,7 +71,7 @@ function parse_term(chars)
     chars:get()
     local lower_bound = parse_number(chars)
     local repeated = prim
-    for i=2, lower_bound do repeated = nfa_concat(repeated, prim) end
+    for i=2, lower_bound do repeated = nfa_concat(repeated, prim:dup()) end
     next_char = chars:get()
     if next_char == "}" then return repeated
     elseif next_char == "," then
@@ -106,18 +106,13 @@ function parse_prim(chars)
   elseif char == "[" then
     return parse_char_class(chars)
   else
-    char = chars:get()
-    if char == "\\" then
-      char = chars:get()
-      if char == "n" then char = "\n"
-      elseif char == "t" then char = "\t"
-      elseif char == "b" then char = "\b"
-      elseif char == "f" then char = "\f"
-      elseif char == "r" then char = "\r"
-      end
-    end
+    local char = parse_char(chars)
     int_set = IntSet:new()
-    int_set:add(Range:new(char:byte(), char:byte()))
+    if char == "." then
+      int_set:add(Range:new(0, math.huge))
+    else
+      int_set:add(Range:new(char:byte(), char:byte()))
+    end
     char = nfa_char(int_set)
     return char
   end
@@ -132,11 +127,11 @@ function parse_char_class(chars)
   end
 
   while true do
-    local char = chars:get()
+    local char = parse_char(chars)
     if char == "]" then break end
     if chars:lookahead(1) == "-" and chars:lookahead(2) ~= "]" then
       chars:get()
-      local high_char = chars:get()
+      local high_char = parse_char(chars)
       int_set:add(Range:new(char:byte(), high_char:byte()))
     else
       int_set:add(Range:new(char:byte(), char:byte()))
@@ -144,6 +139,33 @@ function parse_char_class(chars)
   end
 
   return nfa_char(int_set)
+end
+
+function parse_char(chars)
+  local char = chars:get()
+  if char == "\\" then
+    char = chars:get()
+    if char == "n" then char = "\n"
+    elseif char == "t" then char = "\t"
+    elseif char == "b" then char = "\b"
+    elseif char == "f" then char = "\f"
+    elseif char == "r" then char = "\r"
+    elseif char == "s" then char = " "
+    end
+  end
+  return char
+end
+
+function parse_number(chars)
+  local num = 0
+  local char = chars:lookahead(1)
+  while (char:byte() >= string.byte("0")) and (char:byte() <= string.byte("9")) do
+    local digit = chars:get():byte() - string.byte("0")
+    num = num * 10
+    num = num + digit
+    char = chars:lookahead(1)
+  end
+  return num
 end
 
 -- nfa = parse_regex(TokenStream:new("(1*01*0)*1*"))

@@ -52,3 +52,32 @@ function FA:states()
   return breadth_first_traversal(self.start, function (s) return s:child_states() end)
 end
 
+function FA:dup()
+  local new_fa = FA:new()
+  local new_states = {}
+  for state in each(self:states()) do
+      print("Foo1!")
+      print(state.transitions)
+    new_states[state] = new_states[state] or FAState:new()
+    if self.start == state then new_fa.start = new_states[state] end
+    if self.final == state then new_fa.final = new_states[state] end
+
+    for int_set, dest_states in pairs(state.transitions) do
+      if dest_states.class == FAState then
+        new_states[dest_state] = new_states[dest_state] or FAState:new()
+        new_states[state]:add_transition(int_set, new_states[dest_state])
+      else
+        local new_dest_states = {}
+        for dest_state in each(dest_states) do
+          new_states[dest_state] = new_states[dest_state] or FAState:new()
+          table.insert(new_dest_states, new_states[dest_state])
+        end
+        new_states[state]:add_transition(int_set, new_dest_states)
+      end
+    end
+  end
+  print(self)
+  print(new_fa)
+  return new_fa
+end
+

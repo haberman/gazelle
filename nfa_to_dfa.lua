@@ -72,7 +72,7 @@ function new_dfa_state(nfa_states, begin_groups, end_groups)
   for nfa_state in nfa_states:each() do
     if nfa_state.final then
       if dfa_state.final and dfa_state.final ~= nfa_state.final then
-        print("Ambiguous finality not supported yet!! (" .. tostring(dfa_state.final) .. " and " .. tostring(nfa_state.final .. ")"))
+        error("Ambiguous finality not supported yet!! (" .. tostring(dfa_state.final) .. " and " .. tostring(nfa_state.final .. ")"))
       end
       dfa_state.final = nfa_state.final
     end
