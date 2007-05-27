@@ -2,7 +2,7 @@
 dofile("misc.lua")
 
 -- Queue
-Queue = {}
+Queue = {name="Queue"}
   function Queue:new(init)
     local obj = newobject(self)
     obj.first = 0
@@ -31,24 +31,34 @@ Queue = {}
 
 
 -- Stack
-Stack = {}
+Stack = {name="Stack"}
   function Stack:new(init)
     local obj = newobject(self)
+    obj.stack = {}
     return obj
   end
 
   function Stack:push(val)
-    table.insert(self, val)
+    table.insert(self.stack, val)
   end
 
   function Stack:pop()
-    return table.remove(self)
+    return table.remove(self.stack)
+  end
+
+  function Stack:contains(elem)
+    for e in each(self.stack) do
+      if elem == e then
+        return true
+      end
+    end
+    return false
   end
 -- class Stack
 
 
 -- Set
-Set = {}
+Set = {name="Set"}
   function Set:new(init)
     local obj = newobject(self)
     obj.elements = {}
@@ -120,7 +130,7 @@ Set = {}
 
 -- Range
 -- The Range is *inclusive* at both ends.
-Range = {}
+Range = {name="Range"}
   function Range:new(low, high)
     assert(low <= high)
 
@@ -154,7 +164,7 @@ Range = {}
 
 -- IntSet
 -- None of the ranges may overlap.
-IntSet = {}
+IntSet = {name="IntSet"}
   function IntSet:new()
     local obj = newobject(self)
     obj.list = {}

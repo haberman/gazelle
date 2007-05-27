@@ -1,6 +1,7 @@
 
 dofile("data_structures.lua")
 dofile("misc.lua")
+dofile("sketches/pp.lua")
 
 -- We treat'(' and ')' (begin and end capture group) as epsilons, but also
 -- add them to a list that we return alongside the simple list of states.
@@ -11,14 +12,19 @@ function epsilon_closure(state)
   -- TODO: this is messy: separate concerns by having the "children" function be
   -- separate from the "run this for every node" function
   local children_func = function(s)
-    local children = s.transitions["e"]
+    local children = Set:new()
+
+    if s.transitions["e"] then children:add_collection(s.transitions["e"]) end
+
     if s.transitions["("] then
       table.insert(begin_groups, s.transitions["("])
-      children:add(s.transitions["("][3])
+      children:add_collection(s.transitions["("][3])
     end
+
     if s.transitions[")"] then
       table.insert(end_groups, s.transitions[")"])
-      children:add(s.transitions[")"][3])
+      print(serialize(s.transitions[")"], 8, true))
+      children:add_collection(s.transitions[")"][3])
     end
     return children
   end
@@ -53,8 +59,8 @@ function nfas_to_dfa(nfa_string_pairs)
         state.transitions["("] = {token_string, capture_group_num, state.transitions["("]}
         capture_group_stack:push(capture_group_num)
         capture_group_num = capture_group_num + 1
-      elseif state.transitions["("] then
-        state.transitions[")"] = { token_string, capture_group_stack:pop(), state.transitions[")"]}
+      elseif state.transitions[")"] then
+        state.transitions[")"] = {token_string, capture_group_stack:pop(), state.transitions[")"]}
       end
     end
   end

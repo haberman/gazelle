@@ -99,16 +99,16 @@ function parse_prim(chars)
   if char == ")" or char == "|" or char == "" then return nil
   elseif char == "(" then
     local leftparen = chars:get()
-    --local regex = nfa_capture(parse_regex(chars))
-    local regex = parse_regex(chars)
+    local regex = nfa_capture(parse_regex(chars))
+    --local regex = parse_regex(chars)
     local rightparen = chars:get()
     return regex
   elseif char == "[" then
     return parse_char_class(chars)
   else
-    local char = parse_char(chars)
+    local char, escaped = parse_char(chars)
     int_set = IntSet:new()
-    if char == "." then
+    if char == "." and not escaped then
       int_set:add(Range:new(0, math.huge))
     else
       int_set:add(Range:new(char:byte(), char:byte()))
@@ -127,8 +127,10 @@ function parse_char_class(chars)
   end
 
   while true do
-    local char = parse_char(chars)
-    if char == "]" then break end
+    local char, escaped = parse_char(chars)
+    if char == "]" and not escaped then
+      break
+    end
     if chars:lookahead(1) == "-" and chars:lookahead(2) ~= "]" then
       chars:get()
       local high_char = parse_char(chars)
@@ -143,6 +145,7 @@ end
 
 function parse_char(chars)
   local char = chars:get()
+  local escaped = false
   if char == "\\" then
     char = chars:get()
     if char == "n" then char = "\n"
@@ -151,9 +154,10 @@ function parse_char(chars)
     elseif char == "f" then char = "\f"
     elseif char == "r" then char = "\r"
     elseif char == "s" then char = " "
+    else escaped = true
     end
   end
-  return char
+  return char, escaped
 end
 
 function parse_number(chars)

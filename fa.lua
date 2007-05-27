@@ -1,5 +1,5 @@
 
-FAState = {}
+FAState = {name="FAState"}
 statenum = 1
 function FAState:new(init)
   local obj = newobject(self)
@@ -37,7 +37,7 @@ function FAState:transition_for(int)
   end
 end
 
-FA = {}
+FA = {name="FA"}
 function FA:new(init)
   local obj = newobject(self)
   init = init or {}
