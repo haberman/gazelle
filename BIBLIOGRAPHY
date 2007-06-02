@@ -1,0 +1,23 @@
+
+Gries, David:  Describing an Algorithm by Hopcroft, 1972
+   Acta Informatica, 2(2):97-109
+
+   This article is a bit more digestible presentation of Hopcroft's algorithm.
+   It was useful in actually implementing the minimization algorithm in minimize.lua.
+
+
+Hopcroft, John E.  An n log n algorithm for minimizing states in a finite automaton, 1971
+   Available online at: ftp://reports.stanford.edu/pub/cstr/reports/cs/tr/71/190/CS-TR-71-190.pdf
+
+   This algorithm, published in 1971, is still the best known algorithm for DFA
+   minimization.  It is O(n log n), where all other algorithms are at least O(n^2).
+   I use this algorithm in minimize.lua.
+
+
+Scott, Michael L.  Programming Language Pragmatics, second edition, 2006
+   ISBN: 0126339511
+
+   This is a textbook about programming language implementation and design.
+   I used its NFA construction in nfa_construct.lua.
+
+

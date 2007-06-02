@@ -1,5 +1,15 @@
+--
+-- minimize.lua
+--
+-- Algorithm to transform a DFA into an equivalent DFA with the
+-- minimal number of states.  Uses Hopcroft's algorithm, which is
+-- O(n lg n) in the number of states, as explained by both Hopcroft
+-- and Gries (see BIBLIOGRAPHY for details).
+--
+-- Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+--
 
-dofile("data_structures.lua")
+require("data_structures")
 
 function hopcroft_minimize(dfa)
   -- first create the alphabet, which we define as the set of equivalent int sets

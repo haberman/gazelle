@@ -1,5 +1,13 @@
+--
+-- data_structures.lua
+--
+-- Implementations of useful data structures that we use often.
+-- Most of these are just useful interface around Lua's tables.
+--
+-- Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+--
 
-dofile("misc.lua")
+require("misc")
 
 -- Queue
 Queue = {name="Queue"}

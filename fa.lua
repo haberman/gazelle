@@ -1,11 +1,8 @@
 
 FAState = {name="FAState"}
-statenum = 1
 function FAState:new(init)
   local obj = newobject(self)
   obj.transitions = init or {}
-  obj.statenum = statenum
-  statenum = statenum + 1
   return obj
 end
 
@@ -56,8 +53,6 @@ function FA:dup()
   local new_fa = FA:new()
   local new_states = {}
   for state in each(self:states()) do
-      print("Foo1!")
-      print(state.transitions)
     new_states[state] = new_states[state] or FAState:new()
     if self.start == state then new_fa.start = new_states[state] end
     if self.final == state then new_fa.final = new_states[state] end
@@ -76,8 +71,6 @@ function FA:dup()
       end
     end
   end
-  print(self)
-  print(new_fa)
   return new_fa
 end
 

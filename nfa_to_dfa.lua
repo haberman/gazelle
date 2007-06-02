@@ -1,7 +1,16 @@
+--
+-- nfa_to_dfa.lua
+--
+-- Translate a set of NFAs into a DFA that can recognize any of the
+-- constituent strings.  This is how we build a lexer that looks for
+-- all candidate tokens simultaneously.
+--
+-- Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+--
 
-dofile("data_structures.lua")
-dofile("misc.lua")
-dofile("sketches/pp.lua")
+require("data_structures")
+require("misc")
+--require("sketches/pp")
 
 -- We treat'(' and ')' (begin and end capture group) as epsilons, but also
 -- add them to a list that we return alongside the simple list of states.
@@ -23,7 +32,7 @@ function epsilon_closure(state)
 
     if s.transitions[")"] then
       table.insert(end_groups, s.transitions[")"])
-      print(serialize(s.transitions[")"], 8, true))
+      --print(serialize(s.transitions[")"], 8, true))
       children:add_collection(s.transitions[")"][3])
     end
     return children
@@ -66,7 +75,7 @@ function nfas_to_dfa(nfa_string_pairs)
   end
 
   -- Now combine all the nfas with alternation
-  local final_nfa = nfa_alt(nfas)
+  local final_nfa = nfa_construct.alt(nfas)
   return nfa_to_dfa(final_nfa)
 end
 

@@ -1,9 +1,20 @@
+--
+-- regex_parser.lua
+--
+-- A hand-written recursive descent parser to parse regular expressions.
+-- Hopefully this could eventually be implemented using the engine itself,
+-- but even then you need a way to bootstrap.
+--
+-- Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+--
 
-dofile("data_structures.lua")
-dofile("misc.lua")
-dofile("thompson_nfa_construct.lua")
+require("data_structures")
+require("misc")
+require("nfa_construct")
 
--- TokenStream
+-- class TokenStream
+-- A simple convenience class for reading characters one at a time and
+-- doing simple lookahead.  It is not especially efficient.
 TokenStream = {}
   function TokenStream:new(string)
     local obj = newobject(self)
@@ -22,7 +33,8 @@ TokenStream = {}
   end
 -- class TokenStream
 
-
+-- The grammar we are working from is:
+--
 -- regex ::= frag
 -- regex ::= regex "|" frag
 --
@@ -35,19 +47,18 @@ TokenStream = {}
 -- term  ::= prim *
 -- term  ::= prim { number }
 -- term  ::= prim { number , number }
-
+--
 -- prim  ::= char
 -- prim  ::= char_class
 -- prim  ::= (regex)
 
 function parse_regex(chars)
-  local frag = parse_frag(chars)
+  local frags = {parse_frag(chars)}
   while chars:lookahead(1) == "|" do
     local ortok = chars:get()
-    local newfrag = parse_frag(chars)
-    frag = nfa_alt2(frag, newfrag)
+    table.insert(frags, parse_frag(chars))
   end
-  return frag
+  return nfa_construct.alt(frags)
 end
 
 function parse_frag(chars)
@@ -55,7 +66,7 @@ function parse_frag(chars)
   while true do
     local newterm = parse_term(chars)
     if newterm == nil then return term end
-    term = nfa_concat(term, newterm)
+    term = nfa_construct.concat(term, newterm)
   end
 end
 
@@ -64,14 +75,14 @@ function parse_term(chars)
   if prim == nil then return nil end
 
   local next_char = chars:lookahead(1)
-  if next_char == "?" then chars:get() return nfa_alt2(prim, nfa_epsilon())
-  elseif next_char == "+" then chars:get() return nfa_rep(prim)
-  elseif next_char == "*" then chars:get() return nfa_kleene(prim)
+  if next_char == "?" then chars:get() return nfa_construct.alt2(prim, nfa_construct.epsilon())
+  elseif next_char == "+" then chars:get() return nfa_construct.rep(prim)
+  elseif next_char == "*" then chars:get() return nfa_construct.kleene(prim)
   elseif next_char == "{" then
     chars:get()
     local lower_bound = parse_number(chars)
     local repeated = prim
-    for i=2, lower_bound do repeated = nfa_concat(repeated, prim:dup()) end
+    for i=2, lower_bound do repeated = nfa_construct.concat(repeated, prim:dup()) end
     next_char = chars:get()
     if next_char == "}" then return repeated
     elseif next_char == "," then
@@ -79,7 +90,7 @@ function parse_term(chars)
       local upper_bound = parse_number(chars)
       if chars:get() ~= "}" then print("Seriously, don't do that\n") end
       for i=1, (upper_bound-lower_bound) do
-        repeated = nfa_concat(repeated, nfa_alt2(prim, nfa_epsilon()))
+        repeated = nfa_construct.concat(repeated, nfa_construct.alt2(prim, nfa_construct.epsilon()))
       end
       return repeated
     else
@@ -99,7 +110,7 @@ function parse_prim(chars)
   if char == ")" or char == "|" or char == "" then return nil
   elseif char == "(" then
     local leftparen = chars:get()
-    local regex = nfa_capture(parse_regex(chars))
+    local regex = nfa_construct.capture(parse_regex(chars))
     --local regex = parse_regex(chars)
     local rightparen = chars:get()
     return regex
@@ -113,7 +124,7 @@ function parse_prim(chars)
     else
       int_set:add(Range:new(char:byte(), char:byte()))
     end
-    char = nfa_char(int_set)
+    char = nfa_construct.char(int_set)
     return char
   end
 end
@@ -140,7 +151,7 @@ function parse_char_class(chars)
     end
   end
 
-  return nfa_char(int_set)
+  return nfa_construct.char(int_set)
 end
 
 function parse_char(chars)
@@ -171,29 +182,4 @@ function parse_number(chars)
   end
   return num
 end
-
--- nfa = parse_regex(TokenStream:new("(1*01*0)*1*"))
--- dfa = nfa_to_dfa(nfa)
--- -- print(nfa:dump_dot())
--- print(dfa:dump_dot())
-
-dofile("nfa_to_dfa.lua")
-dofile("sketches/regex_debug.lua")
-dofile("minimize.lua")
-
-statenum = 0
-nfas = {}
-linenum = 1
-while true do
-  line = io.read()
-  if line == nil then break end
-  nfa = parse_regex(TokenStream:new(line))
-  table.insert(nfas, {nfa, "Regex" .. tostring(linenum)})
-  linenum = linenum + 1
-end
-
-dfa = nfas_to_dfa(nfas)
-print(dfa)
-minimal_dfa = hopcroft_minimize(dfa)
-print(minimal_dfa)
 

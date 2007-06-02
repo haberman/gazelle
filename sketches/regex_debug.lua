@@ -1,5 +1,5 @@
 
-dofile("sketches/pp.lua")
+--dofile("sketches/pp.lua")
 
 -- function NFA:dump_dot()
 --   local str = "digraph untitled {\n"
@@ -34,7 +34,7 @@ dofile("sketches/pp.lua")
 function FA:__tostring()
   local str = "digraph untitled {\n"
   states = self:states():to_array()
-  table.sort(states, function (a, b) return a.statenum < b.statenum end)
+  --table.sort(states, function (a, b) return a.statenum < b.statenum end)
   for i,state in ipairs(states) do
     if state.class ~= FAState then print("NO") end
     local label = ""
