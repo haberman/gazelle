@@ -1,3 +1,10 @@
+--[[--------------------------------------------------------------------
+
+  misc.lua
+
+  Miscellaneous algorithms that don't belong anywhere else.
+
+--------------------------------------------------------------------]]--
 
 function newobject(class)
   local obj = {}
@@ -7,6 +14,8 @@ function newobject(class)
   return obj
 end
 
+-- each(foo): returns an iterator; if the object supports the each method,
+--            call that, otherwise return an iterator for a plain array.
 function each(array_or_eachable_obj)
   if array_or_eachable_obj.class then
     return array_or_eachable_obj:each()
@@ -20,6 +29,8 @@ function each(array_or_eachable_obj)
   end
 end
 
+-- traverses a graph of some sort -- caller provides a function that gives
+-- children of the current node.
 function breadth_first_traversal(obj, children_func)
   local seen = Set:new{obj}
   local queue = Queue:new(obj)

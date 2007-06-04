@@ -1,6 +1,6 @@
 
-require('luaunit')
-require('data_structures')
+require "luaunit"
+require "data_structures"
 
 TestQueue = {}
   function TestQueue:test_initial_state()

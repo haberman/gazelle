@@ -1,16 +1,18 @@
---
--- nfa_to_dfa.lua
---
--- Translate a set of NFAs into a DFA that can recognize any of the
--- constituent strings.  This is how we build a lexer that looks for
--- all candidate tokens simultaneously.
---
--- Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
---
+--[[--------------------------------------------------------------------
 
-require("data_structures")
-require("misc")
---require("sketches/pp")
+  nfa_to_dfa.lua
+
+  Translate a set of NFAs into a DFA that can recognize any of the
+  constituent strings.  This is how we build a lexer that looks for
+  all candidate tokens simultaneously.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
+
+require "data_structures"
+require "misc"
+--require "sketches/pp"
 
 -- We treat'(' and ')' (begin and end capture group) as epsilons, but also
 -- add them to a list that we return alongside the simple list of states.

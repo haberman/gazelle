@@ -1,16 +1,18 @@
---
--- regex_parser.lua
---
--- A hand-written recursive descent parser to parse regular expressions.
--- Hopefully this could eventually be implemented using the engine itself,
--- but even then you need a way to bootstrap.
---
--- Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
---
+--[[--------------------------------------------------------------------
 
-require("data_structures")
-require("misc")
-require("nfa_construct")
+  regex_parser.lua
+
+  A hand-written recursive descent parser to parse regular expressions.
+  Hopefully this could eventually be implemented using the engine itself,
+  but even then you need a way to bootstrap.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
+
+require "data_structures"
+require "misc"
+require "nfa_construct"
 
 -- class TokenStream
 -- A simple convenience class for reading characters one at a time and
@@ -33,24 +35,28 @@ TokenStream = {}
   end
 -- class TokenStream
 
--- The grammar we are working from is:
---
--- regex ::= frag
--- regex ::= regex "|" frag
---
--- frag  ::= term
--- frag  ::= frag term
---
--- term  ::= prim
--- term  ::= prim ?
--- term  ::= prim +
--- term  ::= prim *
--- term  ::= prim { number }
--- term  ::= prim { number , number }
---
--- prim  ::= char
--- prim  ::= char_class
--- prim  ::= (regex)
+--[[--------------------------------------------------------------------
+
+  The grammar we are working from is:
+
+  regex ::= frag
+  regex ::= regex "|" frag
+
+  frag  ::= term
+  frag  ::= frag term
+
+  term  ::= prim
+  term  ::= prim ?
+  term  ::= prim +
+  term  ::= prim *
+  term  ::= prim { number }
+  term  ::= prim { number , number }
+
+  prim  ::= char
+  prim  ::= char_class
+  prim  ::= (regex)
+
+--------------------------------------------------------------------]]--
 
 function parse_regex(chars)
   local frags = {parse_frag(chars)}

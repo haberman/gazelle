@@ -1,3 +1,19 @@
+--[[--------------------------------------------------------------------
+
+  fa.lua
+
+  Minimalist data structures for finite automata.  Both NFAs and DFAs
+  can be represented using this structure -- DFAs map transitions to
+  a single state, while NFAs map them to an array of states (and
+  transitions can be "e" for epsilon).  It's all a bit fast and loose,
+  but given that it's only designed for the needs of this system,
+  it's not worth the effort to make this a really robust FA library.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
+
+require "misc"
 
 FAState = {name="FAState"}
 function FAState:new(init)
