@@ -49,6 +49,7 @@ function FA:__tostring()
       end
       peripheries = 2
     end
+    label = label:gsub("[\"\\]", "\\%1")
     str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
     for char,tostates in pairs(state.transitions) do
       if tostates.class == FAState then tostates = {tostates} end

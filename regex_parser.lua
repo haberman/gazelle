@@ -14,6 +14,8 @@ require "data_structures"
 require "misc"
 require "nfa_construct"
 
+module("regex_parser", package.seeall)
+
 -- class TokenStream
 -- A simple convenience class for reading characters one at a time and
 -- doing simple lookahead.  It is not especially efficient.
@@ -30,6 +32,9 @@ TokenStream = {}
 
   function TokenStream:get()
     local char = self.string:sub(1, 1)
+    if char == "" then
+      error("Premature end of regex!")
+    end
     self.string = self.string:sub(2, -1)
     return char
   end
@@ -39,22 +44,18 @@ TokenStream = {}
 
   The grammar we are working from is:
 
-  regex ::= frag
-  regex ::= regex "|" frag
+  regex -> frag *(|);
+  frag  -> term *;
+  term  -> prim modifier ?
+  modifier -> "?" | "+" | "*" | "{" number "}" | "{" number "," number "}";
+  prim  -> char | char_class | "(" regex ")";
+  char  -> /\\./ | /[^\\]/;
+  char_class -> "[" ( class_char "-" class_char | class_char )* "]";
+  class_char -> /\\./ | /[^\]\\]/;
+  number -> /\d+/;
 
-  frag  ::= term
-  frag  ::= frag term
-
-  term  ::= prim
-  term  ::= prim ?
-  term  ::= prim +
-  term  ::= prim *
-  term  ::= prim { number }
-  term  ::= prim { number , number }
-
-  prim  ::= char
-  prim  ::= char_class
-  prim  ::= (regex)
+  whitespace -> /[\r\n\t\s]+/;
+  ignore whitespace in regex, frag, term, prim;
 
 --------------------------------------------------------------------]]--
 
