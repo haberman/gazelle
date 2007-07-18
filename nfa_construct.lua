@@ -29,27 +29,8 @@ module("nfa_construct", package.seeall)
 --------------------------------------------------------------------]]--
 
 function concat(nfa1, nfa2)
-  nfa1.final.transitions["e"] = {nfa2.start}
-  return FA:new{start = nfa1.start, final = nfa2.final}
-end
-
-
---[[--------------------------------------------------------------------
-
-  capture(nfa): Creates capturing transitions around an NFA.
-  eg. for the NFA A:
-
-     A                       (      A      )
-  o ---> *   ...becomes:  o ---> o ---> o ---> o
-
-  ...where '(' is 'begin capture' and ')' is 'end capture.'
-
---------------------------------------------------------------------]]--
-
-function capture(nfa)
-  local new_nfa = FA:new()
-  new_nfa.start.transitions["("], nfa.final.transitions[")"] = {nfa.start}, {new_nfa.final}
-  return new_nfa
+  nfa1.final:add_transition(fa.e, nfa2.start)
+  return nfa1:new_graph{start = nfa1.start, final = nfa2.final}
 end
 
 
@@ -70,12 +51,11 @@ end
 --------------------------------------------------------------------]]--
 
 function alt(nfas)
-  local new_nfa = FA:new()
-  new_nfa.start.transitions["e"] = {}
+  local new_nfa = nfas[1]:new_graph()
 
   for i=1,#nfas do
-    table.insert(new_nfa.start.transitions["e"], nfas[i].start)
-    nfas[i].final.transitions["e"] = {new_nfa.final}
+    new_nfa.start:add_transition(fa.e, nfas[i].start)
+    nfas[i].final:add_transition(fa.e, new_nfa.final)
   end
 
   return new_nfa
@@ -108,9 +88,10 @@ end
 --------------------------------------------------------------------]]--
 
 function rep(nfa)
-  local new_nfa = FA:new()
-  new_nfa.start.transitions["e"] = {nfa.start}
-  nfa.final.transitions["e"] = {nfa.start, new_nfa.final}
+  local new_nfa = nfa:new_graph()
+  new_nfa.start:add_transition(fa.e, nfa.start)
+  nfa.final:add_transition(fa.e, nfa.start)
+  nfa.final:add_transition(fa.e, new_nfa.final)
   return new_nfa
 end
 
@@ -133,31 +114,10 @@ end
 
 function kleene(nfa)
   local new_nfa = rep(nfa)
-  new_nfa.start.transitions["e"] = {nfa.start, new_nfa.final}
-  nfa.final.transitions["e"] = {nfa.start, new_nfa.final}
+  new_nfa.start:add_transition(fa.e, nfa.start)
+  new_nfa.start:add_transition(fa.e, new_nfa.final)
+  nfa.final:add_transition(fa.e, nfa.start)
+  nfa.final:add_transition(fa.e, new_nfa.final)
   return new_nfa
-end
-
-
---[[--------------------------------------------------------------------
-
-  char(char): Returns the NFA that matches a single symbol.
-  eg. for the regular expression A, constructs:
-
-       A
-    o ---> *
-
-  Note: 'char' might be something more complicated, like an IntSet.
-
---------------------------------------------------------------------]]--
-
-function char(char)
-  local new_nfa = FA:new()
-  new_nfa.start.transitions[char] = {new_nfa.final}
-  return new_nfa
-end
-
-function epsilon()
-  return char("e")
 end
 

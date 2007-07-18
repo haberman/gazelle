@@ -31,12 +31,15 @@
 --   return str
 -- end
 
-function FA:__tostring()
+function fa.IntFA:__tostring()
+  -- local oldmt = getmetatable(self)
+  -- setmetatable(self, nil)
+  -- print("BTW my identity is " .. tostring(self))
+  -- setmetatable(self, oldmt)
   local str = "digraph untitled {\n"
   states = self:states():to_array()
   --table.sort(states, function (a, b) return a.statenum < b.statenum end)
   for i,state in ipairs(states) do
-    if state.class ~= FAState then print("NO") end
     local label = ""
     local peripheries = 1
     if state == self.start then label = "Begin" end
@@ -51,25 +54,23 @@ function FA:__tostring()
     end
     label = label:gsub("[\"\\]", "\\%1")
     str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
-    for char,tostates in pairs(state.transitions) do
-      if tostates.class == FAState then tostates = {tostates} end
-      for i,tostate in ipairs(tostates) do
-        local print_char
-        if char == "e" then
-          print_char = "ep"
-        elseif char == "(" then
-          print_char = "start capture"
-        elseif char == ")" then
-          print_char = "end capture"
-        elseif type(char) == 'table' and char.class == IntSet then
-          if char:isunbounded() then char = char:invert() end
-          print_char = char:toasciistring()
-        else
-          print_char = string.char(char)
-        end
-        print_char = print_char:gsub("[\"\\]", "\\%1")
-        str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
+    for char, tostate in state:transitions() do
+      local print_char
+      if char == fa.e then
+        print_char = "ep"
+      elseif char == "(" then
+        print_char = "start capture"
+      elseif char == ")" then
+        print_char = "end capture"
+      elseif type(char) == 'table' and char.class == IntSet then
+        if char:isunbounded() then char = char:invert() end
+        print_char = char:toasciistring()
+      else
+        print(char.name)
+        print_char = string.char(char)
       end
+      print_char = print_char:gsub("[\"\\]", "\\%1")
+      str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
     end
   end
   str = str .. "}"

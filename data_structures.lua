@@ -109,12 +109,15 @@ Set = {name="Set"}
   end
 
   function Set:isempty()
-    local empty = true
+    return self:count() == 0
+  end
+
+  function Set:count()
+    local i = 0
     for elem in self:each() do
-      empty = false
-      break
+      i = i + 1
     end
-    return empty
+    return i
   end
 
   function Set:num_elements()

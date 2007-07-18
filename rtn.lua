@@ -190,6 +190,7 @@ function parse_derivation(chars)
   local ret = {parse_term(chars)}
   while chars:lookahead(1) ~= "|" and chars:lookahead(1) ~= ";" and chars:lookahead(1) ~= ")" do
     table.insert(ret, parse_term(chars))
+
   end
   chars:ignore(old_ignore)
   return ret
@@ -314,6 +315,7 @@ grammar = parse_grammar(CharStream:new(grammar_str))
 
 print(serialize(grammar, 15, true))
 require "sketches/regex_debug"
+
 
 
 

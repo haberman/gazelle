@@ -47,16 +47,6 @@ function breadth_first_traversal(obj, children_func)
   return seen
 end
 
-function transitions_for(transitions, int)
-  local targets = Set:new()
-  for int_set, target in pairs(transitions) do
-    if type(int_set) == "table" and int_set:contains(int) then
-      targets:add(target)
-    end
-  end
-  return targets
-end
-
 -- all ints within each IntSet are assumed to be equivalent.
 -- Given this, return a new list of IntSets, where each IntSet
 -- returned is considered equivalent across ALL IntSets.

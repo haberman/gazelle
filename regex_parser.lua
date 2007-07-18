@@ -82,13 +82,13 @@ function parse_term(chars)
   if prim == nil then return nil end
 
   local next_char = chars:lookahead(1)
-  if next_char == "?" then chars:get() return nfa_construct.alt2(prim, nfa_construct.epsilon())
+  if next_char == "?" then chars:get() return nfa_construct.alt2(prim, fa.IntFA:new{symbol=fa.e})
   elseif next_char == "+" then chars:get() return nfa_construct.rep(prim)
   elseif next_char == "*" then chars:get() return nfa_construct.kleene(prim)
   elseif next_char == "{" then
     chars:get()
     local lower_bound = parse_number(chars)
-    local repeated = prim
+    local repeated = prim:dup()
     for i=2, lower_bound do repeated = nfa_construct.concat(repeated, prim:dup()) end
     next_char = chars:get()
     if next_char == "}" then return repeated
@@ -97,7 +97,7 @@ function parse_term(chars)
       local upper_bound = parse_number(chars)
       if chars:get() ~= "}" then print("Seriously, don't do that\n") end
       for i=1, (upper_bound-lower_bound) do
-        repeated = nfa_construct.concat(repeated, nfa_construct.alt2(prim, nfa_construct.epsilon()))
+        repeated = nfa_construct.concat(repeated, nfa_construct.alt2(prim:dup(), nfa_construct.epsilon()))
       end
       return repeated
     else
@@ -117,8 +117,8 @@ function parse_prim(chars)
   if char == ")" or char == "|" or char == "" then return nil
   elseif char == "(" then
     local leftparen = chars:get()
-    local regex = nfa_construct.capture(parse_regex(chars))
-    --local regex = parse_regex(chars)
+    --local regex = nfa_construct.capture(parse_regex(chars))
+    local regex = parse_regex(chars)
     local rightparen = chars:get()
     return regex
   elseif char == "[" then
@@ -131,7 +131,7 @@ function parse_prim(chars)
     else
       int_set:add(Range:new(char:byte(), char:byte()))
     end
-    char = nfa_construct.char(int_set)
+    char = fa.IntFA:new{symbol=int_set}
     return char
   end
 end
@@ -158,7 +158,7 @@ function parse_char_class(chars)
     end
   end
 
-  return nfa_construct.char(int_set)
+  return fa.IntFA:new{symbol=int_set}
 end
 
 function parse_char(chars)

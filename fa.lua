@@ -2,12 +2,21 @@
 
   fa.lua
 
-  Minimalist data structures for finite automata.  Both NFAs and DFAs
-  can be represented using this structure -- DFAs map transitions to
-  a single state, while NFAs map them to an array of states (and
-  transitions can be "e" for epsilon).  It's all a bit fast and loose,
-  but given that it's only designed for the needs of this system,
-  it's not worth the effort to make this a really robust FA library.
+  Data structure for representing finite automata.  Both NFAs and DFAs
+  can be represented using this class.
+
+  The base class (FA/FAState) has two child classes:
+
+  - IntFA/IntFAState represents a nonrecursive FA that transitions
+    on IntSets or Epsilon.  These represent the machines that recognize
+    regular expressions.
+
+  - RTN/RTNState represents a recursive transition network: the graph
+    that is built to recognize context-free grammars.  These transition
+    on strings, regexes, epsilon, or on another RTN.
+
+  Either child class can be deterministic or nondeterministic.  The only
+  difference is whether there are epsilons / redundant transtions.
 
   Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
 
@@ -15,48 +24,85 @@
 
 require "misc"
 
+module("fa", package.seeall)
+
+-- This is a special edge value
+Epsilon = {name="Epsilon"}
+function Epsilon:new()
+  -- Epsilon is a singleton
+  self.singleton = self.singleton or newobject(self)
+  return self.singleton
+end
+
+e = Epsilon:new()
+
+
+--[[--------------------------------------------------------------------
+
+  class State -- base class of FAState and RTNState
+
+--------------------------------------------------------------------]]--
+
 FAState = {name="FAState"}
-function FAState:new(init)
+function FAState:new()
   local obj = newobject(self)
-  obj.transitions = init or {}
+  obj._transitions = {}
   return obj
 end
 
 function FAState:child_states()
-  children = Set:new()
-  for int_set, child_states in pairs(self.transitions) do
-    if child_states.class == FAState then children:add(child_states)
-    else children:add_collection(child_states) end
+  local children = Set:new()
+  for edge_value, target_state in self:transitions() do
+    children:add(target_state)
   end
   return children
 end
 
-function FAState:add_transition(int_set, state)
-  for existing_int_set, existing_state in pairs(self.transitions) do
-    if state == existing_state then
-      existing_int_set:add_intset(int_set)
-      return
-    end
-  end
-  self.transitions[int_set] = state
+function FAState:add_transition(edge_value, target_state, edge_properties)
+  table.insert(self._transitions, {edge_value, target_state, edge_properties})
 end
 
-function FAState:transition_for(int)
-  local transitions = transitions_for(self.transitions, int):to_array()
-  if #transitions == 0 then
-    return nil
-  else
-    return transitions[1]
+function FAState:transitions()
+  local i = 0
+  return function ()
+    i = i + 1
+    if self._transitions[i] then
+      return unpack(self._transitions[i])
+    else
+      return nil
+    end
   end
 end
+
+function FAState:transitions_for(val)
+  local targets = Set:new()
+  for edge_val, target_state, properties in self:transitions() do
+    if edge_val == val then
+      targets:add(target_state)
+    end
+  end
+  return targets
+end
+
+
+--[[--------------------------------------------------------------------
+
+  class FA -- base class of IntFA and RTN
+
+--------------------------------------------------------------------]]--
 
 FA = {name="FA"}
 function FA:new(init)
   local obj = newobject(self)
   init = init or {}
 
-  obj.start = init.start or FAState:new()
-  obj.final = init.final or FAState:new() -- for all but Thompson NFA fragments we ignore this
+  if obj.new_state then
+    obj.start = init.start or obj:new_state()
+    obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
+    if init.symbol then
+      obj.start:add_transition(init.symbol, obj.final)
+    end
+  end
 
   return obj
 end
@@ -66,27 +112,83 @@ function FA:states()
 end
 
 function FA:dup()
-  local new_fa = FA:new()
+  local new_graph = self:new_graph()
   local new_states = {}
-  for state in each(self:states()) do
-    new_states[state] = new_states[state] or FAState:new()
-    if self.start == state then new_fa.start = new_states[state] end
-    if self.final == state then new_fa.final = new_states[state] end
 
-    for int_set, dest_states in pairs(state.transitions) do
-      if dest_states.class == FAState then
-        new_states[dest_state] = new_states[dest_state] or FAState:new()
-        new_states[state]:add_transition(int_set, new_states[dest_state])
-      else
-        local new_dest_states = {}
-        for dest_state in each(dest_states) do
-          new_states[dest_state] = new_states[dest_state] or FAState:new()
-          table.insert(new_dest_states, new_states[dest_state])
-        end
-        new_states[state]:add_transition(int_set, new_dest_states)
+  -- duplicate states
+  for state in each(self:states()) do
+    new_states[state] = new_states[state] or self:new_state()
+    if self.start == state then new_graph.start = new_states[state] end
+    if self.final == state then new_graph.final = new_states[state] end
+  end
+
+  -- duplicate transitions
+  for state in each(self:states()) do
+    for edge_val, target_state, properties in state:transitions() do
+      new_states[state]:add_transition(edge_val, new_states[target_state], properties)
+    end
+  end
+
+  return new_graph
+end
+
+--[[--------------------------------------------------------------------
+
+  class IntFA/IntFAState: Classes for representing machines that recognize
+  regular expressions.
+
+--------------------------------------------------------------------]]--
+
+IntFA = FA:new()
+IntFA.name = "FA"
+function IntFA:new_graph(init)
+  return IntFA:new(init)
+end
+
+function IntFA:new_state()
+  return IntFAState:new()
+end
+
+function IntFA:get_outgoing_edge_values(states)
+  local symbol_sets = Set:new()
+  for state in each(states) do
+    for symbol_set, target_state, properties in state:transitions() do
+      if type(symbol_set) == "table" and symbol_set.class == IntSet then
+        symbol_sets:add(symbol_set)
       end
     end
   end
-  return new_fa
+  return equivalence_classes(symbol_sets)
 end
 
+
+IntFAState = FAState:new()
+IntFAState.name = "IntFAState"
+
+function IntFAState:add_transition(edge_value, target_state, edge_properties)
+  -- as a special case, IntSet edge_values can be combined if two edge_values
+  -- have the same target_state and neither has any edge_properties.
+  if edge_value.class == IntSet and edge_properties == nil then
+    for existing_edge_value, existing_target_state, existing_edge_properties in self:transitions() do
+      if existing_edge_value.class == IntSet and target_state == existing_target_state and existing_edge_properties == nil then
+        existing_edge_value:add_intset(edge_value)
+        return
+      end
+    end
+  end
+  FAState.add_transition(self, edge_value, target_state, edge_properties)
+end
+
+function IntFAState:transitions_for(val)
+  local targets = Set:new()
+  if type(val) == "table" and val.class == IntSet then
+    val = val:sampleint()
+  end
+
+  for edge_val, target_state, properties in self:transitions() do
+    if edge_val == val or (val ~= fa.e and edge_val.class == IntSet and edge_val:contains(val)) then
+      targets:add(target_state)
+    end
+  end
+  return targets
+end

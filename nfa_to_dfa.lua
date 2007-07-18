@@ -12,37 +12,9 @@
 
 require "data_structures"
 require "misc"
---require "sketches/pp"
 
--- We treat'(' and ')' (begin and end capture group) as epsilons, but also
--- add them to a list that we return alongside the simple list of states.
 function epsilon_closure(state)
-  local begin_groups = {}
-  local end_groups = {}
-
-  -- TODO: this is messy: separate concerns by having the "children" function be
-  -- separate from the "run this for every node" function
-  local children_func = function(s)
-    local children = Set:new()
-
-    if s.transitions["e"] then children:add_collection(s.transitions["e"]) end
-
-    if s.transitions["("] then
-      table.insert(begin_groups, s.transitions["("])
-      children:add_collection(s.transitions["("][3])
-    end
-
-    if s.transitions[")"] then
-      table.insert(end_groups, s.transitions[")"])
-      --print(serialize(s.transitions[")"], 8, true))
-      children:add_collection(s.transitions[")"][3])
-    end
-    return children
-  end
-
-  local nodes = breadth_first_traversal(state, children_func)
-
-  return nodes, begin_groups, end_groups
+  return breadth_first_traversal(state, function(s) return s:transitions_for(fa.e) end)
 end
 
 -- we as input an array of NFAs, one for each token we want to match simultaneously,
@@ -57,23 +29,8 @@ function nfas_to_dfa(nfa_string_pairs)
     local nfa, token_string = unpack(nfa_string_pair)
     table.insert(nfas, nfa)
 
-    -- We assign capture groups in order of the left parentheses we encounter
-    capture_group_num = 0
-
-    capture_group_stack = Stack:new()
-
     -- Mark the nfa fragment's final state as the final state for this *token*
     nfa.final.final = token_string
-
-    for state in each(nfa:states()) do
-      if state.transitions["("] then
-        state.transitions["("] = {token_string, capture_group_num, state.transitions["("]}
-        capture_group_stack:push(capture_group_num)
-        capture_group_num = capture_group_num + 1
-      elseif state.transitions[")"] then
-        state.transitions[")"] = {token_string, capture_group_stack:pop(), state.transitions[")"]}
-      end
-    end
   end
 
   -- Now combine all the nfas with alternation
@@ -81,8 +38,8 @@ function nfas_to_dfa(nfa_string_pairs)
   return nfa_to_dfa(final_nfa)
 end
 
-function new_dfa_state(nfa_states, begin_groups, end_groups)
-  local dfa_state = FAState:new()
+function new_dfa_state(nfa, nfa_states)
+  local dfa_state = nfa:new_state()
 
   -- If this is a final state for one or more of the nfas, make it an
   -- (appropriately labeled) final state for the dfa
@@ -95,19 +52,15 @@ function new_dfa_state(nfa_states, begin_groups, end_groups)
     end
   end
 
-  -- If there are any begin or end groups, note that in the dfa state as well.
-  dfa_state.begin_groups = begin_groups
-  dfa_state.end_groups   = end_groups
-
   return dfa_state
 end
 
 function nfa_to_dfa(nfa)
   -- The sets of NFA states we need to process for outgoing transitions
-  local first_nfa_states, begin_groups, end_groups = epsilon_closure(nfa.start)
+  local first_nfa_states = epsilon_closure(nfa.start)
   local queue = Queue:new(first_nfa_states)
 
-  local dfa = FA:new{start = new_dfa_state(first_nfa_states, begin_groups, end_groups)}
+  local dfa = nfa:new_graph{start = new_dfa_state(nfa, first_nfa_states)}
   -- The DFA states we create from sets of NFA states
   local dfa_states = {[first_nfa_states:hash_key()] = dfa.start}
 
@@ -116,27 +69,18 @@ function nfa_to_dfa(nfa)
     local dfa_state = dfa_states[nfa_states:hash_key()]
 
     -- Generate a list of symbols that transition out of this set of NFA states.
-    -- We could skip this and just iterate over the entire symbol (character) space
-    -- but we want to avoid doing anything that is O(the character space), so that
-    -- we can support LARGE character spaces without flinching.
-    local symbol_sets = Set:new()
-    for nfa_state in nfa_states:each() do
-      for symbol_set, new_state in pairs(nfa_state.transitions) do
-        if type(symbol_set) == "table" then
-          symbol_sets:add(symbol_set)
-        end
-      end
-    end
-    symbol_sets = equivalence_classes(symbol_sets)
+    -- We prefer this to iterating over the entire symbol space because it's
+    -- vastly more efficient in the case of a large symbol space (eg. Unicode)
+    local symbols = nfa:get_outgoing_edge_values(nfa_states)
 
     -- For each output symbol, generate the list of destination NFA states that
     -- recognizing this symbol could put you in (including epsilon transitions).
-    for symbol_set in each(symbol_sets) do
+    for symbol in each(symbols) do
       local dest_nfa_states = Set:new()
       for nfa_state in nfa_states:each() do
         -- equivalence classes dictate that this character represents what will
         -- happen to ALL characters in the set
-        local target_states = nfa_state:transition_for(symbol_set.list[1].low)
+        local target_states = nfa_state:transitions_for(symbol)
 
         if target_states then
           for target_state in each(target_states) do
@@ -150,13 +94,13 @@ function nfa_to_dfa(nfa)
       -- already exist.
       local dest_dfa_state = dfa_states[dest_nfa_states:hash_key()]
       if dest_dfa_state == nil then
-        dest_dfa_state = new_dfa_state(dest_nfa_states, begin_groups, end_groups)
+        dest_dfa_state = new_dfa_state(nfa, dest_nfa_states)
         dfa_states[dest_nfa_states:hash_key()] = dest_dfa_state
         queue:enqueue(dest_nfa_states)
       end
 
       -- create a transition from the current DFA state into the new one
-      dfa_state.transitions[symbol_set] = dest_dfa_state
+      dfa_state:add_transition(symbol, dest_dfa_state)
     end
   end
 
