@@ -31,7 +31,7 @@
 --   return str
 -- end
 
-function fa.IntFA:__tostring()
+function fa.FA:__tostring()
   -- local oldmt = getmetatable(self)
   -- setmetatable(self, nil)
   -- print("BTW my identity is " .. tostring(self))
@@ -62,11 +62,17 @@ function fa.IntFA:__tostring()
         print_char = "start capture"
       elseif char == ")" then
         print_char = "end capture"
+      elseif type(char) == "string" then
+        print_char = char
       elseif type(char) == 'table' and char.class == IntSet then
         if char:isunbounded() then char = char:invert() end
         print_char = char:toasciistring()
+      elseif type(char) == 'table' and char.class == fa.NonTerm then
+        print_char = char.name
+      elseif type(char) == 'table' and char.class == fa.IntFA then
+        print_char = "A regex!"
       else
-        print(char.name)
+        print(serialize(char, 3, true))
         print_char = string.char(char)
       end
       print_char = print_char:gsub("[\"\\]", "\\%1")
@@ -76,4 +82,8 @@ function fa.IntFA:__tostring()
   str = str .. "}"
   return str
 end
+print(fa.RTN.__tostring)
+
+fa.IntFA.__tostring = fa.FA.__tostring
+fa.RTN.__tostring = fa.FA.__tostring
 

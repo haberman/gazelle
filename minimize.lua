@@ -82,7 +82,6 @@ function hopcroft_minimize(dfa)
         state.block:remove(state)
         state.block = new_twin
       end
-      print(string.format("Old block size: %d, New Block SIze: %d", old_block:count(), new_twin:count()))
 
       local smaller_block
       if old_block:num_elements() < new_twin:num_elements() then

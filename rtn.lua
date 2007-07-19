@@ -1,48 +1,14 @@
 
 require "misc"
 require "regex_parser"
+require "fa"
+require "sketches/regex_debug"
 
 require "sketches/pp"
-function FA:__tostring()
-  return "<A regex!  I'm sure it's quite pretty>"
-end
+-- function fa.FA:__tostring()
+--   return "<A regex!  I'm sure it's quite pretty>"
+-- end
 
--- RTN = {name="RTN"}
--- function RTN:new(init)
---   local obj = newobject(self)
---   return obj
--- end
--- 
--- RTNState = {name="RTNState"}
--- function RTNState:new(init)
---   local obj = newobject(self)
---   obj.transitions = {}
---   return obj
--- end
--- 
--- function RTNState:add_transition(on, dest_state)
---   table.insert(self.transitions, {on, dest_state})
--- end
--- 
--- RTNEpsilon = {name="RTNEpsilon"}
--- function RTNState:new()
---   local obj = newobject(self)
---   return obj
--- end
--- 
--- RTNString = {name="RTNString"}
--- function RTNState:new(str)
---   local obj = newobject(self)
---   obj.string = str
---   return obj
--- end
--- 
--- RTNDFA = {name="RTNDFA"}
--- function RTNState:new(dfa)
---   local obj = newobject(self)
---   obj.dfa = dfa
---   return obj
--- end
 NonTerminal = {name="NonTerminal"}
 function NonTerminal:new(name)
   local obj = newobject(self)
@@ -105,6 +71,7 @@ CharStream = {}
     end
     self.offset = self.offset + str:len()
     self:skip_ignored()
+    return true
   end
 
   function CharStream:consume_pattern(pattern)
@@ -143,10 +110,9 @@ function parse_grammar(chars)
     if not stmt then
       break
     end
-    grammar[stmt.nonterm] = grammar[stmt.nonterm] or {}
-    for derivation in each(stmt.derivations) do
-      table.insert(grammar[stmt.nonterm], derivation)
-    end
+    grammar[stmt.nonterm] = stmt.derivations
+    print(serialize(stmt.nonterm))
+    print(stmt.derivations)
   end
   return grammar
 end
@@ -156,7 +122,6 @@ function parse_statement(chars)
   local ret = {}
 
   ret.nonterm = parse_nonterm(chars)
-  print(ret.nonterm)
   chars:consume("->")
   ret.derivations = parse_derivations(chars)
   chars:consume(";")
@@ -166,31 +131,25 @@ end
 
 function parse_derivations(chars)
   local old_ignore = chars:ignore("whitespace")
-  local ret = {}
-  if chars:lookahead(1) == "e" then
-    ret = {"e"}
-  else
-    ret = {parse_derivation(chars)}
-  end
+  local derivations = {}
 
-  while chars:lookahead(1) == "|" do
-    chars:consume("|")
+  repeat
     if chars:lookahead(1) == "e" then
-      table.insert(ret, "e")
+      table.insert(derivations, fa.RTN:new(fa.e))
     else
-      table.insert(ret, parse_derivation(chars))
+      table.insert(derivations, parse_derivation(chars))
     end
-  end
+  until chars:lookahead(1) ~= "|" or not chars:consume("|")
+
   chars:ignore(old_ignore)
-  return ret
+  return nfa_construct.alt(derivations)
 end
 
 function parse_derivation(chars)
   local old_ignore = chars:ignore("whitespace")
-  local ret = {parse_term(chars)}
+  local ret = parse_term(chars)
   while chars:lookahead(1) ~= "|" and chars:lookahead(1) ~= ";" and chars:lookahead(1) ~= ")" do
-    table.insert(ret, parse_term(chars))
-
+    ret = nfa_construct.concat(ret, parse_term(chars))
   end
   chars:ignore(old_ignore)
   return ret
@@ -198,28 +157,53 @@ end
 
 function parse_term(chars)
   local old_ignore = chars:ignore("whitespace")
-  local ret = {}
+  local name
+  local ret
   if chars:match("\s*\w+\s*=") then
-    ret.name = parse_name(chars)
+    name = parse_name(chars)
     chars:consume("=")
   end
 
+  local symbol
   if chars:lookahead(1) == "/" then
-    ret.regex = parse_regex(chars)
+    ret = fa.RTN:new{symbol=parse_regex(chars), properties={name=name}}
   elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-    ret.string = parse_string(chars)
+    local string = parse_string(chars)
+    name = name or string
+    ret = fa.RTN:new{symbol=string, properties={name=name}}
   elseif chars:lookahead(1) == "(" then
+    if name then error("You cannot name a group") end
     chars:consume("(")
-    ret.derivation = parse_derivations(chars)
+    ret = parse_derivations(chars)
     chars:consume(")")
   else
-    ret.nonterm = parse_nonterm(chars)
+    local nonterm = parse_nonterm(chars)
+    name = name or nonterm
+    ret = fa.RTN:new{symbol=nonterm, properties={name=name}}
   end
 
   local one_ahead = chars:lookahead(1)
   if one_ahead == "?" or one_ahead == "*" or one_ahead == "+" then
-    ret.modifier = parse_modifier(chars)
+    local modifier, sep = parse_modifier(chars)
+    -- foo +(bar) == foo (bar foo)*
+    -- foo *(bar) == (foo (bar foo)*)?
+    if sep then
+      if modifier == "?" then error("Question mark with separator makes no sense") end
+      ret = nfa_construct.concat(ret:dup(), nfa_construct.kleene(nfa_construct.concat(sep, ret:dup())))
+      if modifier == "*" then
+        ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret)
+      end
+    else
+      if modifier == "?" then
+        ret = nfa_construct.alt2(ra.RTN:new{symbol=fa.e}, ret)
+      elseif modifier == "*" then
+        ret = nfa_construct.kleene(ret)
+      elseif modifier == "+" then
+        ret = nfa_construct.rep(ret)
+      end
+    end
   end
+
   chars:ignore(old_ignore)
   return ret
 end
@@ -233,40 +217,39 @@ end
 
 function parse_modifier(chars)
   local old_ignore = chars:ignore()
-  local ret = {}
-  ret.modifier = chars:consume_pattern("[?*+]")
+  local modifier, str
+  modifier = chars:consume_pattern("[?*+]")
   if chars:lookahead(1) == "(" then
     chars:consume("(")
     if chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-      ret.string = parse_string()
+      str = fa.RTN:new{symbol=parse_string()}
     else
-      ret.sep = chars:consume_pattern("[^)]*")
+      str = fa.RTN:new{symbol=chars:consume_pattern("[^)]*")}
     end
     chars:consume(")")
   end
   chars:ignore(old_ignore)
-  return ret
+  return modifier, str
 end
 
 function parse_nonterm(chars)
   local old_ignore = chars:ignore()
-  local ret = NonTerminal:new(chars:consume_pattern("[%w_]+"))
+  local ret = fa.NonTerm:new(chars:consume_pattern("[%w_]+"))
   chars:ignore(old_ignore)
   return ret
 end
 
 function parse_string(chars)
   local old_ignore = chars:ignore()
-  local ret = {}
-  ret.str = ""
+  local str = ""
   if chars:lookahead(1) == "'" then
     chars:consume("'")
     while chars:lookahead(1) ~= "'" do
       if chars:lookahead(1) == "\\" then
         chars:consume("\\")
-        ret.str = ret.str .. chars:consume_pattern(".") -- TODO: other backslash sequences
+        str = str .. chars:consume_pattern(".") -- TODO: other backslash sequences
       else
-        ret.str = ret.str .. chars:consume_pattern(".")
+        str = str .. chars:consume_pattern(".")
       end
     end
     chars:consume("'")
@@ -275,20 +258,19 @@ function parse_string(chars)
     while chars:lookahead(1) ~= '"' do
       if chars:lookahead(1) == "\\" then
         chars:consume("\\")
-        ret.str = ret.str .. chars:consume_pattern(".") -- TODO: other backslash sequences
+        str = str .. chars:consume_pattern(".") -- TODO: other backslash sequences
       else
-        ret.str = ret.str .. chars:consume_pattern(".")
+        str = str .. chars:consume_pattern(".")
       end
     end
     chars:consume('"')
   end
   chars:ignore(old_ignore)
-  return ret
+  return str
 end
 
 function parse_regex(chars)
   local old_ignore = chars:ignore()
-  local ret = {}
   chars:consume("/")
   local regex = ""
   while chars:lookahead(1) ~= "/" do
@@ -298,11 +280,13 @@ function parse_regex(chars)
       regex = regex .. chars:consume_pattern(".")
     end
   end
-  ret.regex = regex_parser.parse_regex(regex_parser.TokenStream:new(regex))
+  local regex = regex_parser.parse_regex(regex_parser.TokenStream:new(regex))
   chars:consume("/")
   chars:ignore(old_ignore)
-  return ret
+  return regex
 end
+
+require "sketches/regex_debug"
 
 grammar_str = ""
 while true do
@@ -312,10 +296,4 @@ while true do
 end
 
 grammar = parse_grammar(CharStream:new(grammar_str))
-
-print(serialize(grammar, 15, true))
-require "sketches/regex_debug"
-
-
-
 

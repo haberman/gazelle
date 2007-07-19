@@ -100,7 +100,7 @@ function FA:new(init)
     obj.start = init.start or obj:new_state()
     obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
     if init.symbol then
-      obj.start:add_transition(init.symbol, obj.final)
+      obj.start:add_transition(init.symbol, obj.final, init.properties)
     end
   end
 
@@ -140,7 +140,7 @@ end
 --------------------------------------------------------------------]]--
 
 IntFA = FA:new()
-IntFA.name = "FA"
+IntFA.name = "IntFA"
 function IntFA:new_graph(init)
   return IntFA:new(init)
 end
@@ -192,3 +192,44 @@ function IntFAState:transitions_for(val)
   end
   return targets
 end
+
+--[[--------------------------------------------------------------------
+
+  class RTN/RTNState: Classes for representing machines that represent
+  context-free grammars.
+
+--------------------------------------------------------------------]]--
+
+RTN = FA:new()
+RTN.name = "RTN"
+function RTN:new_graph(init)
+  return RTN:new(init)
+end
+
+function RTN:new_state()
+  return RTNState:new()
+end
+
+function RTN:get_outgoing_edge_values(states)
+  -- local symbol_sets = Set:new()
+  -- for state in each(states) do
+  --   for symbol_set, target_state, properties in state:transitions() do
+  --     if type(symbol_set) == "table" and symbol_set.class == IntSet then
+  --       symbol_sets:add(symbol_set)
+  --     end
+  --   end
+  -- end
+  -- return equivalence_classes(symbol_sets)
+end
+
+
+RTNState = FAState:new()
+RTNState.name = "RTNState"
+
+NonTerm = {name="NonTerm"}
+function NonTerm:new(name)
+  obj = newobject(self)
+  obj.name = name
+  return obj
+end
+
