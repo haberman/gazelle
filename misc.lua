@@ -29,6 +29,16 @@ function each(array_or_eachable_obj)
   end
 end
 
+function table_shallow_eql(tbl1, tbl2)
+  for k,v in pairs(tbl1) do
+    if tbl1[k] ~= tbl2[k] then return false end
+  end
+  for k,v in pairs(tbl2) do
+    if tbl1[k] ~= tbl2[k] then return false end
+  end
+  return true
+end
+
 -- traverses a graph of some sort -- caller provides a function that gives
 -- children of the current node.
 function breadth_first_traversal(obj, children_func)

@@ -59,6 +59,12 @@ function FAState:child_states()
 end
 
 function FAState:add_transition(edge_value, target_state, edge_properties)
+  for e_edge_value, e_target_state, e_edge_properties in self:transitions() do
+    if edge_value == e_edge_value and target_state == e_target_state
+       and e_edge_properties == edge_properties then
+       return
+    end
+  end
   table.insert(self._transitions, {edge_value, target_state, edge_properties})
 end
 
@@ -74,10 +80,10 @@ function FAState:transitions()
   end
 end
 
-function FAState:transitions_for(val)
+function FAState:transitions_for(val, prop)
   local targets = Set:new()
   for edge_val, target_state, properties in self:transitions() do
-    if edge_val == val then
+    if edge_val == val and ((prop == "ANY") or (prop == properties)) then
       targets:add(target_state)
     end
   end
@@ -100,9 +106,11 @@ function FA:new(init)
     obj.start = init.start or obj:new_state()
     obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
     if init.symbol then
-      obj.start:add_transition(init.symbol, obj.final, init.properties)
+      obj.start:add_transition(init.symbol, obj.final, ShallowTable:new(init.properties))
     end
   end
+
+  obj.properties = {}
 
   return obj
 end
@@ -151,14 +159,28 @@ end
 
 function IntFA:get_outgoing_edge_values(states)
   local symbol_sets = Set:new()
+  local properties_set = Set:new()
   for state in each(states) do
     for symbol_set, target_state, properties in state:transitions() do
+      properties_set:add(properties)
       if type(symbol_set) == "table" and symbol_set.class == IntSet then
         symbol_sets:add(symbol_set)
       end
     end
   end
-  return equivalence_classes(symbol_sets)
+  symbol_sets = equivalence_classes(symbol_sets)
+
+  -- for now, just cross symbol sets with properties.  a bit wasteful,
+  -- but we'll worry about that later.
+  local values = {}
+  for set in each(symbol_sets) do
+    for properties in each(properties_set) do
+      table.insert(values, {set, properties})
+    end
+    table.insert(values, {set, nil})
+  end
+
+  return values
 end
 
 
@@ -179,7 +201,7 @@ function IntFAState:add_transition(edge_value, target_state, edge_properties)
   FAState.add_transition(self, edge_value, target_state, edge_properties)
 end
 
-function IntFAState:transitions_for(val)
+function IntFAState:transitions_for(val, prop)
   local targets = Set:new()
   if type(val) == "table" and val.class == IntSet then
     val = val:sampleint()
@@ -187,7 +209,9 @@ function IntFAState:transitions_for(val)
 
   for edge_val, target_state, properties in self:transitions() do
     if edge_val == val or (val ~= fa.e and edge_val.class == IntSet and edge_val:contains(val)) then
-      targets:add(target_state)
+      if (prop == "ANY") or (prop == properties) then
+        targets:add(target_state)
+      end
     end
   end
   return targets
@@ -211,15 +235,36 @@ function RTN:new_state()
 end
 
 function RTN:get_outgoing_edge_values(states)
-  -- local symbol_sets = Set:new()
-  -- for state in each(states) do
-  --   for symbol_set, target_state, properties in state:transitions() do
-  --     if type(symbol_set) == "table" and symbol_set.class == IntSet then
-  --       symbol_sets:add(symbol_set)
-  --     end
-  --   end
-  -- end
-  -- return equivalence_classes(symbol_sets)
+  local symbol_sets = {}
+  local properties_set = Set:new()
+  for state in each(states) do
+    for edge_val, target_state, properties in state:transitions() do
+      if properties then properties_set:add(properties) end
+
+      if edge_val ~= fa.e then
+        -- do we already have edge_val?
+        local have_edge = false
+        for set in each(symbol_sets) do
+          if set == edge_val then have_edge = true; break; end
+        end
+        if not have_edge then
+          table.insert(symbol_sets, edge_val)
+        end
+      end
+    end
+  end
+
+  -- for now, just cross symbol sets with properties.  a bit wasteful,
+  -- but we'll worry about that later.
+  local values = {}
+  for set in each(symbol_sets) do
+    for properties in each(properties_set) do
+      table.insert(values, {set, properties})
+    end
+    table.insert(values, {set, nil})
+  end
+
+  return values
 end
 
 

@@ -102,6 +102,9 @@ CharStream = {}
 
 -- class TokenStream
 
+require "nfa_to_dfa"
+require "minimize"
+
 function parse_grammar(chars)
   chars:ignore("whitespace")
   local grammar = {}
@@ -111,8 +114,10 @@ function parse_grammar(chars)
       break
     end
     grammar[stmt.nonterm] = stmt.derivations
-    print(serialize(stmt.nonterm))
-    print(stmt.derivations)
+    stmt.derivations.final.final = "Final"
+    print("NonTerm is: " .. serialize(stmt.nonterm))
+    print(hopcroft_minimize(nfa_to_dfa(stmt.derivations)))
+    --print(nfa_to_dfa(stmt.derivations))
   end
   return grammar
 end
@@ -132,12 +137,14 @@ end
 function parse_derivations(chars)
   local old_ignore = chars:ignore("whitespace")
   local derivations = {}
+  local attributes = {slotnum = 1}
 
   repeat
     if chars:lookahead(1) == "e" then
-      table.insert(derivations, fa.RTN:new(fa.e))
+      table.insert(derivations, fa.RTN:new{symbol=fa.e, properties={slotnum=attributes.slotnum}})
+      attributes.slotnum = attributes.slotnum + 1
     else
-      table.insert(derivations, parse_derivation(chars))
+      table.insert(derivations, parse_derivation(chars, attributes))
     end
   until chars:lookahead(1) ~= "|" or not chars:consume("|")
 
@@ -145,32 +152,34 @@ function parse_derivations(chars)
   return nfa_construct.alt(derivations)
 end
 
-function parse_derivation(chars)
+function parse_derivation(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
-  local ret = parse_term(chars)
+  local ret = parse_term(chars, attributes)
   while chars:lookahead(1) ~= "|" and chars:lookahead(1) ~= ";" and chars:lookahead(1) ~= ")" do
-    ret = nfa_construct.concat(ret, parse_term(chars))
+    ret = nfa_construct.concat(ret, parse_term(chars, attributes))
   end
   chars:ignore(old_ignore)
   return ret
 end
 
-function parse_term(chars)
+function parse_term(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local name
   local ret
-  if chars:match("\s*\w+\s*=") then
+  if chars:match(" *%w+ *=") then
     name = parse_name(chars)
     chars:consume("=")
   end
 
   local symbol
   if chars:lookahead(1) == "/" then
-    ret = fa.RTN:new{symbol=parse_regex(chars), properties={name=name}}
+    ret = fa.RTN:new{symbol=parse_regex(chars), properties={name=name, slotnum=attributes.slotnum}}
+    attributes.slotnum = attributes.slotnum + 1
   elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
     local string = parse_string(chars)
     name = name or string
-    ret = fa.RTN:new{symbol=string, properties={name=name}}
+    ret = fa.RTN:new{symbol=string, properties={name=name, slotnum=attributes.slotnum}}
+    attributes.slotnum = attributes.slotnum + 1
   elseif chars:lookahead(1) == "(" then
     if name then error("You cannot name a group") end
     chars:consume("(")
@@ -179,12 +188,13 @@ function parse_term(chars)
   else
     local nonterm = parse_nonterm(chars)
     name = name or nonterm
-    ret = fa.RTN:new{symbol=nonterm, properties={name=name}}
+    ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}
+    attributes.slotnum = attributes.slotnum + 1
   end
 
   local one_ahead = chars:lookahead(1)
   if one_ahead == "?" or one_ahead == "*" or one_ahead == "+" then
-    local modifier, sep = parse_modifier(chars)
+    local modifier, sep = parse_modifier(chars, attributes)
     -- foo +(bar) == foo (bar foo)*
     -- foo *(bar) == (foo (bar foo)*)?
     if sep then
@@ -215,17 +225,18 @@ function parse_name(chars)
   return ret
 end
 
-function parse_modifier(chars)
+function parse_modifier(chars, attributes)
   local old_ignore = chars:ignore()
   local modifier, str
   modifier = chars:consume_pattern("[?*+]")
   if chars:lookahead(1) == "(" then
     chars:consume("(")
     if chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-      str = fa.RTN:new{symbol=parse_string()}
+      str = fa.RTN:new{symbol=parse_string(), attributes={slotnum=attributes.slotnum}}
     else
-      str = fa.RTN:new{symbol=chars:consume_pattern("[^)]*")}
+      str = fa.RTN:new{symbol=chars:consume_pattern("[^)]*"), attributes={slotnum=attributes.slotnum}}
     end
+    attributes.slotnum = attributes.slotnum + 1
     chars:consume(")")
   end
   chars:ignore(old_ignore)

@@ -60,12 +60,15 @@ TokenStream = {}
 --------------------------------------------------------------------]]--
 
 function parse_regex(chars)
+  local regex_str = chars.string
   local frags = {parse_frag(chars)}
   while chars:lookahead(1) == "|" do
     local ortok = chars:get()
     table.insert(frags, parse_frag(chars))
   end
-  return nfa_construct.alt(frags)
+  local nfa = nfa_construct.alt(frags)
+  nfa.properties.string = regex_str
+  return nfa
 end
 
 function parse_frag(chars)

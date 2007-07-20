@@ -31,6 +31,8 @@
 --   return str
 -- end
 
+require "sketches/pp"
+
 function fa.FA:__tostring()
   -- local oldmt = getmetatable(self)
   -- setmetatable(self, nil)
@@ -54,7 +56,7 @@ function fa.FA:__tostring()
     end
     label = label:gsub("[\"\\]", "\\%1")
     str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
-    for char, tostate in state:transitions() do
+    for char, tostate, attributes in state:transitions() do
       local print_char
       if char == fa.e then
         print_char = "ep"
@@ -75,6 +77,17 @@ function fa.FA:__tostring()
         print(serialize(char, 3, true))
         print_char = string.char(char)
       end
+      if attributes then
+        for k,v in pairs(attributes) do
+          if k ~= "class" then
+            local s = tostring(v)
+            if type(v) == "table" then
+              s = v.name
+            end
+            print_char = print_char .. string.format(" %s: %s", k, s)
+          end
+        end
+      end
       print_char = print_char:gsub("[\"\\]", "\\%1")
       str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
     end
@@ -82,7 +95,6 @@ function fa.FA:__tostring()
   str = str .. "}"
   return str
 end
-print(fa.RTN.__tostring)
 
 fa.IntFA.__tostring = fa.FA.__tostring
 fa.RTN.__tostring = fa.FA.__tostring

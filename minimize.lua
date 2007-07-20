@@ -19,9 +19,9 @@ function hopcroft_minimize(dfa)
   local inverse_transitions = {}
 
   for state in each(dfa:states()) do
-    for symbol, dest_state in state:transitions() do
+    for symbol, dest_state, properties in state:transitions() do
       inverse_transitions[dest_state] = inverse_transitions[dest_state] or dfa:new_state()
-      inverse_transitions[dest_state]:add_transition(symbol, state)
+      inverse_transitions[dest_state]:add_transition(symbol, state, properties)
     end
   end
 
@@ -42,21 +42,22 @@ function hopcroft_minimize(dfa)
     for state in each(states) do
       state.block = block
     end
-    for symbol in each(alphabet) do
-      work_queue:enqueue({block, symbol})
-      work_queue_set:add(tostring(block) .. tostring(symbol))
+    for symbol_tuple in each(alphabet) do
+      local symbol, properties = unpack(symbol_tuple)
+      work_queue:enqueue({block, symbol, properties})
+      work_queue_set:add(tostring(block) .. tostring(symbol) .. tostring(properties))
     end
   end
 
   while (not work_queue:isempty()) do
-    local block, symbol = unpack(work_queue:dequeue())
-    work_queue_set:remove(tostring(block) .. tostring(symbol))
+    local block, symbol, properties = unpack(work_queue:dequeue())
+    work_queue_set:remove(tostring(block) .. tostring(symbol) .. tostring(properties))
 
     -- determine what blocks need to be split
     local states_to_split = Set:new()
     for state in each(block) do
       if inverse_transitions[state] then
-        states_to_split:add_collection(inverse_transitions[state]:transitions_for(symbol))
+        states_to_split:add_collection(inverse_transitions[state]:transitions_for(symbol, properties))
       end
     end
 
@@ -64,7 +65,7 @@ function hopcroft_minimize(dfa)
     local new_twins = {}
     for state_to_split in each(states_to_split) do
       for state in each(state_to_split.block) do
-        local dest_state = state:transitions_for(symbol):to_array()[1]
+        local dest_state = state:transitions_for(symbol, properties):to_array()[1]
         if not (dest_state and dest_state.block == block) then
           if not new_twins[state.block] then
             local new_twin = Set:new()
@@ -90,13 +91,14 @@ function hopcroft_minimize(dfa)
         smaller_block = new_twin
       end
 
-      for alphabet_symbol in each(alphabet) do
-        if work_queue_set:contains(tostring(old_block) .. tostring(alphabet_symbol)) then
-          work_queue:enqueue({new_twin, alphabet_symbol})
-          work_queue_set:add(tostring(new_twin) .. tostring(alphabet_symbol))
+      for alphabet_symbol_tuple in each(alphabet) do
+        local alphabet_symbol, alphabet_properties = unpack(alphabet_symbol_tuple)
+        if work_queue_set:contains(tostring(old_block) .. tostring(alphabet_symbol) .. tostring(alphabet_properties)) then
+          work_queue:enqueue({new_twin, alphabet_symbol, alphabet_properties})
+          work_queue_set:add(tostring(new_twin) .. tostring(alphabet_symbol) .. tostring(alphabet_properties))
         else
-          work_queue:enqueue({smaller_block, alphabet_symbol})
-          work_queue_set:add(tostring(smaller_block) .. tostring(alphabet_symbol))
+          work_queue:enqueue({smaller_block, alphabet_symbol, alphabet_properties})
+          work_queue_set:add(tostring(smaller_block) .. tostring(alphabet_symbol) .. tostring(alphabet_properties))
         end
       end
     end
@@ -117,8 +119,8 @@ function hopcroft_minimize(dfa)
   minimal_dfa.start = states[dfa.start.block]
   for block in blocks:each() do
     for state in each(block) do
-      for symbol, dest_state in state:transitions() do
-        states[block]:add_transition(symbol, states[dest_state.block])
+      for symbol, dest_state, properties in state:transitions() do
+        states[block]:add_transition(symbol, states[dest_state.block], properties)
       end
     end
   end

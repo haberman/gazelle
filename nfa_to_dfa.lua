@@ -14,7 +14,7 @@ require "data_structures"
 require "misc"
 
 function epsilon_closure(state)
-  return breadth_first_traversal(state, function(s) return s:transitions_for(fa.e) end)
+  return breadth_first_traversal(state, function(s) return s:transitions_for(fa.e, "ANY") end)
 end
 
 -- we as input an array of NFAs, one for each token we want to match simultaneously,
@@ -71,16 +71,17 @@ function nfa_to_dfa(nfa)
     -- Generate a list of symbols that transition out of this set of NFA states.
     -- We prefer this to iterating over the entire symbol space because it's
     -- vastly more efficient in the case of a large symbol space (eg. Unicode)
-    local symbols = nfa:get_outgoing_edge_values(nfa_states)
+    local symbol_tuples = nfa:get_outgoing_edge_values(nfa_states)
 
     -- For each output symbol, generate the list of destination NFA states that
     -- recognizing this symbol could put you in (including epsilon transitions).
-    for symbol in each(symbols) do
+    for symbol_tuple in each(symbol_tuples) do
+      local symbol, properties = unpack(symbol_tuple)
       local dest_nfa_states = Set:new()
       for nfa_state in nfa_states:each() do
         -- equivalence classes dictate that this character represents what will
         -- happen to ALL characters in the set
-        local target_states = nfa_state:transitions_for(symbol)
+        local target_states = nfa_state:transitions_for(symbol, properties)
 
         if target_states then
           for target_state in each(target_states) do
@@ -90,17 +91,23 @@ function nfa_to_dfa(nfa)
         end
       end
 
-      -- create a DFA state for this set of NFA states, if one does not
-      -- already exist.
-      local dest_dfa_state = dfa_states[dest_nfa_states:hash_key()]
-      if dest_dfa_state == nil then
-        dest_dfa_state = new_dfa_state(nfa, dest_nfa_states)
-        dfa_states[dest_nfa_states:hash_key()] = dest_dfa_state
-        queue:enqueue(dest_nfa_states)
-      end
+      -- this is necessary because (at the moment) get_outgoing_edge_values will generate
+      -- combinations of symbol/properties that don't *actually* transtion anywhere
+      -- TODO: get rid of that shortcoming
+      if not dest_nfa_states:isempty() then
 
-      -- create a transition from the current DFA state into the new one
-      dfa_state:add_transition(symbol, dest_dfa_state)
+        -- create a DFA state for this set of NFA states, if one does not
+        -- already exist.
+        local dest_dfa_state = dfa_states[dest_nfa_states:hash_key()]
+        if dest_dfa_state == nil then
+          dest_dfa_state = new_dfa_state(nfa, dest_nfa_states)
+          dfa_states[dest_nfa_states:hash_key()] = dest_dfa_state
+          queue:enqueue(dest_nfa_states)
+        end
+
+        -- create a transition from the current DFA state into the new one
+        dfa_state:add_transition(symbol, dest_dfa_state, properties)
+      end
     end
   end
 
