@@ -57,6 +57,27 @@ function breadth_first_traversal(obj, children_func)
   return seen
 end
 
+function depth_first_traversal(obj, children_func)
+  local seen = Set:new{obj}
+  local stack = Stack:new()
+  stack:push(obj)
+  depth_first_traversal_helper(obj, children_func, stack, seen)
+end
+
+function depth_first_traversal_helper(obj, children_func, stack, seen)
+  children = children_func(obj, stack) or {}
+  for child in each(children) do
+    if seen:contains(child) then
+      error("You gave me a left-recursive grammar you bastard!")
+    elseif seen:contains(child) == false then
+      seen:add(child)
+      stack:push(child)
+      depth_first_traversal_helper(child, children_func, stack, seen)
+      stack:pop()
+    end
+  end
+end
+
 -- all ints within each IntSet are assumed to be equivalent.
 -- Given this, return a new list of IntSets, where each IntSet
 -- returned is considered equivalent across ALL IntSets.

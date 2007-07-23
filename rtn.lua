@@ -113,11 +113,8 @@ function parse_grammar(chars)
     if not stmt then
       break
     end
-    grammar[stmt.nonterm] = stmt.derivations
     stmt.derivations.final.final = "Final"
-    print("NonTerm is: " .. serialize(stmt.nonterm))
-    print(hopcroft_minimize(nfa_to_dfa(stmt.derivations)))
-    --print(nfa_to_dfa(stmt.derivations))
+    grammar[stmt.nonterm.name] = hopcroft_minimize(nfa_to_dfa(stmt.derivations))
   end
   return grammar
 end
@@ -125,19 +122,21 @@ end
 function parse_statement(chars)
   local old_ignore = chars:ignore("whitespace")
   local ret = {}
+  local attributes = {}
 
   ret.nonterm = parse_nonterm(chars)
+  attributes.nonterm = ret.nonterm
   chars:consume("->")
-  ret.derivations = parse_derivations(chars)
+  ret.derivations = parse_derivations(chars, attributes)
   chars:consume(";")
   chars:ignore(old_ignore)
   return ret
 end
 
-function parse_derivations(chars)
+function parse_derivations(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local derivations = {}
-  local attributes = {slotnum = 1}
+  attributes.slotnum = 1
 
   repeat
     if chars:lookahead(1) == "e" then
@@ -166,13 +165,14 @@ function parse_term(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local name
   local ret
-  if chars:match(" *%w+ *=") then
+  if chars:match(" *[%w_]+ *=") then
     name = parse_name(chars)
     chars:consume("=")
   end
 
   local symbol
   if chars:lookahead(1) == "/" then
+    name = name or attributes.nonterm
     ret = fa.RTN:new{symbol=parse_regex(chars), properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
   elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
@@ -183,7 +183,7 @@ function parse_term(chars, attributes)
   elseif chars:lookahead(1) == "(" then
     if name then error("You cannot name a group") end
     chars:consume("(")
-    ret = parse_derivations(chars)
+    ret = parse_derivations(chars, attributes)
     chars:consume(")")
   else
     local nonterm = parse_nonterm(chars)
@@ -220,7 +220,7 @@ end
 
 function parse_name(chars)
   local old_ignore = chars:ignore()
-  local ret = chars:consume_pattern("%w+")
+  local ret = chars:consume_pattern("[%w_]+")
   chars:ignore(old_ignore)
   return ret
 end
@@ -296,15 +296,4 @@ function parse_regex(chars)
   chars:ignore(old_ignore)
   return regex
 end
-
-require "sketches/regex_debug"
-
-grammar_str = ""
-while true do
-  local str = io.read()
-  if str == nil then break end
-  grammar_str = grammar_str .. str
-end
-
-grammar = parse_grammar(CharStream:new(grammar_str))
 

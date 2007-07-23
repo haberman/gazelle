@@ -64,6 +64,14 @@ Stack = {name="Stack"}
     end
     return false
   end
+
+  function Stack:to_array()
+    local arr = {}
+    for i, val in ipairs(self.stack) do
+      table.insert(arr, val)
+    end
+    return arr
+  end
 -- class Stack
 
 
