@@ -85,7 +85,7 @@ function hopcroft_minimize(dfa)
       end
 
       local smaller_block
-      if old_block:num_elements() < new_twin:num_elements() then
+      if old_block:count() < new_twin:count() then
         smaller_block = old_block
       else
         smaller_block = new_twin

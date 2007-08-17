@@ -108,21 +108,41 @@ require "minimize"
 function parse_grammar(chars)
   chars:ignore("whitespace")
   local grammar = {}
+  local attributes = {terminals={}, ignore={}}
   while not chars:eof() do
-    stmt = parse_statement(chars)
-    if not stmt then
-      break
+    if chars:match(" *start") then
+      local start = parse_nonterm(chars)
+      attributes.start = parse_nonterm(chars).name;
+      chars:consume(";")
+    elseif chars:match(" *ignore") then
+      local ignore = parse_nonterm(chars)
+      local what_to_ignore = parse_nonterm(chars).name
+      local in_ = parse_nonterm(chars)
+      local nonterms = {parse_nonterm(chars).name}
+      while chars:match(",") do
+        local comma = chars:consume(",")
+        table.insert(nonterms, parse_nonterm(chars).name)
+      end
+      for nonterm in each(nonterms) do
+        attributes.ignore[nonterm] = attributes.ignore[nonterm] or Set:new()
+        attributes.ignore[nonterm]:add(what_to_ignore)
+      end
+      chars:consume(";")
+    else
+      stmt = parse_statement(chars, attributes)
+      if not stmt then
+        break
+      end
+      stmt.derivations.final.final = "Final"
+      grammar[stmt.nonterm.name] = hopcroft_minimize(nfa_to_dfa(stmt.derivations))
     end
-    stmt.derivations.final.final = "Final"
-    grammar[stmt.nonterm.name] = hopcroft_minimize(nfa_to_dfa(stmt.derivations))
   end
-  return grammar
+  return grammar, attributes
 end
 
-function parse_statement(chars)
+function parse_statement(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local ret = {}
-  local attributes = {}
 
   ret.nonterm = parse_nonterm(chars)
   attributes.nonterm = ret.nonterm
@@ -172,11 +192,13 @@ function parse_term(chars, attributes)
 
   local symbol
   if chars:lookahead(1) == "/" then
-    name = name or attributes.nonterm
-    ret = fa.RTN:new{symbol=parse_regex(chars), properties={name=name, slotnum=attributes.slotnum}}
+    name = name or attributes.nonterm.name
+    attributes.terminals[name] = parse_regex(chars)
+    ret = fa.RTN:new{symbol=name, properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
   elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
     local string = parse_string(chars)
+    attributes.terminals[string] = string
     name = name or string
     ret = fa.RTN:new{symbol=string, properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
@@ -231,11 +253,14 @@ function parse_modifier(chars, attributes)
   modifier = chars:consume_pattern("[?*+]")
   if chars:lookahead(1) == "(" then
     chars:consume("(")
+    local sep_string
     if chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-      str = fa.RTN:new{symbol=parse_string(), attributes={slotnum=attributes.slotnum}}
+      sep_string = parse_string()
     else
-      str = fa.RTN:new{symbol=chars:consume_pattern("[^)]*"), attributes={slotnum=attributes.slotnum}}
+      sep_string = chars:consume_pattern("[^)]*")
     end
+    str = fa.RTN:new{symbol=sep_string, attributes={slotnum=attributes.slotnum}}
+    attributes.terminals[sep_string] = sep_string
     attributes.slotnum = attributes.slotnum + 1
     chars:consume(")")
   end

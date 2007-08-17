@@ -56,6 +56,10 @@ Stack = {name="Stack"}
     return table.remove(self.stack)
   end
 
+  function Stack:top()
+    return self.stack[#self.stack]
+  end
+
   function Stack:contains(elem)
     for e in each(self.stack) do
       if elem == e then
@@ -126,14 +130,6 @@ Set = {name="Set"}
       i = i + 1
     end
     return i
-  end
-
-  function Set:num_elements()
-    local num = 0
-    for _ in self:each() do
-      num = num + 1
-    end
-    return num
   end
 
   function Set:hash_key()

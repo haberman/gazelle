@@ -54,7 +54,27 @@ function fa.FA:__tostring()
       end
       peripheries = 2
     end
+    if state.decisions then
+      for terminal, stack in pairs(state.decisions) do
+        label = label .. "NEWLINE" .. terminal .. "->"
+        if stack == Ignore then
+          label = label .. "IGNORE"
+        else
+          for stack_member in each(stack) do
+            if type(stack_member) == "table" and stack_member.class == fa.NonTerm then
+              label = label .. stack_member.name
+            elseif type(stack_member) == "table" and stack_member.class == Ignore then
+              label = label .. "IGNORE"
+            else
+              label = label .. serialize(stack_member)
+            end
+            label = label .. ", "
+          end
+        end
+      end
+    end
     label = label:gsub("[\"\\]", "\\%1")
+    label = label:gsub("NEWLINE", "\\n")
     str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
     for char, tostate, attributes in state:transitions() do
       local print_char

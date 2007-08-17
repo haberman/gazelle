@@ -68,6 +68,10 @@ function FAState:add_transition(edge_value, target_state, edge_properties)
   table.insert(self._transitions, {edge_value, target_state, edge_properties})
 end
 
+function FAState:num_transitions()
+  return #self._transitions
+end
+
 function FAState:transitions()
   local i = 0
   return function ()
@@ -106,7 +110,23 @@ function FA:new(init)
     obj.start = init.start or obj:new_state()
     obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
     if init.symbol then
-      obj.start:add_transition(init.symbol, obj.final, ShallowTable:new(init.properties))
+      if init.properties ~= nil then
+        init.properties = ShallowTable:new(init.properties)
+      end
+
+      obj.start:add_transition(init.symbol, obj.final, init.properties)
+    elseif init.string then
+      local int_set = IntSet:new()
+      local char = init.string:sub(1, 1):byte()
+      int_set:add(Range:new(char, char))
+      local fa = IntFA:new{symbol=int_set}
+      for i=2,#init.string do
+        int_set = IntSet:new()
+        char = init.string:sub(i, i):byte()
+        int_set:add(Range:new(char, char))
+        fa = nfa_construct.concat(fa, IntFA:new{symbol=int_set})
+      end
+      return fa
     end
   end
 
@@ -162,7 +182,10 @@ function IntFA:get_outgoing_edge_values(states)
   local properties_set = Set:new()
   for state in each(states) do
     for symbol_set, target_state, properties in state:transitions() do
-      properties_set:add(properties)
+      if properties ~= nil then
+        properties_set:add(properties)
+      end
+
       if type(symbol_set) == "table" and symbol_set.class == IntSet then
         symbol_sets:add(symbol_set)
       end
