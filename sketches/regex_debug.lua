@@ -80,10 +80,10 @@ function fa.FA:__tostring()
       local print_char
       if char == fa.e then
         print_char = "ep"
-      elseif char == "(" then
-        print_char = "start capture"
-      elseif char == ")" then
-        print_char = "end capture"
+      -- elseif char == "(" then
+      --   print_char = "start capture"
+      -- elseif char == ")" then
+      --   print_char = "end capture"
       elseif type(char) == "string" then
         print_char = char
       elseif type(char) == 'table' and char.class == IntSet then
@@ -97,18 +97,19 @@ function fa.FA:__tostring()
         print(serialize(char, 3, true))
         print_char = string.char(char)
       end
-      if attributes then
+      if attributes and false then
         for k,v in pairs(attributes) do
           if k ~= "class" then
             local s = tostring(v)
             if type(v) == "table" then
               s = v.name
             end
-            print_char = print_char .. string.format(" %s: %s", k, s)
+            print_char = print_char .. string.format("NEWLINE%s: %s", k, s)
           end
         end
       end
       print_char = print_char:gsub("[\"\\]", "\\%1")
+      print_char = print_char:gsub("NEWLINE", "\\n")
       str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
     end
   end

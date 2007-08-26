@@ -9,5 +9,5 @@ array    -> "[" value *(,)              "]";
 whitespace -> /[\r\n\s\t]+/;
 
 start object;
-ignore whitespace in object, array;
+allow whitespace in object, array;
 

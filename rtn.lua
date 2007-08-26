@@ -71,6 +71,7 @@ CharStream = {}
     end
     self.offset = self.offset + str:len()
     self:skip_ignored()
+    -- print("Consumed " .. str)
     return true
   end
 
@@ -114,7 +115,7 @@ function parse_grammar(chars)
       local start = parse_nonterm(chars)
       attributes.start = parse_nonterm(chars).name;
       chars:consume(";")
-    elseif chars:match(" *ignore") then
+    elseif chars:match(" *allow") then
       local ignore = parse_nonterm(chars)
       local what_to_ignore = parse_nonterm(chars).name
       local in_ = parse_nonterm(chars)
@@ -159,7 +160,7 @@ function parse_derivations(chars, attributes)
   attributes.slotnum = 1
 
   repeat
-    if chars:lookahead(1) == "e" then
+    if chars:match(" e ") then
       table.insert(derivations, fa.RTN:new{symbol=fa.e, properties={slotnum=attributes.slotnum}})
       attributes.slotnum = attributes.slotnum + 1
     else
@@ -227,7 +228,7 @@ function parse_term(chars, attributes)
       end
     else
       if modifier == "?" then
-        ret = nfa_construct.alt2(ra.RTN:new{symbol=fa.e}, ret)
+        ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret)
       elseif modifier == "*" then
         ret = nfa_construct.kleene(ret)
       elseif modifier == "+" then

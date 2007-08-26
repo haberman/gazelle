@@ -1,0 +1,16 @@
+
+grammar     -> statement*;
+statement   -> nonterm "->" derivations ";" | "ignore" nonterm "in" nonterm +(,);
+derivations -> ( "e" | derivation ) +(|);
+derivation  -> term+;
+term        -> ( name "=" )? (regex | string | nonterm | ( "(" derivations ")" ) ) modifier ? ;
+name        -> /\w+/;
+modifier    -> "?" | "*" | "+" | ("*" | "+") "(" ( /[^)]*/ | string ) ")";
+nonterm     -> /\w+/;
+string      -> '"' /([^"]|\\")*/ '"';
+string      -> "'" /([^']|\\')*/ "'";
+regex       -> "/" /([^\/]|\\\/)*/ "/";
+
+whitespace  -> /[\r\n\s\t]+/;
+allow whitespace in grammar, statement, derivations, derivation, term;
+

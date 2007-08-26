@@ -1,0 +1,14 @@
+
+regex -> frag *(|);
+frag  -> term *;
+term  -> prim modifier ?;
+modifier -> "?" | "+" | "*" | "{" number "}" | "{" number "," number "}";
+prim  -> char | char_class | "(" regex ")";
+char  -> escaped_char=/\\./ | regular_char=/[^\\\r\n\t\s[(]/;
+char_class -> "[" ( class_char ("-" class_char)? )* "]";
+class_char -> escaped_class_char=/\\./ | regular_class_char=/[^\]\\]/;
+number -> /\d+/;
+
+whitespace -> /[\r\n\t\s]+/;
+allow whitespace in regex, frag, term, prim;
+

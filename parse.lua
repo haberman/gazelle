@@ -34,9 +34,16 @@ require "sketches/pp"
 
 Ignore = {name="Ignore"}
 
+-- for nonterm, rtn in pairs(grammar) do
+--   print(nonterm)
+--   print(rtn)
+-- end
+
 -- For each state in the grammar, create (or reuse) a DFA to run
 -- when we hit that state.
 for nonterm, rtn in pairs(grammar) do
+  print(nonterm)
+  print(rtn)
   for state in each(rtn:states()) do
     local transition_num = 0
     decisions = {}
