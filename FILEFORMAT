@@ -1,0 +1,21 @@
+
+Bitcode file, application magic number = "GH"
+
+INTFAS
+  INTFA
+    INTFA_STATES
+      [INTFA_STATE, # of transitions]  <-- first state is assumed to be start state
+      [INTFA_STATE, # of transitions]
+      [INTFA_FINAL_STATE, # of transitions, terminal_name_int]
+      ...
+      (states are identified by their offset in this list)
+    INTFA_TRANSITIONS
+      [INTFA_TRANSITION, edge val low, edge val high, dest state offset]
+      [INTFA_TRANSITION, edge val low, edge val high, dest state offset]
+      ...
+      (transitions are identified by their offset in this list)
+STRINGS
+  [STRING, <ascii array of chars>]
+  [STRING, <ascii array of chars>]
+  ...
+
