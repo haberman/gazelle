@@ -1,16 +1,15 @@
 
 require "rtn"
+require "pack"
 
--- First read grammar file
-
-local grm = io.open(arg[1], "r")
-local grm_str = grm:read("*a")
-
-grammar, attributes = parse_grammar(CharStream:new(grm_str))
+BC_INTFAS = 1
+BC_INTFA = 2
+BC_INTFA_STATES = 3
+BC_INTFA_TRANSITIONS = 4
 
 --print(serialize(attributes.ignore))
 
-function child_edges(edge, stack)
+function child_edges(edge, stack, grammar, decisions)
   if type(edge) == "table" and edge.class == fa.NonTerm then
     local child_edges = {}
     for edge_val in grammar[edge.name].start:transitions() do
@@ -29,132 +28,180 @@ function child_edges(edge, stack)
   end
 end
 
-require "sketches/regex_debug"
-require "sketches/pp"
+-- require "sketches/regex_debug"
+-- require "sketches/pp"
 
 Ignore = {name="Ignore"}
 
--- for nonterm, rtn in pairs(grammar) do
---   print(nonterm)
---   print(rtn)
--- end
+function load_grammar(file)
+  -- First read grammar file
 
--- For each state in the grammar, create (or reuse) a DFA to run
--- when we hit that state.
-for nonterm, rtn in pairs(grammar) do
-  print(nonterm)
-  print(rtn)
-  for state in each(rtn:states()) do
-    local transition_num = 0
-    decisions = {}
-    if state:num_transitions() > 0 then
-      for edge_val, target_state in state:transitions() do
-        transition_num = transition_num + 1
-        depth_first_traversal(edge_val, child_edges)
-      end
+  local grm = io.open(file, "r")
+  local grm_str = grm:read("*a")
 
-      -- add "ignore" decisions
-      if attributes.ignore[nonterm] then
-        for ignore in each(attributes.ignore[nonterm]) do
-          decisions[ignore] = Ignore
-        end
-      end
+  local grammar, attributes = parse_grammar(CharStream:new(grm_str))
 
-      -- print("Inside " .. nonterm .. ", state=" .. tostring(state) .. "...")
-      -- print(serialize(decisions))
-      local nfas = {}
-      for term, stack in pairs(decisions) do
-        local target = attributes.terminals[term]
-        if type(target) == "string" then
-          target = fa.IntFA:new{string=target}
-        end
-        table.insert(nfas, {target, term})
-      end
+  -- for nonterm, rtn in pairs(grammar) do
+  --   print(nonterm)
+  --   print(rtn)
+  -- end
 
-      state.dfa = hopcroft_minimize(nfas_to_dfa(nfas))
-      state.decisions = decisions
-    end
+  local decisions
+  function my_child_edges(edge, stack)
+    return child_edges(edge, stack, grammar, decisions)
   end
-end
 
-chars = regex_parser.TokenStream:new([[{
-    "glossary": {
-        "title": "example glossary",
-                "GlossDiv": {
-            "title": "S",
-                        "GlossList": {
-                "GlossEntry": {
-                    "ID": "SGML",
-                                        "SortAs": "SGML",
-                                        "GlossTerm": "Standard Generalized Markup Language",
-                                        "Acronym": "SGML",
-                                        "Abbrev": "ISO 8879:1986",
-                                        "GlossDef": {
-                        "para": "A meta-markup language, used to create markup languages such as DocBook.",
-                                                "GlossSeeAlso": ["GML", "XML"]
-                    },
-                                        "GlossSee": "markup"
-                }
-            }
-        }
-    }
-}]])
-
--- parse!
-local state_stack = Stack:new()
-local nonterm_stack = Stack:new()
-nonterm_stack:push(attributes.start)
-local state = grammar[attributes.start].start
-while state ~= grammar[attributes.start].final or #stack > 0 do
-  -- match the next terminal using the current state's DFA
-  local dfa = state.dfa
-  local dfa_state = dfa.start
-  local token = ""
-
-  while chars:lookahead(1) ~= "" do
-    local transitions = dfa_state:transitions_for(chars:lookahead(1):byte(), "ANY")
-    local transition
-    if transitions:count() == 1 then
-      for t in each(transitions) do dfa_state = t end
-      token = token .. chars:get()
-    else
-      error("Syntax error when I hit " .. chars:lookahead(1) .. "!")
-    end
-
-    if dfa_state.final and dfa_state:transitions_for(chars:lookahead(1):byte(), "ANY"):count() == 0 then
-      if dfa_state.final ~= "whitespace" then
-        print("\nRecognized token=" .. dfa_state.final .. "  text='" .. token .. "'")
-      end
-      local action_stack = state.decisions[dfa_state.final]
-      -- print("Pre-transition: nonterm_stack="..serialize(nonterm_stack:to_array())..", state="..tostring(state))
-      for action in each(action_stack) do
-        new_states = state:transitions_for(action, "ANY")
-        if new_states:count() == 0 then
-          error("This should not happen -- lookahead was calculated incorrectly")
+  -- For each state in the grammar, create (or reuse) a DFA to run
+  -- when we hit that state.
+  for nonterm, rtn in pairs(grammar) do
+    -- print(nonterm)
+    -- print(rtn)
+    for state in each(rtn:states()) do
+      local transition_num = 0
+      decisions = {}
+      if state:num_transitions() > 0 then
+        for edge_val, target_state in state:transitions() do
+          transition_num = transition_num + 1
+          depth_first_traversal(edge_val, my_child_edges)
         end
 
-        for s in each(new_states) do state = s end
-        if type(action) == "table" and action.class == fa.NonTerm then
-          nonterm_stack:push(action.name)
-          state_stack:push(state)
-          state = grammar[action.name].start
-        end
-
-        while state.final do
-          print("Recognized an ENTIRE " .. nonterm_stack:top())
-          nonterm_stack:pop()
-          state = state_stack:pop()
-          if #(nonterm_stack:to_array()) == 0 then
-            print("Finished parsing!!")
-            os.exit()
+        -- add "ignore" decisions
+        if attributes.ignore[nonterm] then
+          for ignore in each(attributes.ignore[nonterm]) do
+            decisions[ignore] = Ignore
           end
         end
+
+        -- print("Inside " .. nonterm .. ", state=" .. tostring(state) .. "...")
+        -- print(serialize(decisions))
+        local nfas = {}
+        for term, stack in pairs(decisions) do
+          local target = attributes.terminals[term]
+          if type(target) == "string" then
+            target = fa.IntFA:new{string=target}
+          end
+          table.insert(nfas, {target, term})
+        end
+
+        state.dfa = hopcroft_minimize(nfas_to_dfa(nfas))
+        state.decisions = decisions
       end
-      --print("Post-transition: nonterm_stack="..serialize(nonterm_stack:to_array())..", state="..tostring(state))
-      token = ""
-      dfa = state.dfa
-      dfa_state = dfa.start
     end
   end
+
+  return grammar, attributes, decisions
 end
 
+function write_grammar(infilename, outfilename)
+  local file = io.open(outfilename, "w")
+  grammar, attributes, decisions = load_grammar(infilename)
+
+  -- write Bitcode header
+  bc_file = BitCodeFile:new("GH")
+
+  print(string.format("Writing grammar to disk..."))
+
+  bc_file.enter_subblock(BC_INTFAS_BLOCK)
+
+  local intfas = {}
+  local intfa_offsets = {}
+
+  for name, rtn in pairs(grammar) do
+    for rtn_state in each(rtn:states()) do
+      if rtn_state.dfa and not intfa_offsets[rtn_state.dfa] then
+        table.insert(intfas, rtn_state.dfa)
+        intfa_offsets[rtn_state.dfa] = #intfas
+      end
+    end
+  end
+
+  bc_file.enter_subblock(BC_INTFAS)
+  for intfa in each(intfas) do
+    bc_file.enter_subblock(BC_INTFA)
+    local intfa_states = {}
+    local intfa_state_offsets = {}
+    local intfa_transitions = {}
+    local intfa_state_transition_offsets = {}
+
+    bc_file.enter_subblock(BC_INTFA_STATES)
+    for state in each(intfa:states()) do
+      intfa_states_offsets[state] = #intfa_states
+      table.insert(intfa_states, state)
+      local initial_offset = #intfa_transitions
+      for edge_val, target_state, properties in state:transitions() do
+        for range in edge_val:each_range() do
+          table.insert(intfa_transitions, {range, target_state})
+        end
+      end
+      local num_transitions = #intfa_transitions - initial_offset
+      if state.final and not string_offsets[state.final] then
+        string_offsets[state.final] = #strings
+        table.insert(strings, state.final)
+      end
+      if state.final then
+        bc_file.write_abbreviated_record(bc_intfa_final_state, num_transitions, string_offsets[state.final])
+      else
+        bc_file.write_abbreviated_record(bc_intfa_state, num_transitions)
+      end
+    end
+    bc_file.end_subblock(BC_INTFA_STATES)
+
+    bc_file.enter_subblock(BC_INTFA_TRANSITIONS)
+    for transition in each(intfa_transitions) do
+      local range, target_state = unpack(intfa_transition)
+      target_state_offset = intfa_states_offsets[target_state]
+      file:write(string.pack("III", range.high, range.low, intfastates_offsets[target_state]))
+      bc_file.write_abbreviated_record(bc_intfa_transition, range.low, range.high, target_state_offset)
+    end
+
+    bc_file.end_subblock(BC_INTFA_TRANSITIONS)
+    bc_file.end_subblock(BC_INTFA)
+  end
+  bc_file.end_subblock(BC_INTFAS)
+
+  -- for name, rtn in pairs(grammar) do
+  --   rtns_offsets[rtn] = #rtns
+  --   if not string_offsets[name] then
+  --     string_offsets[name] = #strings
+  --     table.insert(strings, name)
+  --   end
+
+  --   table.insert(rtns, {name, rtn})
+  --   for rtn_state in each(rtn:states()) do
+  --     rtnstates_offsets[rtn_state] = #rtnstates
+  --     table.insert(rtnstates, rtn_state)
+  --     if rtn_state.dfa and not intfas_offsets[rtn_state.dfa] then
+  --       intfas_offsets[rtn_state.dfa] = #intfas
+  --       table.insert(intfas, rtn_state.dfa)
+  --       for dfa_state in each(rtn_state.dfa:states()) do
+  --         intfastates_offsets[dfa_state] = #intfastates
+  --         table.insert(intfastates, dfa_state)
+  --         local initial_offset = #intfa_transitions
+  --         for edge_val, target_state, properties in dfa_state:transitions() do
+  --           for range in edge_val:each_range() do
+  --             table.insert(intfa_transitions, {range, target_state})
+  --           end
+  --         end
+  --         intfastate_transitions_for[dfa_state] = {initial_offset, #intfa_transitions - initial_offset}
+  --         if dfa_state.final and not string_offsets[dfa_state.final] then
+  --           string_offsets[dfa_state.final] = #strings
+  --           table.insert(strings, dfa_state.final)
+  --         end
+  --       end
+  --     end
+
+  --     local initial_offset = #rtntransitions
+  --     for edge_val, target_state, properties in rtn_state:transitions() do
+  --       table.insert(rtntransitions, {edge_val, target_state, properties})
+  --     end
+  --     rtnstate_transitions_for[rtn_state] = {initial_offset, #rtntransitions - initial_offset}
+  --   end
+  -- end
+
+  print(string.format("%d RTNs, %d states, %d transitions", #rtns, #rtnstates, #rtntransitions))
+  print(string.format("%d IntFAs, %d states, %d transitions", #intfas, #intfastates, #intfa_transitions))
+  print(string.format("%d strings", #strings))
+
+end
+
+write_grammar(arg[1], arg[2])

@@ -260,6 +260,10 @@ IntSet = {name="IntSet"}
     return new_intset
   end
 
+  function IntSet:each_range()
+    return each(self:get_non_negated().list)
+  end
+
   function IntSet:isunbounded()
     for range in each(self.list) do
       if range.high == math.huge then
