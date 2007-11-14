@@ -1,11 +1,17 @@
 
 require "rtn"
 require "pack"
+require "bc"
 
-BC_INTFAS = 1
-BC_INTFA = 2
-BC_INTFA_STATES = 3
-BC_INTFA_TRANSITIONS = 4
+BC_INTFAS = 8
+BC_INTFA = 9
+BC_INTFA_STATES = 10
+BC_INTFA_TRANSITIONS = 11
+
+BC_INTFA_STATE = 0
+BC_INTFA_FINAL_STATE = 1
+BC_INTFA_TRANSTION = 0
+BC_INTFA_TRANSTION_RANGE = 1
 
 --print(serialize(attributes.ignore))
 
@@ -93,18 +99,27 @@ function load_grammar(file)
 end
 
 function write_grammar(infilename, outfilename)
-  local file = io.open(outfilename, "w")
   grammar, attributes, decisions = load_grammar(infilename)
 
   -- write Bitcode header
-  bc_file = BitCodeFile:new("GH")
+  bc_file = bc.File:new(outfilename, "GH")
+
+  bc_file:enter_subblock(bc.BLOCKINFO)
+  bc_file:write_unabbreviated_record(bc.SETBID, BC_INTFA)
+
+  bc_intfa_final_state = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_FINAL_STATE),
+                                                     bc.VBROp:new(5), bc.VBROp:new(5))
+  bc_intfa_state = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_STATE), bc.VBROp:new(5))
+  bc_intfa_transition = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSTION), bc.VBROp:new(8), bc.VBROp:new(6))
+  bc_intfa_transition_range = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSTION_RANGE), bc.VBROp:new(8), bc.VBROp:new(8), bc.VBROp:new(6))
+  bc_file:end_subblock(bc.BLOCKINFO)
 
   print(string.format("Writing grammar to disk..."))
 
-  bc_file.enter_subblock(BC_INTFAS_BLOCK)
-
   local intfas = {}
   local intfa_offsets = {}
+  local strings = {}
+  local string_offsets = {}
 
   for name, rtn in pairs(grammar) do
     for rtn_state in each(rtn:states()) do
@@ -115,17 +130,17 @@ function write_grammar(infilename, outfilename)
     end
   end
 
-  bc_file.enter_subblock(BC_INTFAS)
+  bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
-    bc_file.enter_subblock(BC_INTFA)
+    bc_file:enter_subblock(BC_INTFA)
     local intfa_states = {}
     local intfa_state_offsets = {}
     local intfa_transitions = {}
     local intfa_state_transition_offsets = {}
 
-    bc_file.enter_subblock(BC_INTFA_STATES)
+    --bc_file:enter_subblock(BC_INTFA_STATES)
     for state in each(intfa:states()) do
-      intfa_states_offsets[state] = #intfa_states
+      intfa_state_offsets[state] = #intfa_states
       table.insert(intfa_states, state)
       local initial_offset = #intfa_transitions
       for edge_val, target_state, properties in state:transitions() do
@@ -139,25 +154,29 @@ function write_grammar(infilename, outfilename)
         table.insert(strings, state.final)
       end
       if state.final then
-        bc_file.write_abbreviated_record(bc_intfa_final_state, num_transitions, string_offsets[state.final])
+        bc_file:write_abbreviated_record(bc_intfa_final_state, num_transitions, string_offsets[state.final])
       else
-        bc_file.write_abbreviated_record(bc_intfa_state, num_transitions)
+        bc_file:write_abbreviated_record(bc_intfa_state, num_transitions)
       end
     end
-    bc_file.end_subblock(BC_INTFA_STATES)
+    --bc_file:end_subblock(BC_INTFA_STATES)
 
-    bc_file.enter_subblock(BC_INTFA_TRANSITIONS)
+    --bc_file:enter_subblock(BC_INTFA_TRANSITIONS)
     for transition in each(intfa_transitions) do
-      local range, target_state = unpack(intfa_transition)
-      target_state_offset = intfa_states_offsets[target_state]
-      file:write(string.pack("III", range.high, range.low, intfastates_offsets[target_state]))
-      bc_file.write_abbreviated_record(bc_intfa_transition, range.low, range.high, target_state_offset)
+      local range, target_state = unpack(transition)
+      target_state_offset = intfa_state_offsets[target_state]
+      if range.low == range.high then
+        bc_file:write_abbreviated_record(bc_intfa_transition, range.low, target_state_offset)
+      else
+        if range.high == math.huge then range.high = 255 end  -- temporary ASCII-specific hack
+        bc_file:write_abbreviated_record(bc_intfa_transition_range, range.low, range.high, target_state_offset)
+      end
     end
 
-    bc_file.end_subblock(BC_INTFA_TRANSITIONS)
-    bc_file.end_subblock(BC_INTFA)
+    --bc_file:end_subblock(BC_INTFA_TRANSITIONS)
+    bc_file:end_subblock(BC_INTFA)
   end
-  bc_file.end_subblock(BC_INTFAS)
+  bc_file:end_subblock(BC_INTFAS)
 
   -- for name, rtn in pairs(grammar) do
   --   rtns_offsets[rtn] = #rtns
@@ -198,8 +217,9 @@ function write_grammar(infilename, outfilename)
   --   end
   -- end
 
-  print(string.format("%d RTNs, %d states, %d transitions", #rtns, #rtnstates, #rtntransitions))
-  print(string.format("%d IntFAs, %d states, %d transitions", #intfas, #intfastates, #intfa_transitions))
+  -- print(string.format("%d RTNs, %d states, %d transitions", #rtns, #rtnstates, #rtntransitions))
+  --print(string.format("%d IntFAs, %d states, %d transitions", #intfas, #intfastates, #intfa_transitions))
+  print(string.format("%d IntFAs", #intfas))
   print(string.format("%d strings", #strings))
 
 end
