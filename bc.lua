@@ -6,7 +6,10 @@ ENTER_SUBBLOCK = 1
 DEFINE_ABBREV = 2
 UNABBREV_RECORD = 3
 
+ENCODING_FIXED = 1
 ENCODING_VBR = 2
+ENCODING_ARRAY = 3
+ENCODING_CHAR6 = 4
 
 BLOCKINFO = 0
 
@@ -15,7 +18,6 @@ SETBID = 1
 LiteralOp = {name="LiteralOp"}
 function LiteralOp:new(value)
   local obj = newobject(self)
-  obj.name = name
   obj.value = value
   return obj
 end
@@ -23,8 +25,24 @@ end
 VBROp = {name="VBROp"}
 function VBROp:new(bits)
   local obj = newobject(self)
-  obj.name = name
   obj.bits = bits
+  obj.name = name
+  return obj
+end
+
+FixedOp = {name="FixedOp"}
+function FixedOp:new(bits)
+  local obj = newobject(self)
+  obj.bits = bits
+  obj.name = name
+  return obj
+end
+
+ArrayOp = {name="ArrayOp"}
+function ArrayOp:new(elem_type)
+  local obj = newobject(self)
+  obj.elem_type = elem_type
+  obj.name = name
   return obj
 end
 
@@ -38,7 +56,6 @@ function File:new(filename, app_magic_number)
   obj.file:write("BC")
   obj.file:write(app_magic_number)
   obj.current_abbrev_width = 2
-  obj.next_id = 4
   obj.offset = 0
   obj.stack = {}
   return obj
@@ -128,6 +145,16 @@ function File:write_unabbreviated_record(id, ...)
   end
 end
 
+function File:write_abbreviated_val(val, op)
+  if op.class == VBROp then
+    self:write_vbr(val, op.bits)
+  elseif op.class == FixedOp then
+    self:write_fixed(val, op.bits)
+  else
+    error("Unknown op type!")
+  end
+end
+
 function File:write_abbreviated_record(abbreviation, ...)
   -- print("Write abbreviated record")
   local args = {...}
@@ -137,29 +164,55 @@ function File:write_abbreviated_record(abbreviation, ...)
   self:write_fixed(abbreviation.id, self.current_abbrev_width)
   for i, arg in ipairs(args) do
     local op = abbreviation.ops[i]
-    if op.class == VBROp then
-      self:write_vbr(arg, op.bits)
+    if op.class == ArrayOp then
+      self:write_vbr(arg:len(), 6)
+      for int in each({arg:byte(1, arg:len())}) do
+        self:write_abbreviated_val(int, op.elem_type)
+      end
     else
-      error("Unknown op type!")
+      self:write_abbreviated_val(arg, op)
     end
   end
 end
 
-function File:define_abbreviation(...)
-  local abbrev = {id=self.next_id, ops={}}
+function File:write_abbrev_op(arg)
+  if arg.class == LiteralOp then
+    self:write_fixed(1, 1)
+    self:write_vbr(arg.value, 8)
+  elseif arg.class == VBROp then
+    self:write_fixed(0, 1)
+    self:write_fixed(ENCODING_VBR, 3)
+    self:write_vbr(arg.bits, 5)
+  elseif arg.class == FixedOp then
+    self:write_fixed(0, 1)
+    self:write_fixed(ENCODING_FIXED, 3)
+    self:write_vbr(arg.bits, 5)
+  else
+    error("Unknown/unhandled op type")
+  end
+end
+
+function File:define_abbreviation(abbrev_id, ...)
+  local abbrev = {id=abbrev_id, ops={}}
   local args = {...}
-  self.next_id = self.next_id + 1
   self:write_fixed(DEFINE_ABBREV, self.current_abbrev_width)
-  self:write_vbr(#args, 5)
+  if args[#args].class == ArrayOp then
+    self:write_vbr(#args+1, 5)
+  else
+    self:write_vbr(#args, 5)
+  end
+
   for arg in each(args) do
-    if arg.class == LiteralOp then
-      self:write_fixed(1, 1)
-      self:write_vbr(arg.value, 8)
-    elseif arg.class == VBROp then
-      self:write_fixed(0, 1)
-      self:write_fixed(ENCODING_VBR, 3)
-      self:write_vbr(arg.bits, 5)
+    if arg.class ~= LiteralOp then
       table.insert(abbrev.ops, arg)
+    end
+
+    if arg.class == ArrayOp then
+      self:write_fixed(0, 1)
+      self:write_fixed(ENCODING_ARRAY, 3)
+      self:write_abbrev_op(arg.elem_type)
+    else
+      self:write_abbrev_op(arg)
     end
   end
   return abbrev

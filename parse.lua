@@ -97,11 +97,15 @@ function write_grammar(infilename, outfilename)
   bc_file:enter_subblock(bc.BLOCKINFO)
   bc_file:write_unabbreviated_record(bc.SETBID, BC_INTFA)
 
-  bc_intfa_final_state = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_FINAL_STATE),
+  bc_intfa_final_state = bc_file:define_abbreviation(4, bc.LiteralOp:new(BC_INTFA_FINAL_STATE),
                                                      bc.VBROp:new(5), bc.VBROp:new(5))
-  bc_intfa_state = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_STATE), bc.VBROp:new(5))
-  bc_intfa_transition = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSITION), bc.VBROp:new(8), bc.VBROp:new(6))
-  bc_intfa_transition_range = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSITION_RANGE), bc.VBROp:new(8), bc.VBROp:new(8), bc.VBROp:new(6))
+  bc_intfa_state = bc_file:define_abbreviation(5, bc.LiteralOp:new(BC_INTFA_STATE), bc.VBROp:new(5))
+  bc_intfa_transition = bc_file:define_abbreviation(6, bc.LiteralOp:new(BC_INTFA_TRANSITION), bc.VBROp:new(8), bc.VBROp:new(6))
+  bc_intfa_transition_range = bc_file:define_abbreviation(7, bc.LiteralOp:new(BC_INTFA_TRANSITION_RANGE), bc.VBROp:new(8), bc.VBROp:new(8), bc.VBROp:new(6))
+
+  bc_file:write_unabbreviated_record(bc.SETBID, BC_STRINGS)
+  bc_string = bc_file:define_abbreviation(4, bc.LiteralOp:new(BC_STRING), bc.ArrayOp:new(bc.FixedOp:new(7)))
+
   bc_file:end_subblock(bc.BLOCKINFO)
 
   print(string.format("Writing grammar to disk..."))
@@ -111,6 +115,7 @@ function write_grammar(infilename, outfilename)
   local strings = {}
   local string_offsets = {}
 
+  -- gather a list of all the intfas
   for name, rtn in pairs(grammar) do
     for rtn_state in each(rtn:states()) do
       if rtn_state.dfa and not intfa_offsets[rtn_state.dfa] then
@@ -120,6 +125,24 @@ function write_grammar(infilename, outfilename)
     end
   end
 
+  -- gather a list of all the strings
+  for intfa in each(intfas) do
+    for state in each(intfa:states()) do
+      if state.final and not string_offsets[state.final] then
+        string_offsets[state.final] = #strings
+        table.insert(strings, state.final)
+      end
+    end
+  end
+
+  -- emit the strings
+  bc_file:enter_subblock(BC_STRINGS)
+  for string in each(strings) do
+    bc_file:write_abbreviated_record(bc_string, string)
+  end
+  bc_file:end_subblock(BC_STRINGS)
+
+  -- emit the intfas
   bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
     bc_file:enter_subblock(BC_INTFA)
@@ -139,10 +162,6 @@ function write_grammar(infilename, outfilename)
         end
       end
       local num_transitions = #intfa_transitions - initial_offset
-      if state.final and not string_offsets[state.final] then
-        string_offsets[state.final] = #strings
-        table.insert(strings, state.final)
-      end
       if state.final then
         bc_file:write_abbreviated_record(bc_intfa_final_state, num_transitions, string_offsets[state.final])
       else
