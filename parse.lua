@@ -1,17 +1,7 @@
 
 require "rtn"
-require "pack"
 require "bc"
-
-BC_INTFAS = 8
-BC_INTFA = 9
-BC_INTFA_STATES = 10
-BC_INTFA_TRANSITIONS = 11
-
-BC_INTFA_STATE = 0
-BC_INTFA_FINAL_STATE = 1
-BC_INTFA_TRANSTION = 0
-BC_INTFA_TRANSTION_RANGE = 1
+require "bc_constants"
 
 --print(serialize(attributes.ignore))
 
@@ -110,8 +100,8 @@ function write_grammar(infilename, outfilename)
   bc_intfa_final_state = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_FINAL_STATE),
                                                      bc.VBROp:new(5), bc.VBROp:new(5))
   bc_intfa_state = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_STATE), bc.VBROp:new(5))
-  bc_intfa_transition = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSTION), bc.VBROp:new(8), bc.VBROp:new(6))
-  bc_intfa_transition_range = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSTION_RANGE), bc.VBROp:new(8), bc.VBROp:new(8), bc.VBROp:new(6))
+  bc_intfa_transition = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSITION), bc.VBROp:new(8), bc.VBROp:new(6))
+  bc_intfa_transition_range = bc_file:define_abbreviation(bc.LiteralOp:new(BC_INTFA_TRANSITION_RANGE), bc.VBROp:new(8), bc.VBROp:new(8), bc.VBROp:new(6))
   bc_file:end_subblock(bc.BLOCKINFO)
 
   print(string.format("Writing grammar to disk..."))
@@ -177,6 +167,11 @@ function write_grammar(infilename, outfilename)
     bc_file:end_subblock(BC_INTFA)
   end
   bc_file:end_subblock(BC_INTFAS)
+
+  -- print("Strings:")
+  -- for str in each(strings) do
+  --   print("   " .. str)
+  -- end
 
   -- for name, rtn in pairs(grammar) do
   --   rtns_offsets[rtn] = #rtns

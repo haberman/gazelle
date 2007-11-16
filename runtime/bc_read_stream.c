@@ -15,9 +15,6 @@
 
 #define BLOCKINFO_BLOCK_SETBID 1
 
-#define ALLOC_INITIAL_ARRAY(ptr, size, len) \
-    
-
 #define RESIZE_ARRAY_IF_NECESSARY(ptr, size, desired_size) \
     if(size < desired_size) \
     { \
