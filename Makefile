@@ -15,4 +15,4 @@ bc_lua.so: runtime/bc_lua.o runtime/bc_read_stream.o
 	gcc -std=c99 -undefined dynamic_lookup -O6 -o bc_lua.so -bundle runtime/bc_lua.o runtime/bc_read_stream.o
 
 png:
-	for x in *.dot; do echo $$x; $(DOT) -Tpng -o `basename $$x`.png $x; done
+	for x in *.dot; do echo $$x; $(DOT) -Tpng -o `basename -s .dot $$x`.png $$x; done

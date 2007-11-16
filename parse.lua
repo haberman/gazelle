@@ -145,14 +145,19 @@ function write_grammar(infilename, outfilename)
   -- emit the intfas
   bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
+    print(intfa)
     bc_file:enter_subblock(BC_INTFA)
     local intfa_states = {}
     local intfa_state_offsets = {}
     local intfa_transitions = {}
-    local intfa_state_transition_offsets = {}
 
     --bc_file:enter_subblock(BC_INTFA_STATES)
-    for state in each(intfa:states()) do
+    -- make sure the start state is emitted first
+    local states = intfa:states()
+    states:remove(intfa.start)
+    states = states:to_array()
+    table.insert(states, 1, intfa.start)
+    for state in each(states) do
       intfa_state_offsets[state] = #intfa_states
       table.insert(intfa_states, state)
       local initial_offset = #intfa_transitions
