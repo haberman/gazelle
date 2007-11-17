@@ -131,3 +131,14 @@ function equivalence_classes(int_sets)
   return ret
 end
 
+function str_join(list, separator)
+  local str = ""
+  for i, string in ipairs(list) do
+    str = str .. string
+    if i < #list then
+      str = str .. separator
+    end
+  end
+  return str
+end
+

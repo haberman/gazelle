@@ -21,7 +21,8 @@ end
 -- and strings describing each token.  So:
 -- { {nfa1, "token string 1"},
 --   {nfa2, "token string 2", etc} }
-function nfas_to_dfa(nfa_string_pairs)
+function nfas_to_dfa(nfa_string_pairs, ambiguous_ok)
+  ambiguous_ok = ambiguous_ok or false
   -- First we need to mark all final states and capture groups with the token string
   local nfas = {}
 
@@ -35,10 +36,10 @@ function nfas_to_dfa(nfa_string_pairs)
 
   -- Now combine all the nfas with alternation
   local final_nfa = nfa_construct.alt(nfas)
-  return nfa_to_dfa(final_nfa)
+  return nfa_to_dfa(final_nfa, ambiguous_ok)
 end
 
-function new_dfa_state(nfa, nfa_states)
+function new_dfa_state(nfa, nfa_states, ambiguous_ok)
   local dfa_state = nfa:new_state()
 
   -- If this is a final state for one or more of the nfas, make it an
@@ -46,21 +47,27 @@ function new_dfa_state(nfa, nfa_states)
   for nfa_state in nfa_states:each() do
     if nfa_state.final then
       if dfa_state.final and dfa_state.final ~= nfa_state.final then
-        error("Ambiguous finality not supported yet!! (" .. tostring(dfa_state.final) .. " and " .. tostring(nfa_state.final .. ")"))
+        if ambiguous_ok then
+          if type(dfa_state.final) ~= "table" then dfa_state.final = Set:new({dfa_state.final}) end
+          dfa_state.final:add(nfa_state.final)
+        else
+          error("Ambiguous finality not supported yet!! (" .. tostring(dfa_state.final) .. " and " .. tostring(nfa_state.final .. ")"))
+        end
+      else
+        dfa_state.final = nfa_state.final
       end
-      dfa_state.final = nfa_state.final
     end
   end
 
   return dfa_state
 end
 
-function nfa_to_dfa(nfa)
+function nfa_to_dfa(nfa, ambiguous_ok)
   -- The sets of NFA states we need to process for outgoing transitions
   local first_nfa_states = epsilon_closure(nfa.start)
   local queue = Queue:new(first_nfa_states)
 
-  local dfa = nfa:new_graph{start = new_dfa_state(nfa, first_nfa_states)}
+  local dfa = nfa:new_graph{start = new_dfa_state(nfa, first_nfa_states, ambiguous_ok)}
   -- The DFA states we create from sets of NFA states
   local dfa_states = {[first_nfa_states:hash_key()] = dfa.start}
 
@@ -100,7 +107,7 @@ function nfa_to_dfa(nfa)
         -- already exist.
         local dest_dfa_state = dfa_states[dest_nfa_states:hash_key()]
         if dest_dfa_state == nil then
-          dest_dfa_state = new_dfa_state(nfa, dest_nfa_states)
+          dest_dfa_state = new_dfa_state(nfa, dest_nfa_states, ambiguous_ok)
           dfa_states[dest_nfa_states:hash_key()] = dest_dfa_state
           queue:enqueue(dest_nfa_states)
         end

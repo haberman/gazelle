@@ -48,7 +48,13 @@ function fa.FA:__tostring()
     if state == self.final or state.final then
       if label ~= "" then label = label .. "/" end
       if state.final then
-        label = label .. state.final
+        if type(state.final) == "table" then
+          print(label)
+          print(serialize(state.final:to_array()))
+          label = label .. str_join(state.final:to_array(), "NEWLINE")
+        else
+          label = label .. state.final
+        end
       else
         label = label .. "Final"
       end

@@ -37,6 +37,33 @@ function load_grammar(file)
 
   local grammar, attributes = parse_grammar(CharStream:new(grm_str))
 
+  local nfas = {}
+  for name, terminal in pairs(attributes.terminals) do
+    if type(terminal) == "string" then
+      terminal = fa.IntFA:new{string=terminal}
+    end
+    table.insert(nfas, {terminal, name})
+  end
+  local uber_dfa = nfas_to_dfa(nfas, true)
+  --print(uber_dfa)
+  local conflicts = {}
+  for state in each(uber_dfa:states()) do
+    if type(state.final) == "table" then  -- more than one terminal ended in this state
+      for term1 in each(state.final) do
+        for term2 in each(state.final) do
+          if term1 ~= term2 then
+            conflicts[term1] = conflicts[term1] or Set:new()
+            conflicts[term1]:add(term2)
+          end
+        end
+      end
+    end
+  end
+
+  for term, others in pairs(conflicts) do
+    print(string.format("Term %s conflicts with: %s", term, serialize(others:to_array())))
+  end
+
   -- for nonterm, rtn in pairs(grammar) do
   --   print(nonterm)
   --   print(rtn)
@@ -145,7 +172,6 @@ function write_grammar(infilename, outfilename)
   -- emit the intfas
   bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
-    print(intfa)
     bc_file:enter_subblock(BC_INTFA)
     local intfa_states = {}
     local intfa_state_offsets = {}
