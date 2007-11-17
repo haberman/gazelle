@@ -37,23 +37,25 @@ function load_grammar(file)
 
   local grammar, attributes = parse_grammar(CharStream:new(grm_str))
 
-  local nfas = {}
-  for name, terminal in pairs(attributes.terminals) do
-    if type(terminal) == "string" then
-      terminal = fa.IntFA:new{string=terminal}
-    end
-    table.insert(nfas, {terminal, name})
-  end
-  local uber_dfa = nfas_to_dfa(nfas, true)
-  --print(uber_dfa)
   local conflicts = {}
-  for state in each(uber_dfa:states()) do
-    if type(state.final) == "table" then  -- more than one terminal ended in this state
-      for term1 in each(state.final) do
-        for term2 in each(state.final) do
-          if term1 ~= term2 then
-            conflicts[term1] = conflicts[term1] or Set:new()
-            conflicts[term1]:add(term2)
+  do
+    local nfas = {}
+    for name, terminal in pairs(attributes.terminals) do
+      if type(terminal) == "string" then
+        terminal = fa.IntFA:new{string=terminal}
+      end
+      table.insert(nfas, {terminal, name})
+    end
+    local uber_dfa = nfas_to_dfa(nfas, true)
+    --print(uber_dfa)
+    for state in each(uber_dfa:states()) do
+      if type(state.final) == "table" then  -- more than one terminal ended in this state
+        for term1 in each(state.final) do
+          for term2 in each(state.final) do
+            if term1 ~= term2 then
+              conflicts[term1] = conflicts[term1] or Set:new()
+              conflicts[term1]:add(term2)
+            end
           end
         end
       end
@@ -76,6 +78,20 @@ function load_grammar(file)
 
   -- For each state in the grammar, create (or reuse) a DFA to run
   -- when we hit that state.
+  local dfas = {}
+
+  function has_conflicts(conflicts, dfa, decisions)
+    for term, stack in pairs(decisions) do
+      if conflicts[term] then
+        for conflict in each(conflicts[term]) do
+          if dfa:contains(conflict) then
+            return true
+          end
+        end
+      end
+    end
+  end
+
   for nonterm, rtn in pairs(grammar) do
     -- print(nonterm)
     -- print(rtn)
@@ -97,26 +113,59 @@ function load_grammar(file)
 
         -- print("Inside " .. nonterm .. ", state=" .. tostring(state) .. "...")
         -- print(serialize(decisions))
-        local nfas = {}
-        for term, stack in pairs(decisions) do
-          local target = attributes.terminals[term]
-          if type(target) == "string" then
-            target = fa.IntFA:new{string=target}
+
+        -- We now have a list of terminals we want to find when we are in this RTN
+        -- state.  Now get a DFA that will match all of them, either by creating
+        -- a new DFA or by finding an existing one that will work (without conflicting
+        -- with any of our terminals).
+        local found_dfa = false
+        for dfa in each(dfas) do
+          -- will this dfa do?  it will if none of our terminals conflict with any of the
+          -- existing terminals in this dfa.
+          -- (we can probably compute this faster by pre-computing equivalence classes)
+          if not has_conflicts(conflicts, dfa, decisions) then
+            found_dfa = dfa
+            break
           end
-          table.insert(nfas, {target, term})
         end
 
-        state.dfa = hopcroft_minimize(nfas_to_dfa(nfas))
+        if found_dfa == false then
+          new_dfa = Set:new()
+          table.insert(dfas, new_dfa)
+          found_dfa = new_dfa
+        end
+
+        -- add all the terminals for this state to the dfa we found
+        for term, stack in pairs(decisions) do
+          found_dfa:add(term)
+        end
+
+        -- state.dfa = hopcroft_minimize(nfas_to_dfa(nfas))
         state.decisions = decisions
       end
     end
   end
 
-  return grammar, attributes, decisions
+  local real_dfas = {}
+  for dfa in each(dfas) do
+    local nfas = {}
+    print(serialize(dfa:to_array()))
+    for term in each(dfa) do
+      local target = attributes.terminals[term]
+      if type(target) == "string" then
+        target = fa.IntFA:new{string=target}
+      end
+      table.insert(nfas, {target, term})
+    end
+    local real_dfa = hopcroft_minimize(nfas_to_dfa(nfas))
+    table.insert(real_dfas, real_dfa)
+  end
+
+  return grammar, attributes, decisions, real_dfas
 end
 
 function write_grammar(infilename, outfilename)
-  grammar, attributes, decisions = load_grammar(infilename)
+  local grammar, attributes, decisions, intfas = load_grammar(infilename)
 
   -- write Bitcode header
   bc_file = bc.File:new(outfilename, "GH")
@@ -137,20 +186,19 @@ function write_grammar(infilename, outfilename)
 
   print(string.format("Writing grammar to disk..."))
 
-  local intfas = {}
   local intfa_offsets = {}
   local strings = {}
   local string_offsets = {}
 
   -- gather a list of all the intfas
-  for name, rtn in pairs(grammar) do
-    for rtn_state in each(rtn:states()) do
-      if rtn_state.dfa and not intfa_offsets[rtn_state.dfa] then
-        table.insert(intfas, rtn_state.dfa)
-        intfa_offsets[rtn_state.dfa] = #intfas
-      end
-    end
-  end
+  -- for name, rtn in pairs(grammar) do
+  --   for rtn_state in each(rtn:states()) do
+  --     if rtn_state.dfa and not intfa_offsets[rtn_state.dfa] then
+  --       table.insert(intfas, rtn_state.dfa)
+  --       intfa_offsets[rtn_state.dfa] = #intfas
+  --     end
+  --   end
+  -- end
 
   -- gather a list of all the strings
   for intfa in each(intfas) do
