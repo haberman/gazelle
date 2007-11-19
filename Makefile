@@ -1,5 +1,5 @@
 
-DOT=/Applications/Graphviz.app/Contents/MacOS/dot
+DOT=dot
 all: runtime/bc_read_stream.o runtime/bc_lua.o bc_lua.so
 
 clean:

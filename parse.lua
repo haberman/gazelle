@@ -213,7 +213,7 @@ function write_grammar(infilename, outfilename)
   -- build an ordered list of RTNs and gather the strings from them
   local rtns = {{attributes.start, grammar[attributes.start]}}
   local rtns_offsets = {}
-  rtns_offsets[grammar[attributes.start]] = 1
+  rtns_offsets[grammar[attributes.start]] = 0
   for name, rtn in pairs(grammar) do
     if name ~= attributes.start then
       rtns_offsets[rtn] = #rtns
@@ -255,7 +255,7 @@ function write_grammar(infilename, outfilename)
     states = states:to_array()
     table.insert(states, 1, intfa.start)
     for i, state in ipairs(states) do
-      intfa_state_offsets[state] = i
+      intfa_state_offsets[state] = i - 1
       local initial_offset = #intfa_transitions
       for edge_val, target_state, properties in state:transitions() do
         for range in edge_val:each_range() do
@@ -302,7 +302,7 @@ function write_grammar(infilename, outfilename)
     states = states:to_array()
     table.insert(states, 1, rtn.start)
     for i, rtn_state in pairs(states) do
-      rtn_state_offsets[rtn_state] = i
+      rtn_state_offsets[rtn_state] = i - 1
       local initial_offset = #rtn_transitions
       for edge_val, target_state, properties in rtn_state:transitions() do
         table.insert(rtn_transitions, {edge_val, target_state, properties})

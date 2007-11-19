@@ -28,7 +28,7 @@ RTNS
     ...
 
     [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
-    [RTN_TRANSITION_NONTERM, nonterm_name_int, dest RTN state offset, slotname_int, slotnum]
+    [RTN_TRANSITION_NONTERM, rtn_offset, dest RTN state offset, slotname_int, slotnum]
     ...
 
     [RTN_DECISION, terminal, <array of transition offsets>]

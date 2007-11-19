@@ -58,6 +58,53 @@ function read_intfa(infile, outfile, strings)
   outfile:write("}\n")
 end
 
+function read_rtn(infile, outfile, strings, rtn_names)
+  outfile:write("digraph untitled {\n")
+  local states_num_transitions = {}
+  local transition_state_num = 1
+  local transition_num = 1
+  local extra_label = "Begin"
+  while true do
+    local val = {bc_lua.next_record(infile)}
+    print(serialize(val))
+    if val[1] == "endblock" then break end
+    if val[1] ~= "data" then error("Got unexpected record type " .. val[1]) end
+    if val[2] == BC_RTN_STATE then
+      table.insert(states_num_transitions, val[3])
+      local peripheries = 1 + val[5]
+      outfile:write(string.format('  "%d" [label="%s\\nIntFA: %d" peripheries=%d]\n', #states_num_transitions, extra_label, val[4]+1, peripheries))
+    elseif val[2] == BC_RTN_TRANSITION_TERMINAL then
+      local str = string.format('  "%d" -> "%d" [label="%s"]\n', transition_state_num, val[4]+1, escape(strings[val[3]+1]))
+      outfile:write(str)
+    elseif val[2] == BC_RTN_TRANSITION_NONTERM then
+      local str = string.format('  "%d" -> "%d" [label="<%s>"]\n', transition_state_num, val[4]+1, escape(strings[rtn_names[val[3]+1]]))
+      outfile:write(str)
+    end
+    if val[2] == BC_RTN_TRANSITION_TERMINAL or val[2] == BC_RTN_TRANSITION_NONTERM then
+      transition_num = transition_num + 1
+      while transition_state_num <= #states_num_transitions and transition_num > states_num_transitions[transition_state_num] do
+        transition_num = 1
+        transition_state_num = transition_state_num + 1
+      end
+    end
+    extra_label = ""
+  end
+  outfile:write("}\n")
+end
+
+-- do a first pass to get all the RTN names
+local bc_file = bc_lua.open(arg[1])
+local rtn_names = {}
+while true do
+  local val = {bc_lua.next_record(bc_file)}
+  if val[1] == nil then break end
+  if val[1] == "startblock" and val[2] == BC_RTN then
+    val = {bc_lua.next_record(bc_file)}
+    table.insert(rtn_names, val[3]+1)
+  end
+end
+
+
 local bc_file = bc_lua.open(arg[1])
 local intfa_num = 1
 local strings = {}
@@ -79,6 +126,11 @@ while true do
     print(string.format("Writing %s...", filename))
     read_intfa(bc_file, io.open(filename, "w"), strings)
     intfa_num = intfa_num + 1
+  elseif val[1] == "startblock" and val[2] == BC_RTN then
+    local val = {bc_lua.next_record(bc_file)}
+    filename = string.format("%s.dot", strings[val[3]+1])
+    print(string.format("Writing %s...", filename))
+    read_rtn(bc_file, io.open(filename, "w"), strings, rtn_names)
   end
 end
 
