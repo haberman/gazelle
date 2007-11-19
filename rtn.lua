@@ -210,7 +210,7 @@ function parse_term(chars, attributes)
     chars:consume(")")
   else
     local nonterm = parse_nonterm(chars)
-    name = name or nonterm
+    name = name or nonterm.name
     ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
   end
@@ -260,7 +260,7 @@ function parse_modifier(chars, attributes)
     else
       sep_string = chars:consume_pattern("[^)]*")
     end
-    str = fa.RTN:new{symbol=sep_string, attributes={slotnum=attributes.slotnum}}
+    str = fa.RTN:new{symbol=sep_string, properties={slotnum=attributes.slotnum, name=sep_string}}
     attributes.terminals[sep_string] = sep_string
     attributes.slotnum = attributes.slotnum + 1
     chars:consume(")")

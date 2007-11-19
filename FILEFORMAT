@@ -1,5 +1,11 @@
 
 Bitcode file, application magic number = "GH"
+All offsets are 0-based.
+
+STRINGS
+  [STRING, <ascii array of chars>]
+  [STRING, <ascii array of chars>]
+  ...
 
 INTFAS
   INTFA
@@ -14,8 +20,17 @@ INTFAS
     ...
     (transitions are identified by their offset in this list)
 
-STRINGS
-  [STRING, <ascii array of chars>]
-  [STRING, <ascii array of chars>]
-  ...
+RTNS
+  RTN
+    [RTN_NAME, nonterm_name_int]
+    [RTN_STATE, # of transitions, intfa #, is final]
+    [RTN_STATE, # of transitions, intfa #, is final]
+    ...
+
+    [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
+    [RTN_TRANSITION_NONTERM, nonterm_name_int, dest RTN state offset, slotname_int, slotnum]
+    ...
+
+    [RTN_DECISION, terminal, <array of transition offsets>]
+    ...
 

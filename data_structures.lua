@@ -316,7 +316,7 @@ function ShallowTable:new(val)
 
   if not self.cache then
     self.cache = {}
-    setmetatable(self.cache, {__mode = "v"})  -- make values weak
+    --setmetatable(self.cache, {__mode = "v"})  -- make values weak
   end
 
   local str = ""

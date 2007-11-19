@@ -37,6 +37,9 @@ function load_grammar(file)
 
   local grammar, attributes = parse_grammar(CharStream:new(grm_str))
 
+  -- First, determine what terminals (if any) conflict with each other.
+  -- In this context, "conflict" means that a string of characters can
+  -- be interpreted as one or more terminals.
   local conflicts = {}
   do
     local nfas = {}
@@ -47,7 +50,6 @@ function load_grammar(file)
       table.insert(nfas, {terminal, name})
     end
     local uber_dfa = nfas_to_dfa(nfas, true)
-    --print(uber_dfa)
     for state in each(uber_dfa:states()) do
       if type(state.final) == "table" then  -- more than one terminal ended in this state
         for term1 in each(state.final) do
@@ -60,20 +62,6 @@ function load_grammar(file)
         end
       end
     end
-  end
-
-  for term, others in pairs(conflicts) do
-    print(string.format("Term %s conflicts with: %s", term, serialize(others:to_array())))
-  end
-
-  -- for nonterm, rtn in pairs(grammar) do
-  --   print(nonterm)
-  --   print(rtn)
-  -- end
-
-  local decisions
-  function my_child_edges(edge, stack)
-    return child_edges(edge, stack, grammar, decisions)
   end
 
   -- For each state in the grammar, create (or reuse) a DFA to run
@@ -96,6 +84,11 @@ function load_grammar(file)
     -- print(nonterm)
     -- print(rtn)
     for state in each(rtn:states()) do
+      local decisions
+      function my_child_edges(edge, stack)
+        return child_edges(edge, stack, grammar, decisions)
+      end
+
       local transition_num = 0
       decisions = {}
       if state:num_transitions() > 0 then
@@ -119,12 +112,12 @@ function load_grammar(file)
         -- a new DFA or by finding an existing one that will work (without conflicting
         -- with any of our terminals).
         local found_dfa = false
-        for dfa in each(dfas) do
+        for i, dfa in ipairs(dfas) do
           -- will this dfa do?  it will if none of our terminals conflict with any of the
           -- existing terminals in this dfa.
           -- (we can probably compute this faster by pre-computing equivalence classes)
           if not has_conflicts(conflicts, dfa, decisions) then
-            found_dfa = dfa
+            found_dfa = i
             break
           end
         end
@@ -132,15 +125,17 @@ function load_grammar(file)
         if found_dfa == false then
           new_dfa = Set:new()
           table.insert(dfas, new_dfa)
-          found_dfa = new_dfa
+          found_dfa = #dfas
         end
 
         -- add all the terminals for this state to the dfa we found
         for term, stack in pairs(decisions) do
-          found_dfa:add(term)
+          -- print(serialize(decisions))
+          dfas[found_dfa]:add(term)
         end
 
-        -- state.dfa = hopcroft_minimize(nfas_to_dfa(nfas))
+        --print(serialize(found_dfa))
+        state.dfa = found_dfa
         state.decisions = decisions
       end
     end
@@ -149,7 +144,6 @@ function load_grammar(file)
   local real_dfas = {}
   for dfa in each(dfas) do
     local nfas = {}
-    print(serialize(dfa:to_array()))
     for term in each(dfa) do
       local target = attributes.terminals[term]
       if type(target) == "string" then
@@ -182,6 +176,12 @@ function write_grammar(infilename, outfilename)
   bc_file:write_unabbreviated_record(bc.SETBID, BC_STRINGS)
   bc_string = bc_file:define_abbreviation(4, bc.LiteralOp:new(BC_STRING), bc.ArrayOp:new(bc.FixedOp:new(7)))
 
+  bc_file:write_unabbreviated_record(bc.SETBID, BC_RTN)
+  bc_rtn_name = bc_file:define_abbreviation(4, bc.LiteralOp:new(BC_RTN_NAME), bc.VBROp:new(6))
+  bc_rtn_state = bc_file:define_abbreviation(5, bc.LiteralOp:new(BC_RTN_STATE), bc.VBROp:new(4), bc.VBROp:new(4), bc.FixedOp:new(1))
+  bc_rtn_transition_terminal = bc_file:define_abbreviation(6, bc.LiteralOp:new(BC_RTN_TRANSITION_TERMINAL), bc.VBROp:new(6), bc.VBROp:new(5), bc.VBROp:new(5), bc.VBROp:new(4))
+  bc_rtn_transition_nonterm = bc_file:define_abbreviation(7, bc.LiteralOp:new(BC_RTN_TRANSITION_NONTERM), bc.VBROp:new(6), bc.VBROp:new(5), bc.VBROp:new(5), bc.VBROp:new(4))
+
   bc_file:end_subblock(bc.BLOCKINFO)
 
   print(string.format("Writing grammar to disk..."))
@@ -200,12 +200,37 @@ function write_grammar(infilename, outfilename)
   --   end
   -- end
 
-  -- gather a list of all the strings
+  -- gather a list of all the strings from intfas
   for intfa in each(intfas) do
     for state in each(intfa:states()) do
       if state.final and not string_offsets[state.final] then
         string_offsets[state.final] = #strings
         table.insert(strings, state.final)
+      end
+    end
+  end
+
+  -- build an ordered list of RTNs and gather the strings from them
+  local rtns = {{attributes.start, grammar[attributes.start]}}
+  local rtns_offsets = {}
+  rtns_offsets[grammar[attributes.start]] = 1
+  for name, rtn in pairs(grammar) do
+    if name ~= attributes.start then
+      rtns_offsets[rtn] = #rtns
+      if not string_offsets[name] then
+        string_offsets[name] = #strings
+        table.insert(strings, name)
+      end
+
+      table.insert(rtns, {name, rtn})
+
+      for rtn_state in each(rtn:states()) do
+        for edge_val, target_state, properties in rtn_state:transitions() do
+          if properties and not string_offsets[properties.name] then
+            string_offsets[properties.name] = #strings
+            table.insert(strings, properties.name)
+          end
+        end
       end
     end
   end
@@ -221,19 +246,16 @@ function write_grammar(infilename, outfilename)
   bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
     bc_file:enter_subblock(BC_INTFA)
-    local intfa_states = {}
     local intfa_state_offsets = {}
     local intfa_transitions = {}
 
-    --bc_file:enter_subblock(BC_INTFA_STATES)
     -- make sure the start state is emitted first
     local states = intfa:states()
     states:remove(intfa.start)
     states = states:to_array()
     table.insert(states, 1, intfa.start)
-    for state in each(states) do
-      intfa_state_offsets[state] = #intfa_states
-      table.insert(intfa_states, state)
+    for i, state in ipairs(states) do
+      intfa_state_offsets[state] = i
       local initial_offset = #intfa_transitions
       for edge_val, target_state, properties in state:transitions() do
         for range in edge_val:each_range() do
@@ -247,9 +269,7 @@ function write_grammar(infilename, outfilename)
         bc_file:write_abbreviated_record(bc_intfa_state, num_transitions)
       end
     end
-    --bc_file:end_subblock(BC_INTFA_STATES)
 
-    --bc_file:enter_subblock(BC_INTFA_TRANSITIONS)
     for transition in each(intfa_transitions) do
       local range, target_state = unpack(transition)
       target_state_offset = intfa_state_offsets[target_state]
@@ -261,54 +281,58 @@ function write_grammar(infilename, outfilename)
       end
     end
 
-    --bc_file:end_subblock(BC_INTFA_TRANSITIONS)
     bc_file:end_subblock(BC_INTFA)
   end
   bc_file:end_subblock(BC_INTFAS)
 
-  -- print("Strings:")
-  -- for str in each(strings) do
-  --   print("   " .. str)
-  -- end
+  -- emit the RTNs
+  bc_file:enter_subblock(BC_RTNS)
+  for name_rtn_pair in each(rtns) do
+    local name, rtn = unpack(name_rtn_pair)
+    bc_file:enter_subblock(BC_RTN)
+    bc_file:write_abbreviated_record(bc_rtn_name, string_offsets[name])
 
-  -- for name, rtn in pairs(grammar) do
-  --   rtns_offsets[rtn] = #rtns
-  --   if not string_offsets[name] then
-  --     string_offsets[name] = #strings
-  --     table.insert(strings, name)
-  --   end
+    local rtn_states = {}
+    local rtn_state_offsets = {}
+    local rtn_transitions = {}
 
-  --   table.insert(rtns, {name, rtn})
-  --   for rtn_state in each(rtn:states()) do
-  --     rtnstates_offsets[rtn_state] = #rtnstates
-  --     table.insert(rtnstates, rtn_state)
-  --     if rtn_state.dfa and not intfas_offsets[rtn_state.dfa] then
-  --       intfas_offsets[rtn_state.dfa] = #intfas
-  --       table.insert(intfas, rtn_state.dfa)
-  --       for dfa_state in each(rtn_state.dfa:states()) do
-  --         intfastates_offsets[dfa_state] = #intfastates
-  --         table.insert(intfastates, dfa_state)
-  --         local initial_offset = #intfa_transitions
-  --         for edge_val, target_state, properties in dfa_state:transitions() do
-  --           for range in edge_val:each_range() do
-  --             table.insert(intfa_transitions, {range, target_state})
-  --           end
-  --         end
-  --         intfastate_transitions_for[dfa_state] = {initial_offset, #intfa_transitions - initial_offset}
-  --         if dfa_state.final and not string_offsets[dfa_state.final] then
-  --           string_offsets[dfa_state.final] = #strings
-  --           table.insert(strings, dfa_state.final)
-  --         end
-  --       end
-  --     end
+    -- make sure the start state is emitted first
+    local states = rtn:states()
+    states:remove(rtn.start)
+    states = states:to_array()
+    table.insert(states, 1, rtn.start)
+    for i, rtn_state in pairs(states) do
+      rtn_state_offsets[rtn_state] = i
+      local initial_offset = #rtn_transitions
+      for edge_val, target_state, properties in rtn_state:transitions() do
+        table.insert(rtn_transitions, {edge_val, target_state, properties})
+      end
+      local num_transitions = #rtn_transitions - initial_offset
+      local is_final = 0
+      if rtn_state.final then is_final = 1 end
+      -- states don't have an associated DFA if there are no outgoing transitions
+      rtn_state.dfa = rtn_state.dfa or 1
+      bc_file:write_abbreviated_record(bc_rtn_state, num_transitions, rtn_state.dfa - 1, is_final)
+    end
 
-  --     local initial_offset = #rtntransitions
-  --     for edge_val, target_state, properties in rtn_state:transitions() do
-  --       table.insert(rtntransitions, {edge_val, target_state, properties})
-  --     end
-  --     rtnstate_transitions_for[rtn_state] = {initial_offset, #rtntransitions - initial_offset}
-  --   end
-  -- end
+    for transition in each(rtn_transitions) do
+      local edge_val, target_state, properties = unpack(transition)
+      target_state_offset = rtn_state_offsets[target_state]
+      if type(edge_val) == "table" and edge_val.class == fa.NonTerm then
+        bc_file:write_abbreviated_record(bc_rtn_transition_nonterm, rtns_offsets[grammar[edge_val.name]],
+                                         rtn_state_offsets[target_state], string_offsets[properties.name],
+                                         properties.slotnum)
+      else
+        bc_file:write_abbreviated_record(bc_rtn_transition_terminal, string_offsets[edge_val],
+                                         rtn_state_offsets[target_state], string_offsets[properties.name],
+                                         properties.slotnum)
+      end
+    end
+    bc_file:end_subblock(BC_RTN)
+
+    -- TODO: decisions
+  end
+  bc_file:end_subblock(BC_RTNS)
 
   -- print(string.format("%d RTNs, %d states, %d transitions", #rtns, #rtnstates, #rtntransitions))
   --print(string.format("%d IntFAs, %d states, %d transitions", #intfas, #intfastates, #intfa_transitions))

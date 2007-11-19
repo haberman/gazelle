@@ -115,7 +115,7 @@ function File:write_vbr(val, bits)
 end
 
 function File:enter_subblock(block_id)
-  -- print(string.format("Enter subblock: %d", block_id))
+  -- print(string.format("++ Enter subblock: %d", block_id))
   table.insert(self.stack, self.current_abbrev_width)
   self:write_fixed(ENTER_SUBBLOCK, self.current_abbrev_width)
   self:write_vbr(block_id, 8)
@@ -127,7 +127,7 @@ function File:enter_subblock(block_id)
 end
 
 function File:end_subblock(block_id)
-  -- print(string.format("End subblock: %d", block_id))
+  -- print(string.format("-- End subblock: %d", block_id))
   self:write_fixed(END_BLOCK, self.current_abbrev_width)
   self:align_32_bits()
   self.current_abbrev_width = table.remove(self.stack)
@@ -156,7 +156,7 @@ function File:write_abbreviated_val(val, op)
 end
 
 function File:write_abbreviated_record(abbreviation, ...)
-  -- print("Write abbreviated record")
+  -- print("Write abbreviated record:" .. serialize({...}))
   local args = {...}
   if #args ~= #abbreviation.ops then
     error("Wrong number of arguments for abbreviated record")
