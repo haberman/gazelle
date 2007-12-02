@@ -514,7 +514,7 @@ struct blockinfo *find_or_create_blockinfo(struct bc_read_stream *stream, int bl
         new_bi->block_id = block_id;
         new_bi->num_abbreviations = 0;
         new_bi->size_abbreviations = 8;
-        new_bi->abbreviations = malloc(new_bi->size_abbreviations * sizeof(new_bi->abbreviations));
+        new_bi->abbreviations = malloc(new_bi->size_abbreviations * sizeof(*new_bi->abbreviations));
 
         return new_bi;
     }
