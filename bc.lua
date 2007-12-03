@@ -61,6 +61,8 @@ function File:new(filename, app_magic_number)
   return obj
 end
 
+-- Witness the joy of trying to do bitwise manipulation in a language that
+-- has no bitwise operators.
 function File:write_fixed(val, bits)
   -- print(string.format("Write fixed: %d, %d", val, bits))
   -- print(string.format("Existing bytes(%d): %d", self.current_bits, self.current_byte))

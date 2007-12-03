@@ -23,14 +23,16 @@ INTFAS
 RTNS
   RTN
     [RTN_NAME, nonterm_name_int]
-    [RTN_STATE, # of transitions, intfa #, is final]
-    [RTN_STATE, # of transitions, intfa #, is final]
+
+    [RTN_IGNORE, terminal_name_int]
+    ...
+
+    [RTN_STATE, # of transitions+decisions, intfa #, is final]
+    [RTN_STATE, # of transitions+decisions, intfa #, is final]
     ...
 
     [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
     [RTN_TRANSITION_NONTERM, rtn_offset, dest RTN state offset, slotname_int, slotnum]
-    ...
-
-    [RTN_DECISION, terminal, <array of transition offsets>]
+    [RTN_DECISION, terminal_name_int, <array of transition offsets>]
     ...
 

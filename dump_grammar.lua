@@ -80,7 +80,7 @@ function read_rtn(infile, outfile, strings, rtn_names)
       local str = string.format('  "%d" -> "%d" [label="<%s>"]\n', transition_state_num, val[4]+1, escape(strings[rtn_names[val[3]+1]]))
       outfile:write(str)
     end
-    if val[2] == BC_RTN_TRANSITION_TERMINAL or val[2] == BC_RTN_TRANSITION_NONTERM then
+    if val[2] == BC_RTN_TRANSITION_TERMINAL or val[2] == BC_RTN_TRANSITION_NONTERM or val[2] == BC_RTN_DECISION then
       transition_num = transition_num + 1
       while transition_state_num <= #states_num_transitions and transition_num > states_num_transitions[transition_state_num] do
         transition_num = 1
