@@ -66,7 +66,7 @@ function read_rtn(infile, outfile, strings, rtn_names)
   local extra_label = "Begin"
   while true do
     local val = {bc_lua.next_record(infile)}
-    print(serialize(val))
+    --print(serialize(val))
     if val[1] == "endblock" then break end
     if val[1] ~= "data" then error("Got unexpected record type " .. val[1]) end
     if val[2] == BC_RTN_STATE then
@@ -120,7 +120,7 @@ while true do
       table.insert(strings, string.char(unpack(val)))
       val = {bc_lua.next_record(bc_file)}
     end
-    print(serialize(strings))
+    -- print(serialize(strings))
   elseif val[1] == "startblock" and val[2] == BC_INTFA then
     filename = string.format("%d.dot", intfa_num)
     print(string.format("Writing %s...", filename))

@@ -325,6 +325,28 @@ function write_grammar(infilename, outfilename)
   end
   bc_file:end_subblock(BC_INTFAS)
 
+  -- create a sorted list of transitions out of each RTN state, for all RTNs
+  local rtn_state_transitions = {}
+  for name_rtn_pair in each(rtns) do
+    local name, rtn = unpack(name_rtn_pair)
+    for rtn_state in each(rtn:states()) do
+      local this_state_transitions = {}
+      for edge_val, target_state, properties in rtn_state:transitions() do
+        if type(edge_val) == "table" and edge_val.class == fa.NonTerm then
+          table.insert(this_state_transitions, {NontermTransition, rtn_state, {edge_val, target_state, properties}})
+        else
+          table.insert(this_state_transitions, {TerminalTransition, rtn_state, {edge_val, target_state, properties}})
+        end
+      end
+      for terminal, stack in pairs(rtn_state.decisions) do
+        table.insert(this_state_transitions, {Decision, rtn_state, {terminal, stack}})
+      end
+
+      table.sort(this_state_transitions, function (a, b) return a[1].order < b[1].order end)
+      rtn_state_transitions[rtn_state] = this_state_transitions
+    end
+  end
+
   -- emit the RTNs
   bc_file:enter_subblock(BC_RTNS)
   print(string.format("Writing %d RTNs...", #rtns))
@@ -352,25 +374,12 @@ function write_grammar(infilename, outfilename)
     -- emit states
     for i, rtn_state in pairs(states) do
       rtn_state_offsets[rtn_state] = i - 1
-      local this_state_transitions = {}
-      for edge_val, target_state, properties in rtn_state:transitions() do
-        if type(edge_val) == "table" and edge_val.class == fa.NonTerm then
-          table.insert(this_state_transitions, {NontermTransition, {edge_val, target_state, properties}})
-        else
-          table.insert(this_state_transitions, {TerminalTransition, {edge_val, target_state, properties}})
-        end
-      end
-      for terminal, stack in pairs(rtn_state.decisions) do
-        table.insert(this_state_transitions, {Decision, {terminal, stack}})
-      end
       local is_final = 0
       if rtn_state.final then is_final = 1 end
       -- states don't have an associated DFA if there are no outgoing transitions
       rtn_state.dfa = rtn_state.dfa or 1
-      bc_file:write_abbreviated_record(bc_rtn_state, #this_state_transitions, rtn_state.dfa - 1, is_final)
-
-      table.sort(this_state_transitions, function (a, b) return a[1].order < b[1].order end)
-      for t in each(this_state_transitions) do
+      bc_file:write_abbreviated_record(bc_rtn_state, #rtn_state_transitions[rtn_state], rtn_state.dfa - 1, is_final)
+      for t in each(rtn_state_transitions[rtn_state]) do
         table.insert(rtn_transitions, t)
       end
     end
@@ -379,10 +388,31 @@ function write_grammar(infilename, outfilename)
 
     -- emit transitions
     for transition in each(rtn_transitions) do
-      local transition_type, data = unpack(transition)
+      local transition_type, src_state, data = unpack(transition)
       if transition_type == Decision then
         local terminal, stack = unpack(data)
-        bc_file:write_abbreviated_record(bc_rtn_decision, string_offsets[terminal], "X")
+        local stack_str = ""
+        for i, step in ipairs(stack) do
+          --print(string.format("Trying to find %s, %d transitions to consider", serialize(step), #rtn_state_transitions[src_state]))
+          for j, transition2 in ipairs(rtn_state_transitions[src_state]) do
+            local transition_type2, src_state2, data2 = unpack(transition2)
+            local edge_val, target_state, properties = unpack(data2)
+            --print(string.format("Is it %s?", serialize(edge_val)))
+            if edge_val == step then
+              --print("Transition found!")
+              stack_str = stack_str .. string.char(j-1)
+              if i < #stack then
+                src_state = grammar[edge_val.name].start
+              end
+              break
+            end
+            if j == #rtn_state_transitions[src_state] then
+              error(string.format("Transition not found!  Step=%s", step))
+            end
+          end
+        end
+        -- print(serialize(stack))
+        bc_file:write_abbreviated_record(bc_rtn_decision, string_offsets[terminal], stack_str)
       else
         local edge_val, target_state, properties = unpack(data)
         target_state_offset = rtn_state_offsets[target_state]
