@@ -58,8 +58,6 @@ int main()
                 printf("  Value too large.\n");
             if(err & BITCODE_ERR_NO_SUCH_VALUE)
                 printf("  No such value.\n");
-            if(err & BITCODE_ERR_PREMATURE_EOF)
-                printf("  Premature EOF.\n");
             if(err & BITCODE_ERR_IO)
                 printf("  IO error.\n");
             if(err & BITCODE_ERR_CORRUPT_INPUT)
