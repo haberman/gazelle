@@ -63,6 +63,8 @@ int bc_rs_get_remaining_record_size(struct bc_read_stream *stream);
  * results are undefined. */
 void bc_rs_skip_block(struct bc_read_stream *stream);
 
+void bc_rs_rewind_block(struct bc_read_stream *stream);
+
 /**********************************************************
 
   Reading Data
@@ -98,16 +100,13 @@ uint64_t  bc_rs_read_64(struct bc_read_stream *stream, int i);
 /* There were no more values in a record when you called bc_rs_get_*. */
 #define BITCODE_ERR_NO_SUCH_VALUE   0x2
 
-/* Premature end-of-file on the input file */
-#define BITCODE_ERR_PREMATURE_EOF   0x4
-
 /* I/O error reading the input file */
-#define BITCODE_ERR_IO              0x8
+#define BITCODE_ERR_IO              0x4
 
 /* Bitcode data is corrupt */
-#define BITCODE_ERR_CORRUPT_INPUT   0x10
+#define BITCODE_ERR_CORRUPT_INPUT   0x8
 
-#define BITCODE_ERR_INTERNAL        0x20
+#define BITCODE_ERR_INTERNAL        0x10
 
 int bc_rs_get_error(struct bc_read_stream *stream);
 

@@ -41,6 +41,8 @@ struct stream_stack_entry
         struct block_metadata {
             int abbrev_len;
             int block_id;
+            int block_offset;
+            int block_len;
         } block_metadata;
 
         struct {
@@ -78,6 +80,9 @@ struct bc_read_stream
     uint32_t next_bits;
     int num_next_bits;
     int stream_err;
+    int stream_offset;
+
+    struct stream_stack_entry *old_block_metadata;
 
     /* Values for the current block */
     int abbrev_len;
@@ -141,8 +146,10 @@ void print_abbrev(struct abbrev_operand *operands, int num_operands)
 
 void dump_stack(struct bc_read_stream *s)
 {
+    printf("Stream stack: %d entries\n", s->stream_stack_len);
     for(int i = 0; i < s->stream_stack_len; i++)
     {
+        printf("-  ");
         struct stream_stack_entry *e = &s->stream_stack[i];
         if(e->type == Abbreviation)
         {
@@ -167,6 +174,8 @@ void dump_blockinfo(struct blockinfo *bi)
 }
 */
 
+static int refill_next_bits(struct bc_read_stream *stream);
+
 struct bc_read_stream *bc_rs_open_file(const char *filename)
 {
     FILE *infile = fopen(filename, "r");
@@ -188,9 +197,12 @@ struct bc_read_stream *bc_rs_open_file(const char *filename)
 
     struct bc_read_stream *stream = malloc(sizeof(*stream));
     stream->infile = infile;
+    stream->stream_err = 0;
+
     stream->next_bits = 0;
     stream->num_next_bits = 0;
-    stream->stream_err = 0;
+    stream->stream_offset = 0;
+    refill_next_bits(stream);
 
     stream->abbrev_len = 2;    /* its initial value according to the spec */
     stream->num_abbrevs = 0;
@@ -292,8 +304,8 @@ static int refill_next_bits(struct bc_read_stream *stream)
     int ret = fread(buf, 4, 1, stream->infile);
     if(ret < 1)
     {
-        if(feof(stream->infile))
-            stream->stream_err |= BITCODE_ERR_PREMATURE_EOF;
+        //if(feof(stream->infile))
+        //    stream->record_type = Eof;
 
         if(ferror(stream->infile))
             stream->stream_err |= BITCODE_ERR_IO;
@@ -303,9 +315,12 @@ static int refill_next_bits(struct bc_read_stream *stream)
 
     stream->next_bits = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
     stream->num_next_bits = 32;
+    stream->stream_offset += 4;
 
     return 0;
 }
+
+#define LOW_BITS(bitfield, num_bits) (bitfield & (~0U >> (32-num_bits)))
 
 static uint32_t read_fixed(struct bc_read_stream *stream, int num_bits)
 {
@@ -313,12 +328,14 @@ static uint32_t read_fixed(struct bc_read_stream *stream, int num_bits)
 
     if(stream->num_next_bits >= num_bits)
     {
-        ret = stream->next_bits & ((1U << num_bits)-1);
+        /* next_bits already contains all the bits we need -- take them */
+        ret = LOW_BITS(stream->next_bits, num_bits);
         stream->next_bits >>= num_bits;
         stream->num_next_bits -= num_bits;
     }
     else
     {
+        /* we need all of next_bits, and then some */
         ret = stream->next_bits;
         int bits_filled = stream->num_next_bits;
         int bits_left = num_bits - bits_filled;
@@ -326,7 +343,7 @@ static uint32_t read_fixed(struct bc_read_stream *stream, int num_bits)
         if(refill_next_bits(stream) < 0) return 0;
 
         /* take bits_left bits from the next_bits */
-        ret |= (stream->next_bits & (~0U >> (32-bits_left))) << bits_filled;
+        ret |= LOW_BITS(stream->next_bits, bits_left) << bits_filled;
 
         if(bits_left != 32)
             stream->next_bits >>= bits_left;
@@ -335,6 +352,13 @@ static uint32_t read_fixed(struct bc_read_stream *stream, int num_bits)
 
         stream->num_next_bits -= bits_left;
     }
+
+    if(stream->num_next_bits == 0)
+    {
+        /* We could defer this, but doing it now makes our stream_offset more accurate */
+        refill_next_bits(stream);
+    }
+
     return ret;
 }
 
@@ -484,8 +508,8 @@ static int read_abbrev_op(struct bc_read_stream *stream, struct abbrev_operand *
 
 void align_32_bits(struct bc_read_stream *stream)
 {
-    stream->num_next_bits = 0;
-    stream->next_bits     = 0;
+    if(stream->num_next_bits != 32)
+        refill_next_bits(stream);
 }
 
 struct blockinfo *find_blockinfo(struct bc_read_stream *stream, int block_id)
@@ -520,37 +544,44 @@ struct blockinfo *find_or_create_blockinfo(struct bc_read_stream *stream, int bl
     }
 }
 
+static void pop_stack_frame(struct bc_read_stream *stream)
+{
+    stream->stream_stack_len = stream->block_metadata - stream->stream_stack;
+    if(stream->stream_stack_len == 0)
+    {
+        stream->record_type = Eof;
+        return;
+    }
+
+    stream->num_abbrevs = 0;
+    stream->block_metadata--;
+    while(stream->block_metadata->type == Abbreviation)
+    {
+        stream->num_abbrevs++;
+        stream->block_metadata--;
+    }
+
+    stream->abbrev_len = stream->block_metadata->e.block_metadata.abbrev_len;
+    stream->block_id   = stream->block_metadata->e.block_metadata.block_id;
+    stream->blockinfo  = find_blockinfo(stream, stream->block_id);
+}
+
+
 void bc_rs_next_record(struct bc_read_stream *stream)
 {
     /* don't attempt to read past eof */
     if(stream->record_type == Eof) return;
 
     int abbrev_id = read_fixed(stream, stream->abbrev_len);
+    stream->current_record_offset = 0;
 
     switch(abbrev_id) {
         case ABBREV_ID_END_BLOCK:
             stream->record_type = EndBlock;
+            stream->old_block_metadata = stream->block_metadata;
 
             align_32_bits(stream);
-
-            stream->stream_stack_len = stream->block_metadata - stream->stream_stack;
-            if(stream->stream_stack_len == 0)
-            {
-                stream->record_type = Eof;
-                break;
-            }
-
-            stream->num_abbrevs = 0;
-            stream->block_metadata--;
-            while(stream->block_metadata->type == Abbreviation)
-            {
-                stream->num_abbrevs++;
-                stream->block_metadata--;
-            }
-
-            stream->abbrev_len = stream->block_metadata->e.block_metadata.abbrev_len;
-            stream->block_id   = stream->block_metadata->e.block_metadata.block_id;
-            stream->blockinfo  = find_blockinfo(stream, stream->block_id);
+            pop_stack_frame(stream);
 
             break;
 
@@ -559,7 +590,6 @@ void bc_rs_next_record(struct bc_read_stream *stream)
             stream->abbrev_len  = read_vbr(stream, 4);
             align_32_bits(stream);
             stream->block_len = read_fixed(stream, 32);
-
             stream->record_type = StartBlock;
 
             RESIZE_ARRAY_IF_NECESSARY(stream->stream_stack, stream->stream_stack_size,
@@ -569,8 +599,12 @@ void bc_rs_next_record(struct bc_read_stream *stream)
             stream->block_metadata->type = BlockMetadata;
             stream->block_metadata->e.block_metadata.block_id   = stream->block_id;
             stream->block_metadata->e.block_metadata.abbrev_len = stream->abbrev_len;
+            stream->block_metadata->e.block_metadata.block_offset = stream->stream_offset;
+            stream->block_metadata->e.block_metadata.block_len    = stream->block_len;
 
-            stream->blockinfo = find_blockinfo(stream, stream->block_id);
+            //printf("++ Entering block id=%d, offset=%d\n", stream->block_id, stream->stream_offset);
+
+            stream->blockinfo = find_or_create_blockinfo(stream, stream->block_id);
             break;
 
         case ABBREV_ID_DEFINE_ABBREV:
@@ -734,4 +768,39 @@ int bc_rs_get_record_size(struct bc_read_stream *stream)
     return stream->current_record_size;
 }
 
-//int bc_rs_get_remaining_record_size(struct bc_read_stream *stream);
+int bc_rs_get_remaining_record_size(struct bc_read_stream *stream)
+{
+    return stream->current_record_size - stream->current_record_offset;
+}
+
+void bc_rs_skip_block(struct bc_read_stream *stream)
+{
+    int offset = stream->block_metadata->e.block_metadata.block_offset  +
+                   (stream->block_metadata->e.block_metadata.block_len * 4);
+
+    fseek(stream->infile, offset, SEEK_SET);
+    stream->stream_offset = offset-4;
+    refill_next_bits(stream);
+    pop_stack_frame(stream);
+}
+
+void bc_rs_rewind_block(struct bc_read_stream *stream)
+{
+    if(stream->record_type == EndBlock)
+    {
+        stream->num_abbrevs = stream->old_block_metadata - stream->block_metadata - 1;
+        stream->block_metadata = stream->old_block_metadata;
+        stream->abbrev_len = stream->block_metadata->e.block_metadata.abbrev_len;
+        stream->block_id   = stream->block_metadata->e.block_metadata.block_id;
+        stream->blockinfo  = find_or_create_blockinfo(stream, stream->block_id);
+        stream->stream_stack_len = stream->block_metadata - stream->stream_stack + 1;
+    }
+
+    int offset = stream->block_metadata->e.block_metadata.block_offset;
+    fseek(stream->infile, offset, SEEK_SET);
+    stream->stream_offset = offset-4;
+    refill_next_bits(stream);
+    align_32_bits(stream);
+}
+
+
