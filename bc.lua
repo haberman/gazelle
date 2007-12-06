@@ -118,7 +118,7 @@ end
 
 function File:enter_subblock(block_id)
   -- print(string.format("++ Enter subblock: %d", block_id))
-  table.insert(self.stack, self.current_abbrev_width)
+  local old_abbrev_width = self.current_abbrev_width
   self:write_fixed(ENTER_SUBBLOCK, self.current_abbrev_width)
   self:write_vbr(block_id, 8)
   self:write_vbr(4, 4)  -- no need to make this configurable at the moment
@@ -126,14 +126,20 @@ function File:enter_subblock(block_id)
   self:align_32_bits()
 
   self:write_fixed(0, 32)   -- we'll fill this in later
+  table.insert(self.stack, {old_abbrev_width, self.file:seek()})
 end
 
 function File:end_subblock(block_id)
   -- print(string.format("-- End subblock: %d", block_id))
   self:write_fixed(END_BLOCK, self.current_abbrev_width)
   self:align_32_bits()
-  self.current_abbrev_width = table.remove(self.stack)
-  -- TODO: fill in block len
+  local block_offset
+  self.current_abbrev_width, block_offset = unpack(table.remove(self.stack))
+  local current_offset = self.file:seek()
+  self.file:seek("set", block_offset - 4)
+  print(string.format("Current Offset: %d, Block Offset: %d", current_offset, block_offset))
+  self:write_fixed((current_offset - block_offset) / 4, 32)
+  self.file:seek("set", current_offset)
 end
 
 function File:write_unabbreviated_record(id, ...)
