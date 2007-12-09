@@ -1,7 +1,7 @@
 
-require "bc_lua"
 require "bc_constants"
-require "sketches/pp"
+--require "sketches/pp"
+require "bc_read_stream"
 
 function escape(str)
   return str:gsub("[\"\\]", "\\%1")
@@ -30,7 +30,7 @@ function read_intfa(infile, outfile, strings)
   local transition_num = 1
   local extra_label = "Begin"
   while true do
-    local val = {bc_lua.next_record(infile)}
+    local val = {infile:next_record()}
     if val[1] == "endblock" then break end
     if val[1] ~= "data" then error("Got unexpected record type " .. val[1]) end
     if val[2] == BC_INTFA_STATE then
@@ -65,7 +65,7 @@ function read_rtn(infile, outfile, strings, rtn_names)
   local transition_num = 1
   local extra_label = "Begin"
   while true do
-    local val = {bc_lua.next_record(infile)}
+    local val = {infile:next_record()}
     --print(serialize(val))
     if val[1] == "endblock" then break end
     if val[1] ~= "data" then error("Got unexpected record type " .. val[1]) end
@@ -93,32 +93,32 @@ function read_rtn(infile, outfile, strings, rtn_names)
 end
 
 -- do a first pass to get all the RTN names
-local bc_file = bc_lua.open(arg[1])
+local bc_file = bc_read_stream.open(arg[1])
 local rtn_names = {}
 while true do
-  local val = {bc_lua.next_record(bc_file)}
+  local val = {bc_file:next_record()}
   if val[1] == nil then break end
   if val[1] == "startblock" and val[2] == BC_RTN then
-    val = {bc_lua.next_record(bc_file)}
+    val = {bc_file:next_record()}
     table.insert(rtn_names, val[3]+1)
   end
 end
 
 
-local bc_file = bc_lua.open(arg[1])
+local bc_file = bc_read_stream.open(arg[1])
 local intfa_num = 1
 local strings = {}
 
 while true do
-  local val = {bc_lua.next_record(bc_file)}
+  local val = {bc_file:next_record()}
   if val[1] == nil then break end
   if val[1] == "startblock" and val[2] == BC_STRINGS then
-    val = {bc_lua.next_record(bc_file)}
+    val = {bc_file:next_record()}
     while val[1] ~= "endblock" do
       table.remove(val, 1)
       table.remove(val, 1)
       table.insert(strings, string.char(unpack(val)))
-      val = {bc_lua.next_record(bc_file)}
+      val = {bc_file:next_record()}
     end
     -- print(serialize(strings))
   elseif val[1] == "startblock" and val[2] == BC_INTFA then
@@ -127,7 +127,7 @@ while true do
     read_intfa(bc_file, io.open(filename, "w"), strings)
     intfa_num = intfa_num + 1
   elseif val[1] == "startblock" and val[2] == BC_RTN then
-    local val = {bc_lua.next_record(bc_file)}
+    local val = {bc_file:next_record()}
     filename = string.format("%s.dot", strings[val[3]+1])
     print(string.format("Writing %s...", filename))
     read_rtn(bc_file, io.open(filename, "w"), strings, rtn_names)

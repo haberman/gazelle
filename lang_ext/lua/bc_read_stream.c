@@ -5,15 +5,17 @@
 #include "lualib.h"
 #include "lauxlib.h"
 
-struct bc_lua_stream
+struct bc_read_stream_lua
 {
     struct bc_read_stream *s;
 };
 
-static int bc_lua_open(lua_State *L)
+static int bc_read_stream_lua_open(lua_State *L)
 {
   const char *filename = luaL_checkstring(L, 1);
-  struct bc_lua_stream *s = lua_newuserdata(L, sizeof(*s));
+  struct bc_read_stream_lua *s = lua_newuserdata(L, sizeof(*s));
+  luaL_getmetatable(L, "bc_read_stream");
+  lua_setmetatable(L, -2);
   s->s = bc_rs_open_file(filename);
   if(!s->s)
     return luaL_error(L, "Couldn't open bitcode file %s", filename);
@@ -21,9 +23,9 @@ static int bc_lua_open(lua_State *L)
     return 1;
 }
 
-static int bc_lua_next_record(lua_State *L)
+static int bc_read_stream_lua_next_record(lua_State *L)
 {
-  struct bc_lua_stream *s = lua_touserdata(L, 1);
+  struct bc_read_stream_lua *s = luaL_checkudata(L, 1, "bc_read_stream");
   if(!s)
     return luaL_argerror(L, 1, "not a userdata");
 
@@ -58,16 +60,28 @@ static int bc_lua_next_record(lua_State *L)
   return 0;
 }
 
-static const luaL_reg R[] =
+static const luaL_reg global_functions[] =
 {
-  {"open", bc_lua_open},
-  {"next_record", bc_lua_next_record},
+  {"open", bc_read_stream_lua_open},
   {NULL, NULL}
 };
 
-int luaopen_bc_lua(lua_State *L)
+static const luaL_reg read_stream_methods[] =
 {
-  luaL_register(L, "bc_lua", R);
+  {"next_record", bc_read_stream_lua_next_record},
+  {NULL, NULL}
+};
+
+int luaopen_bc_read_stream(lua_State *L)
+{
+  luaL_newmetatable(L, "bc_read_stream");
+
+  /* metatable.__index = metatable */
+  lua_pushvalue(L, -1); /* duplicates the metatable */
+  lua_setfield(L, -2, "__index");
+
+  luaL_register(L, NULL, read_stream_methods);
+  luaL_register(L, "bc_read_stream", global_functions);
   return 0;
 }
 
