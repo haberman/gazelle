@@ -1,5 +1,5 @@
 
-require "rtn"
+require "bootstrap/rtn"
 require "bc"
 require "bc_constants"
 

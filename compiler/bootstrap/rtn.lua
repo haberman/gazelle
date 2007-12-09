@@ -1,10 +1,10 @@
 
 require "misc"
-require "regex_parser"
+require "bootstrap/regex_parser"
 require "fa"
-require "sketches/regex_debug"
+--require "sketches/regex_debug"
 
-require "sketches/pp"
+--require "sketches/pp"
 -- function fa.FA:__tostring()
 --   return "<A regex!  I'm sure it's quite pretty>"
 -- end
