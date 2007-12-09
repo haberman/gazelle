@@ -137,7 +137,6 @@ function File:end_subblock(block_id)
   self.current_abbrev_width, block_offset = unpack(table.remove(self.stack))
   local current_offset = self.file:seek()
   self.file:seek("set", block_offset - 4)
-  print(string.format("Current Offset: %d, Block Offset: %d", current_offset, block_offset))
   self:write_fixed((current_offset - block_offset) / 4, 32)
   self.file:seek("set", current_offset)
 end

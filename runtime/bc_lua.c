@@ -53,6 +53,9 @@ static int bc_lua_next_record(lua_State *L)
     lua_pushstring(L, "endblock");
     return 1;
   }
+
+  /* compiler too stupid to realize that this is unreachable */
+  return 0;
 }
 
 static const luaL_reg R[] =

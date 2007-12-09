@@ -12,6 +12,7 @@ struct rtn_transition;
 struct rtn
 {
     char *name;
+    int num_slots;
 
     int num_ignore;
     char **ignore_terminals;
@@ -82,18 +83,9 @@ struct intfa_transition
 
 struct intfa_state
 {
-    char *final_terminal;  /* NULL if not final */
+    char *final;  /* NULL if not final */
     int num_transitions;
     struct intfa_transition *transitions;
-};
-
-struct parse_stack_frame
-{
-    struct rtn            *nonterm;
-    struct rtn_state      *nonterm_state;
-    struct rtn_transition *nonterm_transition;
-    struct intfa       *terminal_dfa;
-    struct intfa_state *terminal_dfa_state;
 };
 
 struct grammar
@@ -107,15 +99,73 @@ struct grammar
     struct intfa *intfas;
 };
 
+/*
+ * runtime state
+ */
+
+struct terminal
+{
+    int offset;
+    int len;
+};
+
+struct parse_val;
+
+struct slotarray
+{
+    struct rtn *rtn;
+    int num_slots;
+    struct parse_val *slots;
+};
+
+struct parse_val
+{
+    enum {
+      PARSE_VAL_EMPTY,
+      PARSE_VAL_TERMINAL,
+      PARSE_VAL_NONTERM,
+      PARSE_VAL_USERDATA
+    } type;
+
+    union {
+      struct terminal terminal;
+      struct slotarray *nonterm;
+      char userdata[8];
+    } val;
+};
+
+struct parse_stack_frame
+{
+    struct rtn            *rtn;
+    struct rtn_state      *rtn_state;
+    struct rtn_transition *rtn_transition;
+    struct slotarray      slots;
+};
+
+struct buffer
+{
+    char *buf;
+    bool is_eof;
+};
+
 struct parse_state
 {
     struct grammar *grammar;
     struct buffer *buffer;
 
+    int offset;
+
     struct parse_stack_frame *parse_stack;
     int parse_stack_length;
     int parse_stack_size;
+
+    struct intfa       *dfa;
+    struct intfa_state *dfa_state;
+    int match_begin;
+    int last_match_end;
+    struct intfa_state *last_match_state;
 };
 
 struct grammar *load_grammar(struct bc_read_stream *s);
+void parse(struct parse_state *parse_state);
 

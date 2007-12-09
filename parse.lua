@@ -196,9 +196,10 @@ function write_grammar(infilename, outfilename)
   -- RTN abbreviations
   bc_file:write_unabbreviated_record(bc.SETBID, BC_RTN)
 
-  bc_rtn_name = bc_file:define_abbreviation(4,
-                                      bc.LiteralOp:new(BC_RTN_NAME),
-                                      bc.VBROp:new(6))
+  bc_rtn_info = bc_file:define_abbreviation(4,
+                                      bc.LiteralOp:new(BC_RTN_INFO),
+                                      bc.VBROp:new(6),
+                                      bc.VBROp:new(4))
 
   bc_rtn_state = bc_file:define_abbreviation(5,
                                       bc.LiteralOp:new(BC_RTN_STATE),
@@ -353,7 +354,7 @@ function write_grammar(infilename, outfilename)
   for name_rtn_pair in each(rtns) do
     local name, rtn = unpack(name_rtn_pair)
     bc_file:enter_subblock(BC_RTN)
-    bc_file:write_abbreviated_record(bc_rtn_name, string_offsets[name])
+    bc_file:write_abbreviated_record(bc_rtn_info, string_offsets[name], attributes.slot_counts[name])
 
     if attributes.ignore[name] then
       for ign_terminal in each(attributes.ignore[name]) do

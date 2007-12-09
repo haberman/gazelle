@@ -22,7 +22,7 @@ INTFAS
 
 RTNS
   RTN
-    [RTN_NAME, nonterm_name_int]
+    [RTN_INFO, nonterm_name_int, # of slots]
 
     [RTN_IGNORE, terminal_name_int]
     ...

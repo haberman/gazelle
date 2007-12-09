@@ -109,7 +109,7 @@ require "minimize"
 function parse_grammar(chars)
   chars:ignore("whitespace")
   local grammar = {}
-  local attributes = {terminals={}, ignore={}}
+  local attributes = {terminals={}, ignore={}, slot_counts={}}
   while not chars:eof() do
     if chars:match(" *start") then
       local start = parse_nonterm(chars)
@@ -151,6 +151,7 @@ function parse_statement(chars, attributes)
   ret.derivations = parse_derivations(chars, attributes)
   chars:consume(";")
   chars:ignore(old_ignore)
+  attributes.slot_counts[ret.nonterm.name] = attributes.slotnum
   return ret
 end
 
