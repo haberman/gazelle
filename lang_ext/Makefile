@@ -1,6 +1,6 @@
 
 CFLAGS=-Wall -g -O6 -std=c99
-SUBDIRS=runtime lang_ext utilities
+SUBDIRS=lua
 TARGETS=all clean
 
 .PHONY: $(TARGETS)
