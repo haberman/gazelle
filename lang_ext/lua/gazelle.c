@@ -244,38 +244,50 @@ static int gazelle_rtn_state_transitions(lua_State *L)
   {
     struct rtn_transition *t = &rtn_state->rtn_state->transitions[i];
     lua_newtable(L);
-    switch(t->transition_type)
+    if(t->transition_type == TERMINAL_TRANSITION || t->transition_type == NONTERM_TRANSITION)
     {
-      case TERMINAL_TRANSITION:
+      if(t->transition_type == TERMINAL_TRANSITION)
+      {
         lua_pushstring(L, "terminal");
         lua_rawseti(L, -2, 1);
         lua_pushstring(L, t->edge.terminal_name);
         lua_rawseti(L, -2, 2);
-        break;
-
-      case NONTERM_TRANSITION:
+      }
+      else if(t->transition_type == NONTERM_TRANSITION)
+      {
         lua_pushstring(L, "nonterm");
         lua_rawseti(L, -2, 1);
         get_rtn(L, t->edge.nonterminal);
         lua_rawseti(L, -2, 2);
-        break;
+      }
 
-      case DECISION:
-        lua_pushstring(L, "decision");
-        lua_rawseti(L, -2, 1);
-        break;
-
-      default:
-        return luaL_error(L, "corrupt grammar: invalid transition type!");
+      get_rtn_state(L, t->dest_state);
+      lua_rawseti(L, -2, 3);
+      lua_pushstring(L, t->slotname);
+      lua_rawseti(L, -2, 4);
+      lua_pushnumber(L, t->slotnum);
+      lua_rawseti(L, -2, 5);
     }
+    else if(t->transition_type == DECISION)
+    {
+      lua_pushstring(L, "decision");
+      lua_rawseti(L, -2, 1);
+      lua_pushstring(L, t->edge.decision->terminal_name);
+      lua_rawseti(L, -2, 2);
 
-    int table_size = lua_objlen(L, -1);
-    get_rtn_state(L, t->dest_state);
-    lua_rawseti(L, -2, ++table_size);
-    lua_pushstring(L, t->slotname);
-    lua_rawseti(L, -2, ++table_size);
-    lua_pushnumber(L, t->slotnum);
-    lua_rawseti(L, -2, ++table_size);
+      lua_newtable(L);
+      for(int j = 0; j < t->edge.decision->num_actions; j++)
+      {
+        lua_pushnumber(L, t->edge.decision->actions[j]);
+        lua_rawseti(L, -2, j+1);
+      }
+      lua_rawseti(L, -2, 3);
+    }
+    else
+    {
+      printf("%d\n", t->transition_type);
+      return luaL_error(L, "corrupt grammar: invalid transition type!");
+    }
 
     lua_rawseti(L, -2, i+1);
   }
