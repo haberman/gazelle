@@ -51,7 +51,6 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
     {
         if(frame->rtn->ignore_terminals[i] == terminal)
         {
-            printf("Skipping a %s\n", terminal);
             reset_dfa_match(parse_state);
             return;
         }
@@ -63,14 +62,13 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
         struct rtn_transition *t = &frame->rtn_state->transitions[i];
         if(t->transition_type == TERMINAL_TRANSITION && t->edge.terminal_name == terminal)
         {
-            found_transition = true;
             frame->slots.slots[t->slotnum] = val;
-            printf("Setting dest_state to %p\n", t->dest_state);
             frame->rtn_state = t->dest_state;
+            found_transition = true;
+            break;
         }
         else if(t->transition_type == DECISION && t->edge.decision->terminal_name == terminal)
         {
-            found_transition = true;
             struct decision *d = t->edge.decision;
 
             for(int i = 0; i < d->num_actions; i++)
@@ -86,25 +84,25 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
                     }
                     frame->rtn_transition = t2;
                     frame = init_new_stack_frame(parse_state, t2->edge.nonterminal);
-                    printf("Executed nonterm transition!\n");
                 }
                 else if(t2->transition_type == TERMINAL_TRANSITION)
                 {
-                    frame->slots.slots[t->slotnum] = val;
-                    frame->rtn_state = t->dest_state;
-                    printf("Executed terminal transition!\n");
+                    frame->slots.slots[t2->slotnum] = val;
+                    frame->rtn_state = t2->dest_state;
                 }
-                printf("Executed action successfully (of %d)!\n", d->num_actions);
             }
+            found_transition = true;
+            break;
         }
     }
 
     if(found_transition)
     {
-        while(frame->rtn_state->is_final)
+        while(parse_state->parse_stack_length > 0 && frame->rtn_state->is_final)
             frame = pop_stack_frame(parse_state);
 
-        reset_dfa_match(parse_state);
+        if(parse_state->parse_stack_length > 0)
+            reset_dfa_match(parse_state);
     }
     else
     {
@@ -120,7 +118,7 @@ void parse(struct parse_state *parse_state)
     while(!parse_state->buffer->is_eof && !user_cancelled && parse_state->parse_stack_length > 0)
     {
         int ch = parse_state->buffer->buf[parse_state->offset];
-        printf("Offset: %d, char %c\n", parse_state->offset, ch);
+        //printf("Offset: %d, char %c\n", parse_state->offset, ch);
         int found_transition = 0;
 
         /* We've read one character, which should cause one transition in the DFA for terminals.
@@ -132,7 +130,6 @@ void parse(struct parse_state *parse_state)
             if(ch >= t->ch_low && ch <= t->ch_high)
             {
                 parse_state->dfa_state = t->dest_state;
-                printf("Parsed one character: %c\n", ch);
                 found_transition = 1;
                 break;
             }
@@ -154,6 +151,11 @@ void parse(struct parse_state *parse_state)
             if(parse_state->last_match_state)
             {
                 /* we have a terminal.  do RTN transitions as appropriate */
+                //int terminal_len = parse_state->last_match_end-parse_state->match_begin+1;
+                //char terminal[terminal_len];
+                //memcpy(terminal, parse_state->buffer->buf+parse_state->match_begin, terminal_len);
+                //terminal[terminal_len] = '\0';
+                //printf("Recognized a terminal (%s) (%s)\n", parse_state->last_match_state->final, terminal);
                 parse_state->offset = parse_state->last_match_end + 1;
                 do_rtn_transition(parse_state, parse_state->match_begin, parse_state->last_match_end,
                                   parse_state->last_match_state->final);
