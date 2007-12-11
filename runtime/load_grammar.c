@@ -303,7 +303,7 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
                         transition->transition_type = TERMINAL_TRANSITION;
                         transition->edge.terminal_name = g->strings[bc_rs_read_next_32(s)];
                     }
-                    else if(ri.id == BC_RTN_TRANSITION_TERMINAL)
+                    else if(ri.id == BC_RTN_TRANSITION_NONTERM)
                     {
                         transition->transition_type = NONTERM_TRANSITION;
                         transition->edge.nonterminal = &g->rtns[bc_rs_read_next_32(s)];
