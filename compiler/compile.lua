@@ -354,7 +354,7 @@ function write_grammar(infilename, outfilename)
   for name_rtn_pair in each(rtns) do
     local name, rtn = unpack(name_rtn_pair)
     bc_file:enter_subblock(BC_RTN)
-    bc_file:write_abbreviated_record(bc_rtn_info, string_offsets[name], attributes.slot_counts[name])
+    bc_file:write_abbreviated_record(bc_rtn_info, string_offsets[name], attributes.slot_counts[name]-1)
 
     if attributes.ignore[name] then
       for ign_terminal in each(attributes.ignore[name]) do
