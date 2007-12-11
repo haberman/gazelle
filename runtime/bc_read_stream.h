@@ -112,3 +112,11 @@ int bc_rs_get_error(struct bc_read_stream *stream);
 
 #endif
 
+/*
+ * Local Variables:
+ * c-file-style: "bsd"
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ * vim:et:sts=4:sw=4
+ */

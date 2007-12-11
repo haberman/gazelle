@@ -411,3 +411,11 @@ struct grammar *load_grammar(struct bc_read_stream *s)
     return g;
 }
 
+/*
+ * Local Variables:
+ * c-file-style: "bsd"
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ * vim:et:sts=4:sw=4
+ */
