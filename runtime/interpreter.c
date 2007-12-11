@@ -237,8 +237,10 @@ void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
     state->buffer->file = file;
     state->buffer->len  = 0;
     state->buffer->base_offset = 0;
+    state->buffer->is_eof = false;
 
     state->offset = 0;
+    state->precious_offset = 0;
     state->parse_stack_length = 1;
     state->match_begin = 0;
     state->last_match_end = 0;
@@ -259,6 +261,7 @@ void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
 
 void free_parse_state(struct parse_state *state)
 {
+    free(state->buffer->buf);
     free(state->buffer);
     free(state->parse_stack);
     free(state->slotbuf);

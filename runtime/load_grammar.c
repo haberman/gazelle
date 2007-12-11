@@ -411,6 +411,36 @@ struct grammar *load_grammar(struct bc_read_stream *s)
     return g;
 }
 
+void free_grammar(struct grammar *g)
+{
+    for(int i = 0; g->strings[i] != NULL; i++)  
+        free(g->strings[i]);
+    free(g->strings); 
+
+    for(int i = 0; i < g->num_rtns; i++)
+    {
+        struct rtn *rtn = &g->rtns[i];
+        free(rtn->ignore_terminals);
+        free(rtn->states);
+
+        for(int j = 0; j < rtn->num_transitions; j++)
+            if(rtn->transitions[j].transition_type == DECISION)
+                free(rtn->transitions[j].edge.decision);
+        free(rtn->transitions);
+    }
+    free(g->rtns);
+
+    for(int i = 0; i < g->num_intfas; i++)
+    {
+        struct intfa *intfa = &g->intfas[i];
+        free(intfa->states);
+        free(intfa->transitions);
+    }
+    free(g->intfas);
+
+    free(g);
+}
+
 /*
  * Local Variables:
  * c-file-style: "bsd"

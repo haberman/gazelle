@@ -30,6 +30,8 @@ int main(int argc, char *argv[])
 
     struct grammar *g = load_grammar(s);
 
+    bc_rs_close_stream(s);
+
     FILE *file;
     if(strcmp(argv[2], "-") == 0)
     {
@@ -49,8 +51,12 @@ int main(int argc, char *argv[])
     struct parse_state state;
     alloc_parse_state(&state);
     init_parse_state(&state, g, file);
+
     parse(&state);
+
     free_parse_state(&state);
+    free_grammar(g);
+    fclose(file);
 }
 
 /*
