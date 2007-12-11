@@ -1,5 +1,6 @@
 
 #include <stdbool.h>
+#include <stdio.h>
 #include "bc_read_stream.h"
 
 /*
@@ -144,7 +145,11 @@ struct parse_stack_frame
 
 struct buffer
 {
+    FILE *file;
     char *buf;
+    int len;
+    int size;
+    int base_offset;
     bool is_eof;
 };
 
@@ -154,6 +159,7 @@ struct parse_state
     struct buffer *buffer;
 
     int offset;
+    int precious_offset;
 
     struct parse_stack_frame *parse_stack;
     int parse_stack_length;
@@ -164,10 +170,17 @@ struct parse_state
     int match_begin;
     int last_match_end;
     struct intfa_state *last_match_state;
+
+    struct parse_val *slotbuf;
+    int slotbuf_len;
+    int slotbuf_size;
 };
 
 struct grammar *load_grammar(struct bc_read_stream *s);
 void parse(struct parse_state *parse_state);
+void alloc_parse_state(struct parse_state *state);
+void free_parse_state(struct parse_state *state);
+void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file);
 
 /*
  * Local Variables:

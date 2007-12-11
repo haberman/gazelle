@@ -1,7 +1,15 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "interpreter.h"
+
+#define RESIZE_ARRAY_IF_NECESSARY(ptr, size, desired_size) \
+    if(size < desired_size) \
+    { \
+        size *= 2; \
+        ptr = realloc(ptr, size*sizeof(*ptr)); \
+    }
 
 struct parse_stack_frame *init_new_stack_frame(struct parse_state *parse_state, struct rtn *rtn)
 {
@@ -10,14 +18,20 @@ struct parse_stack_frame *init_new_stack_frame(struct parse_state *parse_state, 
     frame->rtn_state = &rtn->states[0];
     frame->slots.rtn = rtn;
     frame->slots.num_slots = rtn->num_slots;
-    frame->slots.slots = malloc(sizeof(struct parse_val)*frame->slots.num_slots);
+
+    RESIZE_ARRAY_IF_NECESSARY(parse_state->slotbuf, parse_state->slotbuf_size,
+                              parse_state->slotbuf_len + frame->slots.num_slots);
+
+    frame->slots.slots = &parse_state->slotbuf[parse_state->slotbuf_len];
+    parse_state->slotbuf_len += frame->slots.num_slots;
+
     return frame;
 }
 
 struct parse_stack_frame *pop_stack_frame(struct parse_state *parse_state)
 {
     struct parse_stack_frame *frame = &parse_state->parse_stack[parse_state->parse_stack_length-1];
-    free(frame->slots.slots);
+    parse_state->slotbuf_len -= frame->slots.num_slots;
     parse_state->parse_stack_length--;
     if(parse_state->parse_stack_length == 0)
     {
@@ -110,6 +124,38 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
     }
 }
 
+void refill_buffer(struct parse_state *state)
+{
+    struct buffer *b = state->buffer;
+    /* if more than 1/4 of the buffer is precious (can't be discarded), double the
+     * buffer size */
+    int precious_len = state->offset - state->precious_offset;
+    if(precious_len > (b->size / 4))
+    {
+        b->size *= 2;
+        b->buf = realloc(b->buf, b->size);
+    }
+
+    memmove(b->buf, b->buf + state->precious_offset - b->base_offset, precious_len);
+    b->len = state->precious_offset - b->base_offset;
+    b->base_offset = state->precious_offset;
+
+    /* now read from the file as much as we can */
+    int bytes_read = fread(b->buf + b->len, sizeof(char), b->size - b->len, b->file);
+
+    if(bytes_read == 0)
+    {
+        if(feof(b->file))
+        {
+            b->is_eof = true;
+        }
+        else
+        {
+            printf("Error reading from file!\n");
+            exit(1);
+        }
+    }
+}
 
 void parse(struct parse_state *parse_state)
 {
@@ -117,7 +163,10 @@ void parse(struct parse_state *parse_state)
 
     while(!parse_state->buffer->is_eof && !user_cancelled && parse_state->parse_stack_length > 0)
     {
-        int ch = parse_state->buffer->buf[parse_state->offset];
+        if(parse_state->offset == parse_state->buffer->base_offset + parse_state->buffer->len)
+            refill_buffer(parse_state);
+
+        int ch = parse_state->buffer->buf[parse_state->offset-parse_state->buffer->base_offset];
         //printf("Offset: %d, char %c\n", parse_state->offset, ch);
         int found_transition = 0;
 
@@ -166,6 +215,53 @@ void parse(struct parse_state *parse_state)
             }
         }
     }
+}
+
+void alloc_parse_state(struct parse_state *state)
+{
+    state->buffer = malloc(sizeof(struct buffer));
+    state->buffer->size = 4096;
+    state->buffer->buf = malloc(state->buffer->size * sizeof(char));
+
+    state->parse_stack_size = 50;
+    state->parse_stack = malloc(sizeof(struct parse_stack_frame) * state->parse_stack_size);
+
+    state->slotbuf_size = 200;
+    state->slotbuf = malloc(sizeof(*state->slotbuf) * state->slotbuf_size);
+}
+
+void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
+{
+    state->grammar = g;
+
+    state->buffer->file = file;
+    state->buffer->len  = 0;
+    state->buffer->base_offset = 0;
+
+    state->offset = 0;
+    state->parse_stack_length = 1;
+    state->match_begin = 0;
+    state->last_match_end = 0;
+    state->last_match_state = NULL;
+
+    struct parse_stack_frame *frame = &state->parse_stack[0];
+    frame->rtn = &g->rtns[0];
+    frame->rtn_state = &frame->rtn->states[0];
+    frame->rtn_transition = NULL;
+    frame->slots.num_slots = frame->rtn->num_slots;
+    frame->slots.rtn = frame->rtn;
+    frame->slots.slots = state->slotbuf;
+    state->slotbuf_len = frame->slots.num_slots;
+
+    state->dfa = frame->rtn_state->term_dfa;
+    state->dfa_state = &state->dfa->states[0];
+}
+
+void free_parse_state(struct parse_state *state)
+{
+    free(state->buffer);
+    free(state->parse_stack);
+    free(state->slotbuf);
 }
 
 /*
