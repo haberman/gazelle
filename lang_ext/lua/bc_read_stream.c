@@ -1,14 +1,9 @@
 
-#include "bc_read_stream.h"
+#include "bc_read_stream_lua.h"
 
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
-
-struct bc_read_stream_lua
-{
-    struct bc_read_stream *s;
-};
 
 static int bc_read_stream_lua_open(lua_State *L)
 {
@@ -26,9 +21,6 @@ static int bc_read_stream_lua_open(lua_State *L)
 static int bc_read_stream_lua_next_record(lua_State *L)
 {
   struct bc_read_stream_lua *s = luaL_checkudata(L, 1, "bc_read_stream");
-  if(!s)
-    return luaL_argerror(L, 1, "not a userdata");
-
   struct record_info ri = bc_rs_next_data_record(s->s);
 
   if(ri.record_type == Eof)
@@ -82,6 +74,13 @@ int luaopen_bc_read_stream(lua_State *L)
 
   luaL_register(L, NULL, read_stream_methods);
   luaL_register(L, "bc_read_stream", global_functions);
-  return 0;
+  return 1;
 }
 
+/* Local Variables:
+ * c-set-style: "bsd"
+ * c-basic-offset: 2
+ * indent-tabs-mode: nil
+ * End:
+ * vim: et sts=2 sw=2
+ */
