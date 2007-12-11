@@ -1,5 +1,5 @@
 
-dofile("data_structures.lua")
+require "data_structures"
 
 function serialize(o, maxdepth, indent, s)
   local seen = s or Stack:new()
