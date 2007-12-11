@@ -148,6 +148,7 @@ function parse_statement(chars, attributes)
   ret.nonterm = parse_nonterm(chars)
   attributes.nonterm = ret.nonterm
   chars:consume("->")
+  attributes.slotnum = 1
   ret.derivations = parse_derivations(chars, attributes)
   chars:consume(";")
   chars:ignore(old_ignore)
@@ -158,7 +159,6 @@ end
 function parse_derivations(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local derivations = {}
-  attributes.slotnum = 1
 
   repeat
     if chars:match(" e ") then

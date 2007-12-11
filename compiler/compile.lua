@@ -420,11 +420,11 @@ function write_grammar(infilename, outfilename)
         if transition_type == TerminalTransition then
           bc_file:write_abbreviated_record(bc_rtn_transition_terminal, string_offsets[edge_val],
                                            rtn_state_offsets[target_state], string_offsets[properties.name],
-                                           properties.slotnum)
+                                           properties.slotnum-1)
         else
           bc_file:write_abbreviated_record(bc_rtn_transition_nonterm, rtns_offsets[grammar[edge_val.name]],
                                            rtn_state_offsets[target_state], string_offsets[properties.name],
-                                           properties.slotnum)
+                                           properties.slotnum-1)
         end
       end
     end
