@@ -18,7 +18,7 @@
 
 #define BC_STRING 0
 
-#define BC_RTN_NAME 0
+#define BC_RTN_INFO 0
 #define BC_RTN_STATE 1
 #define BC_RTN_TRANSITION_TERMINAL 2
 #define BC_RTN_TRANSITION_NONTERM 3
@@ -266,9 +266,10 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
         struct record_info ri = bc_rs_next_data_record(s);
         if(ri.record_type == DataRecord)
         {
-            if(ri.id == BC_RTN_NAME)
+            if(ri.id == BC_RTN_INFO)
             {
                 rtn->name = g->strings[bc_rs_read_next_32(s)];
+                rtn->num_slots = bc_rs_read_next_32(s);
             }
             else if(ri.id == BC_RTN_IGNORE)
             {
