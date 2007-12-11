@@ -208,11 +208,16 @@ struct bc_read_stream *bc_rs_open_file(const char *filename)
     stream->num_abbrevs = 0;
 
     stream->stream_stack_size = 8;  /* enough for a few levels of nesting and a few abbrevs */
-    stream->stream_stack_len  = 1;  /* we start with a single block_metadata entry */
     stream->stream_stack      = malloc(stream->stream_stack_size*sizeof(*stream->stream_stack));
+
+    /* we create an outermose stack frame -- this exists mostly to store
+     * the abbrev length of the outermost scope, and to store a bogus
+     * block_id so that we'll never find a blockinfo for the outer scope */
+    stream->stream_stack_len  = 1;
     stream->block_metadata    = &stream->stream_stack[0];
     stream->block_metadata->type = BlockMetadata;
     stream->block_metadata->e.block_metadata.abbrev_len = stream->abbrev_len;
+    stream->block_metadata->e.block_metadata.block_id = -1;
 
     stream->record_type = DataRecord;  /* anything besides Eof */
 
