@@ -91,11 +91,9 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
 
                 if(t2->transition_type == NONTERM_TRANSITION)
                 {
-                    if(parse_state->parse_stack_length == parse_state->parse_stack_size)
-                    {
-                        printf("Need to reallocate parse stack!!\n");
-                        exit(1);
-                    }
+                    RESIZE_ARRAY_IF_NECESSARY(parse_state->parse_stack,
+                                              parse_state->parse_stack_size,
+                                              parse_state->parse_stack_length+1);
                     frame->rtn_transition = t2;
                     frame = init_new_stack_frame(parse_state, t2->edge.nonterminal);
                 }
@@ -167,12 +165,11 @@ void parse(struct parse_state *parse_state)
 
     while(!parse_state->buffer->is_eof && !user_cancelled && parse_state->parse_stack_length > 0)
     {
+again:
         if(parse_state->offset == parse_state->buffer->base_offset + parse_state->buffer->len)
             refill_buffer(parse_state);
 
         int ch = parse_state->buffer->buf[parse_state->offset - parse_state->buffer->base_offset];
-        //printf("Offset: %d, char %c\n", parse_state->offset, ch);
-        int found_transition = 0;
 
         /* We've read one character, which should cause one transition in the DFA for terminals.
          * Find the appropriate transition, and put the DFA in its new state. */
@@ -183,42 +180,29 @@ void parse(struct parse_state *parse_state)
             if(ch >= t->ch_low && ch <= t->ch_high)
             {
                 parse_state->dfa_state = t->dest_state;
-                found_transition = 1;
-                break;
+                if(parse_state->dfa_state->final)
+                {
+                    parse_state->last_match_state = parse_state->dfa_state;
+                    parse_state->last_match_end = parse_state->offset;
+                }
+                parse_state->offset++;
+                goto again;
             }
         }
 
-        if(found_transition)
+        /* since we fell out of the loop, there was no match.
+         * if there was a previous match, fall back to that.  otherwise this character represents
+         * a syntax error. */
+        if(parse_state->last_match_state)
         {
-            if(parse_state->dfa_state->final)
-            {
-                parse_state->last_match_state = parse_state->dfa_state;
-                parse_state->last_match_end = parse_state->offset;
-            }
-            parse_state->offset++;
+            /* we have a terminal.  do RTN transitions as appropriate */
+            parse_state->offset = parse_state->last_match_end + 1;
+            do_rtn_transition(parse_state, parse_state->match_begin, parse_state->last_match_end,
+                              parse_state->last_match_state->final);
         }
         else
         {
-            /* if there was a previous match, fall back to that.  otherwise this character represents
-             * a syntax error. */
-            if(parse_state->last_match_state)
-            {
-                /* we have a terminal.  do RTN transitions as appropriate */
-                //int terminal_len = parse_state->last_match_end-parse_state->match_begin+1;
-                //char terminal[terminal_len];
-                //memcpy(terminal, parse_state->buffer->buf+parse_state->match_begin, terminal_len);
-                //terminal[terminal_len] = '\0';
-                //printf("Recognized a terminal (%s) (%s)\n", parse_state->last_match_state->final, terminal);
-                parse_state->offset = parse_state->last_match_end + 1;
-                do_rtn_transition(parse_state, parse_state->match_begin, parse_state->last_match_end,
-                                  parse_state->last_match_state->final);
-            }
-            else
-            {
-                printf("Syntax error!\n");
-                printf("offset(%d), base_offset(%d), len(%d)\n", parse_state->offset, parse_state->buffer->base_offset, parse_state->buffer->len);
-                printf("Buffer: %s\n", parse_state->buffer->buf + parse_state->offset - parse_state->buffer->base_offset);
-            }
+            printf("Syntax error!\n");
         }
     }
 }
@@ -227,8 +211,7 @@ void alloc_parse_state(struct parse_state *state)
 {
     state->buffer = malloc(sizeof(struct buffer));
     state->buffer->size = 4096;
-    state->buffer->buf = malloc((state->buffer->size+1) * sizeof(char));
-    state->buffer->buf[state->buffer->size] = '\0';
+    state->buffer->buf = malloc((state->buffer->size) * sizeof(char));
 
     state->parse_stack_size = 50;
     state->parse_stack = malloc(sizeof(struct parse_stack_frame) * state->parse_stack_size);
