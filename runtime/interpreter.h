@@ -146,7 +146,7 @@ struct parse_stack_frame
 struct buffer
 {
     FILE *file;
-    char *buf;
+    unsigned char *buf;
     int len;
     int size;
     int base_offset;
@@ -182,6 +182,7 @@ void parse(struct parse_state *parse_state);
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
 void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file);
+void reinit_parse_state(struct parse_state *state);
 
 /*
  * Local Variables:

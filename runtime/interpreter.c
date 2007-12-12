@@ -113,7 +113,9 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
     if(found_transition)
     {
         while(parse_state->parse_stack_length > 0 && frame->rtn_state->is_final)
+        {
             frame = pop_stack_frame(parse_state);
+        }
 
         if(parse_state->parse_stack_length > 0)
             reset_dfa_match(parse_state);
@@ -137,7 +139,7 @@ void refill_buffer(struct parse_state *state)
     }
 
     memmove(b->buf, b->buf + state->precious_offset - b->base_offset, precious_len);
-    b->len = state->precious_offset - b->base_offset;
+    b->len = precious_len;
     b->base_offset = state->precious_offset;
 
     /* now read from the file as much as we can */
@@ -155,6 +157,8 @@ void refill_buffer(struct parse_state *state)
             exit(1);
         }
     }
+
+    b->len += bytes_read;
 }
 
 void parse(struct parse_state *parse_state)
@@ -166,7 +170,7 @@ void parse(struct parse_state *parse_state)
         if(parse_state->offset == parse_state->buffer->base_offset + parse_state->buffer->len)
             refill_buffer(parse_state);
 
-        int ch = parse_state->buffer->buf[parse_state->offset-parse_state->buffer->base_offset];
+        int ch = parse_state->buffer->buf[parse_state->offset - parse_state->buffer->base_offset];
         //printf("Offset: %d, char %c\n", parse_state->offset, ch);
         int found_transition = 0;
 
@@ -211,7 +215,9 @@ void parse(struct parse_state *parse_state)
             }
             else
             {
-                printf("Syntax error!");
+                printf("Syntax error!\n");
+                printf("offset(%d), base_offset(%d), len(%d)\n", parse_state->offset, parse_state->buffer->base_offset, parse_state->buffer->len);
+                printf("Buffer: %s\n", parse_state->buffer->buf + parse_state->offset - parse_state->buffer->base_offset);
             }
         }
     }
@@ -221,13 +227,22 @@ void alloc_parse_state(struct parse_state *state)
 {
     state->buffer = malloc(sizeof(struct buffer));
     state->buffer->size = 4096;
-    state->buffer->buf = malloc(state->buffer->size * sizeof(char));
+    state->buffer->buf = malloc((state->buffer->size+1) * sizeof(char));
+    state->buffer->buf[state->buffer->size] = '\0';
 
     state->parse_stack_size = 50;
     state->parse_stack = malloc(sizeof(struct parse_stack_frame) * state->parse_stack_size);
 
     state->slotbuf_size = 200;
     state->slotbuf = malloc(sizeof(*state->slotbuf) * state->slotbuf_size);
+}
+
+static void init_parse_state_common(struct parse_state *state);
+
+void reinit_parse_state(struct parse_state *state)
+{
+    state->buffer->base_offset -= state->offset;
+    init_parse_state_common(state);
 }
 
 void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
@@ -239,6 +254,11 @@ void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
     state->buffer->base_offset = 0;
     state->buffer->is_eof = false;
 
+    init_parse_state_common(state);
+}
+
+static void init_parse_state_common(struct parse_state *state)
+{
     state->offset = 0;
     state->precious_offset = 0;
     state->parse_stack_length = 1;
@@ -247,7 +267,7 @@ void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
     state->last_match_state = NULL;
 
     struct parse_stack_frame *frame = &state->parse_stack[0];
-    frame->rtn = &g->rtns[0];
+    frame->rtn = &state->grammar->rtns[0];
     frame->rtn_state = &frame->rtn->states[0];
     frame->rtn_transition = NULL;
     frame->slots.num_slots = frame->rtn->num_slots;
