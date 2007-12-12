@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include "bc_read_stream.h"
 
+struct parse_state;
+typedef void (*parse_callback_t)(struct parse_state *state, void *user_data);
+
 /*
  * RTN
  */
@@ -141,6 +144,7 @@ struct parse_stack_frame
     struct rtn_state      *rtn_state;
     struct rtn_transition *rtn_transition;
     struct slotarray      slots;
+    int start_offset;
 };
 
 struct buffer
@@ -151,6 +155,12 @@ struct buffer
     int size;
     int base_offset;
     bool is_eof;
+};
+
+struct completion_callback
+{
+    char *rtn_name;
+    parse_callback_t callback;
 };
 
 struct parse_state
@@ -174,6 +184,10 @@ struct parse_state
     struct parse_val *slotbuf;
     int slotbuf_len;
     int slotbuf_size;
+
+    int num_completion_callbacks;
+    struct completion_callback *callbacks;
+    void *user_data;
 };
 
 struct grammar *load_grammar(struct bc_read_stream *s);
@@ -183,6 +197,8 @@ void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
 void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file);
 void reinit_parse_state(struct parse_state *state);
+
+void register_callback(struct parse_state *state, char *rtn_name, parse_callback_t callback, void *user_data);
 
 /*
  * Local Variables:

@@ -11,18 +11,23 @@
         ptr = realloc(ptr, size*sizeof(*ptr)); \
     }
 
-struct parse_stack_frame *init_new_stack_frame(struct parse_state *parse_state, struct rtn *rtn)
+struct parse_stack_frame *init_new_stack_frame(struct parse_state *parse_state, struct rtn *rtn, int begin)
 {
     struct parse_stack_frame *frame = &parse_state->parse_stack[parse_state->parse_stack_length++];
     frame->rtn = rtn;
     frame->rtn_state = &rtn->states[0];
     frame->slots.rtn = rtn;
+    frame->rtn_transition = NULL;
     frame->slots.num_slots = rtn->num_slots;
+    frame->start_offset = begin;
 
     RESIZE_ARRAY_IF_NECESSARY(parse_state->slotbuf, parse_state->slotbuf_size,
                               parse_state->slotbuf_len + frame->slots.num_slots);
 
     frame->slots.slots = &parse_state->slotbuf[parse_state->slotbuf_len];
+    for(int i = 0; i < frame->slots.num_slots; i++)
+        frame->slots.slots[i].type = PARSE_VAL_EMPTY;
+
     parse_state->slotbuf_len += frame->slots.num_slots;
 
     return frame;
@@ -95,7 +100,7 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
                                               parse_state->parse_stack_size,
                                               parse_state->parse_stack_length+1);
                     frame->rtn_transition = t2;
-                    frame = init_new_stack_frame(parse_state, t2->edge.nonterminal);
+                    frame = init_new_stack_frame(parse_state, t2->edge.nonterminal, match_begin);
                 }
                 else if(t2->transition_type == TERMINAL_TRANSITION)
                 {
@@ -112,6 +117,13 @@ void do_rtn_transition(struct parse_state *parse_state, int match_begin, int mat
     {
         while(parse_state->parse_stack_length > 0 && frame->rtn_state->is_final)
         {
+            for(int i = 0; i < parse_state->num_completion_callbacks; i++)
+            {
+                struct completion_callback *cb = &parse_state->callbacks[i];
+                if(frame->rtn->name == cb->rtn_name)
+                    cb->callback(parse_state, parse_state->user_data);
+            }
+
             frame = pop_stack_frame(parse_state);
         }
 
@@ -218,6 +230,8 @@ void alloc_parse_state(struct parse_state *state)
 
     state->slotbuf_size = 200;
     state->slotbuf = malloc(sizeof(*state->slotbuf) * state->slotbuf_size);
+
+    state->callbacks = malloc(sizeof(*state->callbacks) * 10);  /* XXX */
 }
 
 static void init_parse_state_common(struct parse_state *state);
@@ -236,6 +250,7 @@ void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file)
     state->buffer->len  = 0;
     state->buffer->base_offset = 0;
     state->buffer->is_eof = false;
+    state->num_completion_callbacks = 0;
 
     init_parse_state_common(state);
 }
@@ -248,18 +263,11 @@ static void init_parse_state_common(struct parse_state *state)
     state->match_begin = 0;
     state->last_match_end = 0;
     state->last_match_state = NULL;
+    state->parse_stack_length = 0;
+    state->slotbuf_len = 0;
 
-    struct parse_stack_frame *frame = &state->parse_stack[0];
-    frame->rtn = &state->grammar->rtns[0];
-    frame->rtn_state = &frame->rtn->states[0];
-    frame->rtn_transition = NULL;
-    frame->slots.num_slots = frame->rtn->num_slots;
-    frame->slots.rtn = frame->rtn;
-    frame->slots.slots = state->slotbuf;
-    state->slotbuf_len = frame->slots.num_slots;
-
-    state->dfa = frame->rtn_state->term_dfa;
-    state->dfa_state = &state->dfa->states[0];
+    init_new_stack_frame(state, &state->grammar->rtns[0], 0);
+    reset_dfa_match(state);
 }
 
 void free_parse_state(struct parse_state *state)
@@ -268,6 +276,18 @@ void free_parse_state(struct parse_state *state)
     free(state->buffer);
     free(state->parse_stack);
     free(state->slotbuf);
+}
+
+void register_callback(struct parse_state *state, char *rtn_name, parse_callback_t callback, void *user_data)
+{
+    struct completion_callback *cb = &state->callbacks[state->num_completion_callbacks++];
+    cb->callback = callback;
+    state->user_data = user_data;
+    for(char **strs = state->grammar->strings; *strs; strs++)
+        if(strcmp(*strs, rtn_name) == 0)
+        {
+            cb->rtn_name = *strs;
+        }
 }
 
 /*
