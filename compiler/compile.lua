@@ -295,17 +295,18 @@ function write_grammar(infilename, outfilename)
     table.insert(states, 1, intfa.start)
     for i, state in ipairs(states) do
       intfa_state_offsets[state] = i - 1
-      local initial_offset = #intfa_transitions
+      local this_state_transitions = {}
       for edge_val, target_state, properties in state:transitions() do
         for range in edge_val:each_range() do
-          table.insert(intfa_transitions, {range, target_state})
+          table.insert(this_state_transitions, {range, target_state})
         end
       end
-      local num_transitions = #intfa_transitions - initial_offset
+      table.sort(this_state_transitions, function (a, b) return a[1].low < b[1].low end)
+      for t in each(this_state_transitions) do table.insert(intfa_transitions, t) end
       if state.final then
-        bc_file:write_abbreviated_record(bc_intfa_final_state, num_transitions, string_offsets[state.final])
+        bc_file:write_abbreviated_record(bc_intfa_final_state, #this_state_transitions, string_offsets[state.final])
       else
-        bc_file:write_abbreviated_record(bc_intfa_state, num_transitions)
+        bc_file:write_abbreviated_record(bc_intfa_state, #this_state_transitions)
       end
     end
 
