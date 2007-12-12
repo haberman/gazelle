@@ -1,6 +1,6 @@
 
 number   -> /(-)? ( 0 | ([1-9][0-9]*) ) (\. [0-9]+ )? ([eE] [+-]? [0-9]+ )?/;
-str_frag -> chars=/[^\\"]+/ | unicode_char=/\\u ([0-9A-F]{4})/ | backslash_char=/\\[ntbr"\/\\]/;
+str_frag -> chars=/[^\\"]+/ | unicode_char=/\\u ([0-9A-Fa-f]{4})/ | backslash_char=/\\[ntbr"\/\\]/;
 string   -> '"' str_frag* '"';
 value    -> string | number | "true" | "false" | "null" | object | array;
 object   -> "{" (string ":" value) *(,) "}";
