@@ -192,7 +192,7 @@ struct parse_state
 
 struct grammar *load_grammar(struct bc_read_stream *s);
 void free_grammar(struct grammar *g);
-void parse(struct parse_state *parse_state);
+void parse(struct parse_state *parse_state, bool *eof);
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
 void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file);

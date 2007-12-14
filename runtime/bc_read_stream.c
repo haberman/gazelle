@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct blockinfo {
     uint32_t block_id;
@@ -77,6 +78,7 @@ struct bc_read_stream
 {
     /* Values for the stream */
     FILE *infile;
+    unsigned char *inmem;
     uint32_t next_bits;
     int num_next_bits;
     int stream_err;
@@ -175,6 +177,15 @@ void dump_blockinfo(struct blockinfo *bi)
 */
 
 static int refill_next_bits(struct bc_read_stream *stream);
+struct bc_read_stream *bc_read_stream_init();
+
+struct bc_read_stream *bc_rs_open_mem(const char *data)
+{
+    struct bc_read_stream *stream = bc_read_stream_init();
+    stream->inmem = (unsigned char *)data;
+    refill_next_bits(stream);
+    return stream;
+}
 
 struct bc_read_stream *bc_rs_open_file(const char *filename)
 {
@@ -193,16 +204,23 @@ struct bc_read_stream *bc_rs_open_file(const char *filename)
         return NULL;
     }
 
+    struct bc_read_stream *stream = bc_read_stream_init();
+    stream->infile = infile;
+    refill_next_bits(stream);
+    return stream;
+}
+
+struct bc_read_stream *bc_read_stream_init()
+{
     /* TODO: give the application a way to get the app-specific magic number */
 
     struct bc_read_stream *stream = malloc(sizeof(*stream));
-    stream->infile = infile;
+    stream->infile = NULL;
     stream->stream_err = 0;
 
     stream->next_bits = 0;
     stream->num_next_bits = 0;
     stream->stream_offset = 0;
-    refill_next_bits(stream);
 
     stream->abbrev_len = 2;    /* its initial value according to the spec */
     stream->num_abbrevs = 0;
@@ -255,7 +273,8 @@ void bc_rs_close_stream(struct bc_read_stream *stream)
     }
     free(stream->blockinfos);
 
-    fclose(stream->infile);
+    if(stream->infile)
+        fclose(stream->infile);
     free(stream);
 }
 
@@ -306,21 +325,30 @@ NEXT_GETTER_FUNC(uint64_t, 64)
 static int refill_next_bits(struct bc_read_stream *stream)
 {
     unsigned char buf[4];
-    int ret = fread(buf, 4, 1, stream->infile);
-    if(ret < 1)
+
+    stream->stream_offset += 4;
+
+    if(stream->infile)
     {
-        //if(feof(stream->infile))
-        //    stream->record_type = Eof;
+        int ret = fread(buf, 4, 1, stream->infile);
+        if(ret < 1)
+        {
+            //if(feof(stream->infile))
+            //    stream->record_type = Eof;
 
-        if(ferror(stream->infile))
-            stream->stream_err |= BITCODE_ERR_IO;
+            if(ferror(stream->infile))
+                stream->stream_err |= BITCODE_ERR_IO;
 
-        return -1;
+            return -1;
+        }
+    }
+    else
+    {
+        memcpy(buf, stream->inmem + stream->stream_offset, 4);
     }
 
     stream->next_bits = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
     stream->num_next_bits = 32;
-    stream->stream_offset += 4;
 
     return 0;
 }
@@ -783,7 +811,9 @@ void bc_rs_skip_block(struct bc_read_stream *stream)
     int offset = stream->block_metadata->e.block_metadata.block_offset  +
                    (stream->block_metadata->e.block_metadata.block_len * 4);
 
-    fseek(stream->infile, offset, SEEK_SET);
+    if(stream->infile)
+        fseek(stream->infile, offset, SEEK_SET);
+
     stream->stream_offset = offset-4;
     refill_next_bits(stream);
     pop_stack_frame(stream);
@@ -802,7 +832,10 @@ void bc_rs_rewind_block(struct bc_read_stream *stream)
     }
 
     int offset = stream->block_metadata->e.block_metadata.block_offset;
-    fseek(stream->infile, offset, SEEK_SET);
+
+    if(stream->infile)
+        fseek(stream->infile, offset, SEEK_SET);
+
     stream->stream_offset = offset-4;
     refill_next_bits(stream);
     align_32_bits(stream);

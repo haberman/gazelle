@@ -171,7 +171,7 @@ void refill_buffer(struct parse_state *state)
     b->len += bytes_read;
 }
 
-void parse(struct parse_state *parse_state)
+void parse(struct parse_state *parse_state, bool *eof)
 {
     bool user_cancelled = false;
 
@@ -217,6 +217,8 @@ again:
             printf("Syntax error!\n");
         }
     }
+
+    if(parse_state->buffer->is_eof) *eof = true;
 }
 
 void alloc_parse_state(struct parse_state *state)

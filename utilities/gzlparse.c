@@ -52,7 +52,8 @@ int main(int argc, char *argv[])
     alloc_parse_state(&state);
     init_parse_state(&state, g, file);
 
-    parse(&state);
+    bool eof;
+    parse(&state, &eof);
 
     free_parse_state(&state);
     free_grammar(g);

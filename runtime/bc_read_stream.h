@@ -23,6 +23,7 @@ struct bc_read_stream;
 ***********************************************************/
 
 struct bc_read_stream *bc_rs_open_file(const char *filename);
+struct bc_read_stream *bc_rs_open_mem(const char *data);
 void bc_rs_close_stream(struct bc_read_stream *stream);
 
 /**********************************************************
