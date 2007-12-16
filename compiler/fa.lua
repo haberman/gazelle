@@ -301,3 +301,4 @@ function NonTerm:new(name)
   return obj
 end
 
+-- vim:et:sts=2:sw=2

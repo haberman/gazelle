@@ -1,3 +1,16 @@
+/*********************************************************************
+
+  Gazelle: a system for building fast, reusable grammars
+
+  gzlparse.c
+
+  This is a command-line utility for parsing using Gazelle.  It is
+  very minimal at the moment, but the intention is for it to grow
+  into a very rich and useful utility for doing all sorts of things.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+*********************************************************************/
 
 #include "interpreter.h"
 #include <stdio.h>

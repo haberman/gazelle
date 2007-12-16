@@ -1,3 +1,17 @@
+/*********************************************************************
+
+  Gazelle: a system for building fast, reusable grammars
+
+  bc_read_stream.c
+
+  This file contains routines for reading files in Bitcode format.
+  It is a stream interface -- the stream keeps only one record in
+  memory at a time, and is designed to have a very small memory
+  footprint.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+*********************************************************************/
 
 #include "bc_read_stream.h"
 

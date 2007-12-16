@@ -1,3 +1,17 @@
+/*********************************************************************
+
+  Gazelle: a system for building fast, reusable grammars
+
+  bitcode_dump.c
+
+  This is a very simple utility for dumping a Bitcode file literally,
+  without any recognition or processing of any of the data.  It could
+  be extended to dump only selected parts, or to dump it in other,
+  more useful formats.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+*********************************************************************/
 
 #include "bc_read_stream.h"
 
@@ -85,3 +99,11 @@ int main(int argc, char *argv[0])
     }
 }
 
+/*
+ * Local Variables:
+ * c-file-style: "bsd"
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ * vim:et:sts=4:sw=4
+ */

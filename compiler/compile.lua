@@ -1,3 +1,13 @@
+--[[--------------------------------------------------------------------
+
+  compile.lua
+
+  The top-level file for compiling an input grammar (written in a
+  human-readable text format) into a compiled grammar in Bitcode.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 
 require "bootstrap/rtn"
 require "bc"
@@ -436,3 +446,5 @@ function write_grammar(infilename, outfilename)
 end
 
 write_grammar(arg[1], arg[2])
+
+-- vim:et:sts=2:sw=2

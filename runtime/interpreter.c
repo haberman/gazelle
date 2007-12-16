@@ -1,3 +1,19 @@
+/*********************************************************************
+
+  Gazelle: a system for building fast, reusable grammars
+
+  interpreter.c
+
+  Once a compiled grammar has been loaded into memory, the routines
+  in this file are what actually does the parsing.  This file is an
+  "interpreter" in the sense that it parses the input by using the
+  grammar as a data structure -- no grammar-specific code is ever
+  generated or executed.  Despite this, it is still quite fast, and
+  has a very low memory footprint.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+*********************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>

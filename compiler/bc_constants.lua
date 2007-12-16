@@ -1,3 +1,13 @@
+--[[--------------------------------------------------------------------
+
+  bc_constants.lua
+
+  Constants for writing compiled grammars in Bitcode format.  See
+  FILEFORMAT for more details.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 
 BC_INTFAS = 8
 BC_INTFA = 9
@@ -19,3 +29,4 @@ BC_RTN_TRANSITION_NONTERM = 3
 BC_RTN_DECISION = 4
 BC_RTN_IGNORE = 5
 
+-- vim:et:sts=2:sw=2

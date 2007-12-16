@@ -341,3 +341,4 @@ function ShallowTable:new(val)
   return self.cache[str]
 end
 
+-- vim:et:sts=2:sw=2

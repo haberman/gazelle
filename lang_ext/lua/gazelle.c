@@ -1,3 +1,14 @@
+/*********************************************************************
+
+  Gazelle: a system for building fast, reusable grammars
+
+  gazelle.c
+
+  These are Lua wrappers for Gazelle.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+*********************************************************************/
 
 #include "bc_read_stream_lua.h"
 #include "interpreter.h"

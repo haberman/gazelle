@@ -1,3 +1,12 @@
+--[[--------------------------------------------------------------------
+
+  bc.lua
+
+  A quick and dirty module for writing files in Bitcode format.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 
 module("bc", package.seeall)
 
@@ -225,3 +234,4 @@ function File:define_abbreviation(abbrev_id, ...)
   return abbrev
 end
 
+-- vim:et:sts=2:sw=2

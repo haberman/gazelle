@@ -1,11 +1,14 @@
-/********************************************************************
+/*********************************************************************
 
-  bitcode_read_stream.h
+  Gazelle: a system for building fast, reusable grammars
 
-  This is a stream-based interface to reading files in bitcode
-  format.
+  bc_read_stream.h
 
-  Author: Joshua Haberman <joshua@reverberate.org>
+  This file presents a public stream-based interface for reading files
+  in Bitcode format.  It allows skipping blocks and rewinding to the
+  beginning of a block.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 

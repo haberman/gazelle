@@ -1,4 +1,13 @@
+--[[--------------------------------------------------------------------
 
+  rtn.lua
+
+  A parser for our grammar language that builds RTNs representing the
+  input grammar.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 require "misc"
 require "bootstrap/regex_parser"
 require "fa"
@@ -324,3 +333,4 @@ function parse_regex(chars)
   return regex
 end
 
+-- vim:et:sts=2:sw=2

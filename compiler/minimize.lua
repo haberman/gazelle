@@ -128,3 +128,4 @@ function hopcroft_minimize(dfa)
   return minimal_dfa
 end
 
+-- vim:et:sts=2:sw=2

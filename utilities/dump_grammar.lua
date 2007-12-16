@@ -1,4 +1,14 @@
+--[[--------------------------------------------------------------------
 
+  dump_grammar.lua
+
+  This is a utility for dumping graphs that allow you to visualize a
+  compiled grammar.  The output files are in dot format, suitable for
+  processing with graphviz.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 require "bc_constants"
 --require "sketches/pp"
 require "bc_read_stream"

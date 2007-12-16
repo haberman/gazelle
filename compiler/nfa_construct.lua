@@ -121,3 +121,4 @@ function kleene(nfa)
   return new_nfa
 end
 
+-- vim:et:sts=2:sw=2

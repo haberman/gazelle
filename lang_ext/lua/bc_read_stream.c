@@ -1,3 +1,14 @@
+/*********************************************************************
+
+  Gazelle: a system for building fast, reusable grammars
+
+  bc_read_stream.c
+
+  These are Lua wrappers for bc_read_stream.
+
+  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+
+*********************************************************************/
 
 #include "bc_read_stream_lua.h"
 

@@ -121,3 +121,4 @@ function nfa_to_dfa(nfa, ambiguous_ok)
   return dfa
 end
 
+-- vim:et:sts=2:sw=2
