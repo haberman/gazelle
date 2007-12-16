@@ -1,14 +1,24 @@
 
+This is a description of Gazelle's bytecode file format.
+
+The file format itself is "Bitcode," a generic bytecode format
+developed as part of the LLVM project.  It is documented here:
+  http://llvm.cs.uiuc.edu/docs/BitCodeFormat.html
+
+This file describes the meaning of the information that Gazelle
+puts into the bytecode.
+
 Bitcode file, application magic number = "GH"
 All offsets are 0-based.
 
-STRINGS
+STRINGS -- all strings are put into the STRINGS block, and referenced
+           by offset in other parts of the file
   [STRING, <ascii array of chars>]
   [STRING, <ascii array of chars>]
   ...
 
-INTFAS
-  INTFA
+INTFAS -- the list of all IntFAs (lexing DFAs)
+  INTFA -- a single DFA
     [INTFA_STATE, # of transitions]  <-- first state is assumed to be start state
     [INTFA_STATE, # of transitions]
     [INTFA_FINAL_STATE, # of transitions, terminal_name_int]
@@ -20,8 +30,8 @@ INTFAS
     ...
     (transitions are identified by their offset in this list)
 
-RTNS
-  RTN
+RTNS -- a list of all the RTNs
+  RTN - a single RTN
     [RTN_INFO, nonterm_name_int, # of slots]
 
     [RTN_IGNORE, terminal_name_int]
