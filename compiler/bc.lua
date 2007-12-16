@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   bc.lua
 
   A quick and dirty module for writing files in Bitcode format.

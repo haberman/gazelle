@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   rtn.lua
 
   A parser for our grammar language that builds RTNs representing the

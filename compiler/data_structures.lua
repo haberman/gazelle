@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   data_structures.lua
 
   Implementations of useful data structures that we use often.

@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   fa.lua
 
   Data structure for representing finite automata.  Both NFAs and DFAs

@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   bc_constants.lua
 
   Constants for writing compiled grammars in Bitcode format.  See

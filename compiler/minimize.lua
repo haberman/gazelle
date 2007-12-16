@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   minimize.lua
 
   Algorithm to transform a DFA into an equivalent DFA with the

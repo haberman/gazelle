@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   dump_grammar.lua
 
   This is a utility for dumping graphs that allow you to visualize a

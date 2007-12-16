@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   misc.lua
 
   Miscellaneous algorithms that don't belong anywhere else.

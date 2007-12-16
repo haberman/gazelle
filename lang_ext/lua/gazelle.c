@@ -1,6 +1,6 @@
 /*********************************************************************
 
-  Gazelle: a system for building fast, reusable grammars
+  Gazelle: a system for building fast, reusable parsers
 
   gazelle.c
 

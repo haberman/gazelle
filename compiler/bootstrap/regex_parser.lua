@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   regex_parser.lua
 
   A hand-written recursive descent parser to parse regular expressions.

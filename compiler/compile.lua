@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   compile.lua
 
   The top-level file for compiling an input grammar (written in a

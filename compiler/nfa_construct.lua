@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   nfa_construct.lua
 
   Construct NFAs based on primitives of concatenation, alternation,

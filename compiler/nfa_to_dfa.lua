@@ -1,5 +1,7 @@
 --[[--------------------------------------------------------------------
 
+  Gazelle: a system for building fast, reusable parsers
+
   nfa_to_dfa.lua
 
   Translate a set of NFAs into a DFA that can recognize any of the
