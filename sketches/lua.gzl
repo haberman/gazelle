@@ -1,0 +1,52 @@
+
+Name: /[:alpha:_][:alnum:_]*/  # but keywords not allowed!
+Number: /[0-9]* (\. [0-9]+)? ([Ee] [+-]? [0-9]+)? | 0x[0-9A-Fa-f]+/
+
+chunk ->  (stat ";"?) *  (laststat ";"?) ? ;
+block -> chunk;
+
+stat  -> varlist "=" explist |
+         functioncall |
+         "do" block "end" |
+         "while" exp "do" block "end" |
+         "repeat" block "until" exp |
+         "if" exp "then" block ("elseif" exp "then" block)* ("else" block)? "end" |
+         "for" Name "=" exp "," exp ("," exp)? "do" block "end" |
+         "function" funcname funcbody |
+         "local" "function" Name funcbody |
+         "local" namelist ("=" explist)?
+
+laststat -> "return" explist? | "break"
+
+funcname -> Name +(.) (":" Name)?
+
+varlist  -> var +(,)
+var      -> Name | prefixexp "[" exp "]" | prefixexp "." Name
+namelist -> Name +(,)
+
+exp -> "nil" | "false" | "true" | Number | string | "..." | function |
+       prefixexp | tableconstructor | <opexpr(exp, ops)>
+
+prefixexp    -> var | functioncall | "(" exp ")"
+functioncall -> prefixexp args | prefixexp ":" Name args
+args         -> "(" explist? ")" | tableconstructor | String
+
+function     -> "function" funcbody
+funcbody     -> "(" parlist? ")" block "end"
+parlist      -> namelist "," "..." | "..."
+
+tableconstructor -> "{" fieldlist? "}"
+fieldlist -> field +(fieldsep) fieldsep?
+field -> "[" exp "]" "=" exp | Name "=" exp | exp
+fieldsep: /[,;]/
+
+
+oplist expop: 2< "or"
+            2< "and"
+            2< "<" | 2< ">" | 2< "<=" | 2< ">=" | 2< "~=" | 2< "=="
+            2> ".."
+            2< "+" | < "-"
+            2< "*" | < "/" | < "%"
+            1< "not" | 1< "#" | 1< "-"
+            2> "^"
+
