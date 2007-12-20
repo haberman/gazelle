@@ -1,16 +1,19 @@
 
-grammar     -> statement*;
-statement   -> nonterm "->" derivations ";" | "ignore" nonterm "in" nonterm +(,);
-derivations -> ( "e" | derivation ) +(|);
-derivation  -> term+;
-term        -> ( name "=" )? (regex | string | nonterm | ( "(" derivations ")" ) ) modifier ? ;
-name        -> /\w+/;
-modifier    -> "?" | "*" | "+" | ("*" | "+") "(" ( /[^)]*/ | string ) ")";
-nonterm     -> /\w+/;
-string      -> '"' /([^"]|\\")*/ '"';
-string      -> "'" /([^']|\\')*/ "'";
-regex       -> "/" /([^\/]|\\\/)*/ "/";
+ident: /[b-zA-Z]+/;
+whitespace -> /[\r\n\s\t]+/;
 
-whitespace  -> /[\r\n\s\t]+/;
+grammar     -> statement*;
+statement   -> nonterm=ident "->" derivations ";" | "allow" ident "in" ident +(,);
+derivations -> derivation +("|");
+derivation  -> term+;
+single_term -> regex | string | nonterm=ident;
+term        -> ( name=ident "=" )? (regex | string | nonterm=ident ) modifier ? ;
+modifier    -> "?" | "*" | "+" |
+                ("*" | "+") "(" single_term ")";
+string      -> '"' dquote_str_body=/([^"\\]|\\.)*/ '"' |
+               "'" squote_str_body=/([^'\\]|\\.)*/ "'";
+regex       -> "/" regex_body=/([^\/\\]|\\.)*/ "/";
+
 allow whitespace in grammar, statement, derivations, derivation, term;
+start grammar;
 
