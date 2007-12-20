@@ -29,10 +29,7 @@ function load_grammar(file)
   local grm_str = grm:read("*a")
 
   local grammar, attributes = parse_grammar(CharStream:new(grm_str))
-  local first = compute_first_sets(grammar)
-  local follow = compute_follow_sets(grammar, first)
-  print(serialize(first))
-  print(serialize(follow))
+  compute_lookahead(grammar, 2)
 
 
   -- First, determine what terminals (if any) conflict with each other.
@@ -42,6 +39,7 @@ function load_grammar(file)
   do
     local nfas = {}
     for name, terminal in pairs(attributes.terminals) do
+      print("Terminal: " .. name )
       if type(terminal) == "string" then
         terminal = fa.IntFA:new{string=terminal}
       end
@@ -89,18 +87,7 @@ function load_grammar(file)
         end
       end
 
-      state.lookahead = compute_lookahead_for_state(nonterm, state, first, follow)
-
-      for terminal, nonterms in pairs(state.lookahead) do
-
-        if terminals:contains(terminal) then
-          error(string.format("Grammar is not LL(1): in nonterm %s, terminal %s leads to both a terminal and nonterms %s!", nonterm, terminal, serialize(nonterms)))
-        elseif #nonterms > 1 then
-          error(string.format("Grammar is not LL(1): in nonterm %s, terminal %s leads to more than one nonterminal (%s)!", nonterm, terminal, serialize(nonterms)))
-        end
-
-        terminals:add(terminal)
-      end
+      -- state.lookahead = compute_lookahead_for_state(nonterm, state, first, follow)
 
       if has_conflicts(conflicts, terminals, terminals) then
         local has_conflict, c1, c2 = has_conflicts(conflicts, terminals, terminals)
@@ -151,7 +138,7 @@ function load_grammar(file)
       end
       table.insert(nfas, {target, term})
     end
-    local real_dfa = hopcroft_minimize(nfas_to_dfa(nfas))
+    local real_dfa = hopcroft_minimize(nfas_to_dfa(nfas), true)
     table.insert(real_dfas, real_dfa)
   end
 
@@ -243,13 +230,9 @@ function write_grammar(infilename, outfilename)
   local string_offsets = {}
 
   -- gather a list of all the strings from intfas
-  for intfa in each(intfas) do
-    for state in each(intfa:states()) do
-      if state.final and not string_offsets[state.final] then
-        string_offsets[state.final] = #strings
-        table.insert(strings, state.final)
-      end
-    end
+  for term in pairs(attributes.terminals) do
+    string_offsets[term] = #strings
+    table.insert(strings, term)
   end
 
   -- build an ordered list of RTNs and gather the strings from them
@@ -259,19 +242,20 @@ function write_grammar(infilename, outfilename)
   for name, rtn in pairs(grammar) do
     if name ~= attributes.start then
       rtns_offsets[rtn] = #rtns
-      if not string_offsets[name] then
-        string_offsets[name] = #strings
-        table.insert(strings, name)
-      end
-
       table.insert(rtns, {name, rtn})
+    end
 
-      for rtn_state in each(rtn:states()) do
-        for edge_val, target_state, properties in rtn_state:transitions() do
-          if properties and not string_offsets[properties.name] then
-            string_offsets[properties.name] = #strings
-            table.insert(strings, properties.name)
-          end
+    if not string_offsets[name] then
+      string_offsets[name] = #strings
+      table.insert(strings, name)
+    end
+
+
+    for rtn_state in each(rtn:states()) do
+      for edge_val, target_state, properties in rtn_state:transitions() do
+        if properties and not string_offsets[properties.name] then
+          string_offsets[properties.name] = #strings
+          table.insert(strings, properties.name)
         end
       end
     end
