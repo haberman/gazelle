@@ -144,9 +144,13 @@ function parse_grammar(chars)
       stmt = parse_statement(chars, attributes)
       if not stmt then
         break
+      elseif stmt.nonterm then
+        stmt.derivations.final.final = "Final"
+        grammar[stmt.nonterm.name] = hopcroft_minimize(nfa_to_dfa(stmt.derivations))
+        grammar[stmt.nonterm.name].name = stmt.nonterm.name
+      elseif stmt.term then
+        attributes.terminals[stmt.term] = stmt.regex
       end
-      stmt.derivations.final.final = "Final"
-      grammar[stmt.nonterm.name] = hopcroft_minimize(nfa_to_dfa(stmt.derivations))
     end
   end
   return grammar, attributes
@@ -156,14 +160,23 @@ function parse_statement(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local ret = {}
 
-  ret.nonterm = parse_nonterm(chars)
-  attributes.nonterm = ret.nonterm
-  chars:consume("->")
-  attributes.slotnum = 1
-  ret.derivations = parse_derivations(chars, attributes)
+  local ident = parse_nonterm(chars)
+
+  if chars:match("->") then
+    attributes.nonterm = ident
+    ret.nonterm = ident
+    chars:consume("->")
+    attributes.slotnum = 1
+    ret.derivations = parse_derivations(chars, attributes)
+    attributes.slot_counts[ret.nonterm.name] = attributes.slotnum
+  else
+    ret.term = ident.name
+    chars:consume(":")
+    ret.regex = parse_regex(chars)
+  end
+
   chars:consume(";")
   chars:ignore(old_ignore)
-  attributes.slot_counts[ret.nonterm.name] = attributes.slotnum
   return ret
 end
 
@@ -223,7 +236,11 @@ function parse_term(chars, attributes)
   else
     local nonterm = parse_nonterm(chars)
     name = name or nonterm.name
-    ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}
+    if attributes.terminals[nonterm.name] then
+      ret = fa.RTN:new{symbol=nonterm.name, properties={name=nonterm.name, slotnum=attributes.slotnum}}
+    else
+      ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}
+    end
     attributes.slotnum = attributes.slotnum + 1
   end
 
@@ -268,7 +285,7 @@ function parse_modifier(chars, attributes)
     chars:consume("(")
     local sep_string
     if chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-      sep_string = parse_string()
+      sep_string = parse_string(chars)
     else
       sep_string = chars:consume_pattern("[^)]*")
     end
