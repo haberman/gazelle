@@ -8,9 +8,12 @@ all: lua_path
 	@for dir in $(SUBDIRS) ; do make -w -C $$dir $@; done
 
 clean:
-	rm -f lua_path
+	rm -f lua_path *.dot *.png
 	@for dir in $(SUBDIRS) ; do make -w -C $$dir $@; done
 
 lua_path: Makefile
 	echo "export LUA_PATH=`pwd`/compiler/?.lua\\;`pwd`/sketches/?.lua" > lua_path
 	echo export LUA_CPATH=`pwd`/lang_ext/lua/?.so >> lua_path
+
+png:
+	for x in *.dot; do echo $$x; dot -Tpng -o `basename $$x .dot`.png $$x; done
