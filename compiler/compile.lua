@@ -15,38 +15,12 @@ require "bootstrap/rtn"
 require "bc"
 require "bc_constants"
 
---print(serialize(attributes.ignore))
-
-function child_edges(edge, stack, grammar, decisions, terminals)
-  if type(edge) == "table" and edge.class == fa.NonTerm then
-    local child_edges = {}
-    for edge_val in grammar[edge.name].start:transitions() do
-      table.insert(child_edges, edge_val)
-    end
-    return child_edges
-  else
-    local str_or_regex
-    if type(edge) == "table" then
-      str_or_regex = edge.properties.string
-    else
-      str_or_regex = edge
-    end
-
-    table.insert(terminals, str_or_regex)
-
-    local decision_stack = stack:to_array()
-    if #decision_stack > 1 then
-      decisions[str_or_regex] = stack:to_array()
-    end
-  end
-end
-
--- require "sketches/regex_debug"
--- require "sketches/pp"
-
 TerminalTransition = {name="TerminalTransition", order=1}
 NontermTransition = {name="NontermTransition", order=2}
 Decision = {name="Decision", order=3}
+
+require "ll"
+require "pp"
 
 function load_grammar(file)
   -- First read grammar file
@@ -55,6 +29,11 @@ function load_grammar(file)
   local grm_str = grm:read("*a")
 
   local grammar, attributes = parse_grammar(CharStream:new(grm_str))
+  local first = compute_first_sets(grammar)
+  local follow = compute_follow_sets(grammar, first)
+  print(serialize(first))
+  print(serialize(follow))
+
 
   -- First, determine what terminals (if any) conflict with each other.
   -- In this context, "conflict" means that a string of characters can
@@ -92,7 +71,7 @@ function load_grammar(file)
       if conflicts[term] then
         for conflict in each(conflicts[term]) do
           if dfa:contains(conflict) then
-            return true
+            return true, term, conflict
           end
         end
       end
@@ -103,20 +82,33 @@ function load_grammar(file)
     -- print(nonterm)
     -- print(rtn)
     for state in each(rtn:states()) do
-      local terminals = {}
-      function my_child_edges(edge, stack)
-        return child_edges(edge, stack, grammar, state.decisions, terminals)
+      local terminals = Set:new()
+      for edge_val in state:transitions() do
+        if not fa.is_nonterm(edge_val) then
+          terminals:add(edge_val)
+        end
       end
 
-      state.decisions = {}
-      if state:num_transitions() > 0 then
-        for edge_val, target_state in state:transitions() do
-          depth_first_traversal(edge_val, my_child_edges)
+      state.lookahead = compute_lookahead_for_state(nonterm, state, first, follow)
+
+      for terminal, nonterms in pairs(state.lookahead) do
+
+        if terminals:contains(terminal) then
+          error(string.format("Grammar is not LL(1): in nonterm %s, terminal %s leads to both a terminal and nonterms %s!", nonterm, terminal, serialize(nonterms)))
+        elseif #nonterms > 1 then
+          error(string.format("Grammar is not LL(1): in nonterm %s, terminal %s leads to more than one nonterminal (%s)!", nonterm, terminal, serialize(nonterms)))
         end
 
-        -- print("Inside " .. nonterm .. ", state=" .. tostring(state) .. "...")
-        -- print(serialize(decisions))
+        terminals:add(terminal)
+      end
 
+      if has_conflicts(conflicts, terminals, terminals) then
+        local has_conflict, c1, c2 = has_conflicts(conflicts, terminals, terminals)
+        error(string.format("Can't build DFA inside %s, because terminals %s and %s conflict",
+                            nonterm, c1, c2))
+      end
+
+      if terminals:count() > 0 then
         -- We now have a list of terminals we want to find when we are in this RTN
         -- state.  Now get a DFA that will match all of them, either by creating
         -- a new DFA or by finding an existing one that will work (without conflicting
@@ -151,6 +143,7 @@ function load_grammar(file)
   local real_dfas = {}
   for dfa in each(dfas) do
     local nfas = {}
+    print(serialize(dfa))
     for term in each(dfa) do
       local target = attributes.terminals[term]
       if type(target) == "string" then
@@ -346,15 +339,16 @@ function write_grammar(infilename, outfilename)
     for rtn_state in each(rtn:states()) do
       local this_state_transitions = {}
       for edge_val, target_state, properties in rtn_state:transitions() do
-        if type(edge_val) == "table" and edge_val.class == fa.NonTerm then
+        if fa.is_nonterm(edge_val) then
           table.insert(this_state_transitions, {NontermTransition, rtn_state, {edge_val, target_state, properties}})
         else
           table.insert(this_state_transitions, {TerminalTransition, rtn_state, {edge_val, target_state, properties}})
         end
       end
-      for terminal, stack in pairs(rtn_state.decisions) do
-        table.insert(this_state_transitions, {Decision, rtn_state, {terminal, stack}})
-      end
+      -- TODO adjust this for lookahead
+      -- for terminal, stack in pairs(rtn_state.decisions) do
+      --   table.insert(this_state_transitions, {Decision, rtn_state, {terminal, stack}})
+      -- end
 
       table.sort(this_state_transitions, function (a, b) return a[1].order < b[1].order end)
       rtn_state_transitions[rtn_state] = this_state_transitions

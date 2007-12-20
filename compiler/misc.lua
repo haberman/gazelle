@@ -69,9 +69,7 @@ end
 function depth_first_traversal_helper(obj, children_func, stack, seen)
   children = children_func(obj, stack) or {}
   for child in each(children) do
-    if seen:contains(child) then
-      error("You gave me a left-recursive grammar you bastard!  Obj: " .. serialize(obj) .. ", Child: " .. serialize(child) .. ", Stack:" .. serialize(stack:to_array()))
-    elseif seen:contains(child) == false then
+    if not seen:contains(child) then
       seen:add(child)
       stack:push(child)
       depth_first_traversal_helper(child, children_func, stack, seen)

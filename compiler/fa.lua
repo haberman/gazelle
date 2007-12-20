@@ -303,4 +303,8 @@ function NonTerm:new(name)
   return obj
 end
 
+function is_nonterm(thing)
+  return (type(thing) == "table" and thing.class == NonTerm)
+end
+
 -- vim:et:sts=2:sw=2
