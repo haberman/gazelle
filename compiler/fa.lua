@@ -260,35 +260,14 @@ function RTN:new_state()
 end
 
 function RTN:get_outgoing_edge_values(states)
-  local symbol_sets = {}
-  local properties_set = Set:new()
+  local values = {}
   for state in each(states) do
     for edge_val, target_state, properties in state:transitions() do
-      if properties then properties_set:add(properties) end
-
       if edge_val ~= fa.e then
-        -- do we already have edge_val?
-        local have_edge = false
-        for set in each(symbol_sets) do
-          if set == edge_val then have_edge = true; break; end
-        end
-        if not have_edge then
-          table.insert(symbol_sets, edge_val)
-        end
+        table.insert(values, {edge_val, properties})
       end
     end
   end
-
-  -- for now, just cross symbol sets with properties.  a bit wasteful,
-  -- but we'll worry about that later.
-  local values = {}
-  for set in each(symbol_sets) do
-    for properties in each(properties_set) do
-      table.insert(values, {set, properties})
-    end
-    table.insert(values, {set, nil})
-  end
-
   return values
 end
 
