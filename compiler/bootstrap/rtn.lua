@@ -146,7 +146,9 @@ function parse_grammar(chars)
         break
       elseif stmt.nonterm then
         stmt.derivations.final.final = "Final"
-        grammar[stmt.nonterm.name] = hopcroft_minimize(nfa_to_dfa(stmt.derivations))
+        local dfa = nfa_to_dfa(stmt.derivations)
+        local minimized_dfa =  hopcroft_minimize(dfa)
+        grammar[stmt.nonterm.name] = minimized_dfa
         grammar[stmt.nonterm.name].name = stmt.nonterm.name
       elseif stmt.term then
         attributes.terminals[stmt.term] = stmt.regex
@@ -233,6 +235,11 @@ function parse_term(chars, attributes)
     chars:consume("(")
     ret = parse_derivations(chars, attributes)
     chars:consume(")")
+  elseif chars:lookahead(1) == "e" then
+    chars:consume("e")
+    ret = fa.RTN:new{symbol=fa.e, properties={name="e", slotnum=attributes.slotnum}}
+    attributes.slotnum = attributes.slotnum + 1
+    return ret
   else
     local nonterm = parse_nonterm(chars)
     name = name or nonterm.name

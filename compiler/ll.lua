@@ -25,7 +25,7 @@ function get_unique_table_for(val)
   for key in pairs(val) do table.insert(keys, key) end
   table.sort(keys)
   for key in each(keys) do
-    if type(val[key]) == "table" and val[key].class == fa.Epsilon then
+    if type(val[key]) == "table" and val[key].class == fa.e then
       str = str .. "|" .. key .. ":e"
     else
       str = str .. "|" .. key .. ":s-" .. tostring(val[key])
@@ -47,7 +47,7 @@ function seen_str(seen)
 end
 
 function dfs_helper(grammar, state, stack, seen, terminals, k, lookahead)
-  if #terminals >= k or terminals[#terminals] == fa.Epsilon then
+  if #terminals >= k or terminals[#terminals] == fa.e then
     table.insert(lookahead, terminals)
   else
     if seen:contains(state) then
@@ -55,6 +55,9 @@ function dfs_helper(grammar, state, stack, seen, terminals, k, lookahead)
     end
     seen:add(state)
 
+    -- This is the memoization code, but I'm not going to worry about memoization
+    -- (which is an optimization -- an important one) until later
+    --
     -- if state.lookahead_cache then
     --   for cached_terminals, cached_stack, cached_state in state.lookahead_cache do
     --     local new_stack = shallow_copy_table(stack)
@@ -87,7 +90,7 @@ function dfs_helper(grammar, state, stack, seen, terminals, k, lookahead)
       if state.final then
         if #stack == 0 then
           local new_terminals = shallow_copy_table(terminals)
-          table.insert(new_terminals, fa.Epsilon)
+          table.insert(new_terminals, fa.e)
           dfs_helper(grammar, nil, stack, nil, new_terminals, k, lookahead)
         else
           new_stack = shallow_copy_table(stack)
@@ -148,8 +151,8 @@ function compute_lookahead(grammar, max_k)
         local terminals = compute_lookahead_for_transition(grammar, state, edge_val, dest_state, k)
         for term_seq in each(terminals) do
           local unique_seq = get_unique_table_for(term_seq)
-          if lookaheads[unique_seq] and unique_seq[-1] ~= fa.Epsilon then
-            if lookaheads[unique_seq] ~= dest_state and unique_seq[-1] ~= fa.Epsilon then
+          if lookaheads[unique_seq] then
+            if lookaheads[unique_seq] ~= dest_state and unique_seq[-1] ~= fa.e then
               still_conflicting_states:add(state)
             end
           else
