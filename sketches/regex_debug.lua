@@ -31,7 +31,7 @@
 --   return str
 -- end
 
-require "sketches/pp"
+require "pp"
 
 function fa.FA:__tostring()
   -- local oldmt = getmetatable(self)
