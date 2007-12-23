@@ -1,9 +1,22 @@
 
+I want Gazelle to be state-of-the-art, so I've read a lot of literature that
+pertains to parsing.  Here is a list of the books and papers that influenced
+me the most as I was writing Gazelle.
+
 Gries, David:  Describing an Algorithm by Hopcroft, 1972
    Acta Informatica, 2(2):97-109
 
    This article is a bit more digestible presentation of Hopcroft's algorithm.
    It was useful in actually implementing the minimization algorithm in minimize.lua.
+
+
+Grune, Dick and Jacobs, Ceriel J. H.  Parsing Techniques, second edition, 2007
+   ISBN: 9780387202488
+
+   This is a fabulous book that puts the whole field of parsing in perspective
+   through its broad coverage and fantastic comparisons of parsing techniques.
+   I didn't truly understand the difference between LL, Simple-LL and Strong-LL
+   until I read this book.
 
 
 Hopcroft, John E.  An n log n algorithm for minimizing states in a finite automaton, 1971
@@ -14,10 +27,38 @@ Hopcroft, John E.  An n log n algorithm for minimizing states in a finite automa
    I use this algorithm in minimize.lua.
 
 
+Norvell, Theodore:  Parsing Expressions by Recursive Descent, 1999-2001
+   http://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
+
+   This article gave a good description of two specialized algorithms for doing
+   expression parsing (operator-precedence parsing): Dijkstra's "Shunting Yard"
+   algorithm (which I ultimately used) and another algorithm known as
+   "Precedence Climbing."  Between this and the Wikipedia article about
+   operator-precedence parsing, I came to the happy realization that it was
+   possible to combine top-down and expression parsing into a single parser.
+
+
+Parr, Terence.  The Definitive ANTLR Reference, 2007
+   ISBN: 0978739256
+
+   It would be foolish to embark on a project like this without learning from
+   what came before.  I read this book and realized that Terence Parr reached
+   a lot of the same conclusions I did about how to do practical LL parsing.
+   I was especially keen on observing his design choices related to syntactic
+   and semantic predicates.
+
+
 Scott, Michael L.  Programming Language Pragmatics, second edition, 2006
    ISBN: 0126339511
 
    This is a textbook about programming language implementation and design.
    I used its NFA construction in nfa_construct.lua.
 
+
+Visser, Eelco.  Scannerless Generalized-LR Parsing, 1997
+   Available online at: http://www.program-transformation.org/Transform/ScannerlessGeneralizedLRParsing
+
+   This paper introduced me to the idea of integrating lexing and parsing and
+   the associated benefits of doing that.  Few of the details applied to my
+   project though, since he was using GLR parsing instead of LL.
 
