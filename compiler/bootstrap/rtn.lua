@@ -10,42 +10,13 @@
   Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
+--
 require "misc"
-require "bootstrap/regex_parser"
 require "fa"
---require "sketches/regex_debug"
 
---require "sketches/pp"
--- function fa.FA:__tostring()
---   return "<A regex!  I'm sure it's quite pretty>"
--- end
+require "bootstrap/regex_parser"
 
-NonTerminal = {name="NonTerminal"}
-function NonTerminal:new(name)
-  local obj = newobject(self)
-  obj.name = name
-  return obj
-end
-
---[[--------------------------------------------------------------------
-
-grammar     -> statement*;
-statement   -> nonterm "->" derivations ";" ;
-derivations -> ( "e" | derivation ) +(|);
-derivation  -> term+;
-term        -> ( name "=" )? (regex | string | nonterm | ( "(" derivations ")" ) ) modifier ? ;
-name        -> /\w+/;
-modifier    -> "?" | "*" | "+" | ("*" | "+") "(" ( /[^)]*/ | string ) ")";
-nonterm     -> /\w+/;
-string      -> '"' /([^"]|\\")*/ '"';
-string      -> "'" /([^']|\\')*/ "'";
-regex       -> "/" <defer to regex parser> "/";   # TODO: deal with termination
-
-whitespace  -> /[\r\n\s\t]+/;
-ignore whitespace in grammar, statement, derivations, derivation, term
-
---------------------------------------------------------------------]]--
-
+-- CharStream: a cheesy sort-of lexer-like object for the RTN parser
 CharStream = {}
   function CharStream:new(string)
     local obj = newobject(self)
@@ -114,9 +85,16 @@ CharStream = {}
 
 -- class TokenStream
 
-require "nfa_to_dfa"
-require "minimize"
-
+-- Parse the grammar file given in +chars+ and return:
+--
+--   grammar: a table of "nonterm name" -> RTN pairs.
+--            the RTNs are raw NFAs -- they have not
+--            been converted to DFAs or minimized.
+--
+--   attributes: other grammar information, specifically
+--      - terminals: a list of terminal names (strings)
+--      - ignore: a map of "nonterm name" -> Set of terminals to ignore
+--      - slot_counts: a map of "nonterm name" -> # of slots
 function parse_grammar(chars)
   chars:ignore("whitespace")
   local grammar = {}
@@ -146,9 +124,7 @@ function parse_grammar(chars)
         break
       elseif stmt.nonterm then
         stmt.derivations.final.final = "Final"
-        local dfa = nfa_to_dfa(stmt.derivations)
-        local minimized_dfa =  hopcroft_minimize(dfa)
-        grammar[stmt.nonterm.name] = minimized_dfa
+        grammar[stmt.nonterm.name] = stmt.derivations
         grammar[stmt.nonterm.name].name = stmt.nonterm.name
       elseif stmt.term then
         attributes.terminals[stmt.term] = stmt.regex

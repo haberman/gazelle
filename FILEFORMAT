@@ -37,12 +37,11 @@ RTNS -- a list of all the RTNs
     [RTN_IGNORE, terminal_name_int]
     ...
 
-    [RTN_STATE, # of transitions+decisions, intfa #, is final]
-    [RTN_STATE, # of transitions+decisions, intfa #, is final]
+    [RTN_STATE, # of transitions+lookahead, intfa #, is final, #of lookahead tokens, <array of DFA offsets>]
     ...
 
     [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
     [RTN_TRANSITION_NONTERM, rtn_offset, dest RTN state offset, slotname_int, slotnum]
-    [RTN_DECISION, terminal_name_int, <array of transition offsets>]
+    [RTN_LOOKAHEAD, transition_offset, <array of terminal_name_int's>]
     ...
 

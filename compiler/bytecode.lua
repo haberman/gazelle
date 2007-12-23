@@ -2,16 +2,15 @@
 
   Gazelle: a system for building fast, reusable parsers
 
-  compile.lua
+  bytecode.lua
 
-  The top-level file for compiling an input grammar (written in a
-  human-readable text format) into a compiled grammar in Bitcode.
+  Code that takes the final optimized parsing structures and emits them
+  to bytecode (in Bitcode format).
 
   Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
 
-require "bootstrap/rtn"
 require "bc"
 require "bc_constants"
 
@@ -19,133 +18,7 @@ TerminalTransition = {name="TerminalTransition", order=1}
 NontermTransition = {name="NontermTransition", order=2}
 Decision = {name="Decision", order=3}
 
-require "ll"
-require "pp"
-
-function load_grammar(file)
-  -- First read grammar file
-
-  local grm = io.open(file, "r")
-  local grm_str = grm:read("*a")
-
-  local grammar, attributes = parse_grammar(CharStream:new(grm_str))
-  compute_lookahead(grammar, 2)
-
-
-  -- First, determine what terminals (if any) conflict with each other.
-  -- In this context, "conflict" means that a string of characters can
-  -- be interpreted as one or more terminals.
-  local conflicts = {}
-  do
-    local nfas = {}
-    for name, terminal in pairs(attributes.terminals) do
-      print("Terminal: " .. name )
-      if type(terminal) == "string" then
-        terminal = fa.IntFA:new{string=terminal}
-      end
-      table.insert(nfas, {terminal, name})
-    end
-    local uber_dfa = nfas_to_dfa(nfas, true)
-    for state in each(uber_dfa:states()) do
-      if type(state.final) == "table" then  -- more than one terminal ended in this state
-        for term1 in each(state.final) do
-          for term2 in each(state.final) do
-            if term1 ~= term2 then
-              conflicts[term1] = conflicts[term1] or Set:new()
-              conflicts[term1]:add(term2)
-            end
-          end
-        end
-      end
-    end
-  end
-
-  -- For each state in the grammar, create (or reuse) a DFA to run
-  -- when we hit that state.
-  local dfas = {}
-
-  function has_conflicts(conflicts, dfa, terminals)
-    for term in each(terminals) do
-      if conflicts[term] then
-        for conflict in each(conflicts[term]) do
-          if dfa:contains(conflict) then
-            return true, term, conflict
-          end
-        end
-      end
-    end
-  end
-
-  for nonterm, rtn in pairs(grammar) do
-    -- print(nonterm)
-    -- print(rtn)
-    for state in each(rtn:states()) do
-      local terminals = Set:new()
-      for edge_val in state:transitions() do
-        if not fa.is_nonterm(edge_val) then
-          terminals:add(edge_val)
-        end
-      end
-
-      -- state.lookahead = compute_lookahead_for_state(nonterm, state, first, follow)
-
-      if has_conflicts(conflicts, terminals, terminals) then
-        local has_conflict, c1, c2 = has_conflicts(conflicts, terminals, terminals)
-        error(string.format("Can't build DFA inside %s, because terminals %s and %s conflict",
-                            nonterm, c1, c2))
-      end
-
-      if terminals:count() > 0 then
-        -- We now have a list of terminals we want to find when we are in this RTN
-        -- state.  Now get a DFA that will match all of them, either by creating
-        -- a new DFA or by finding an existing one that will work (without conflicting
-        -- with any of our terminals).
-        local found_dfa = false
-        for i, dfa in ipairs(dfas) do
-          -- will this dfa do?  it will if none of our terminals conflict with any of the
-          -- existing terminals in this dfa.
-          -- (we can probably compute this faster by pre-computing equivalence classes)
-          if not has_conflicts(conflicts, dfa, terminals) then
-            found_dfa = i
-            break
-          end
-        end
-
-        if found_dfa == false then
-          new_dfa = Set:new()
-          table.insert(dfas, new_dfa)
-          found_dfa = #dfas
-        end
-
-        -- add all the terminals for this state to the dfa we found
-        for term in each(terminals) do
-          dfas[found_dfa]:add(term)
-        end
-
-        state.dfa = found_dfa
-      end
-    end
-  end
-
-  local real_dfas = {}
-  for dfa in each(dfas) do
-    local nfas = {}
-    print(serialize(dfa))
-    for term in each(dfa) do
-      local target = attributes.terminals[term]
-      if type(target) == "string" then
-        target = fa.IntFA:new{string=target}
-      end
-      table.insert(nfas, {target, term})
-    end
-    local real_dfa = hopcroft_minimize(nfas_to_dfa(nfas), true)
-    table.insert(real_dfas, real_dfa)
-  end
-
-  return grammar, attributes, real_dfas
-end
-
-function write_grammar(infilename, outfilename)
+function write_grammar(outfilename)
   local grammar, attributes, intfas = load_grammar(infilename)
 
   -- write Bitcode header
@@ -193,11 +66,18 @@ function write_grammar(infilename, outfilename)
                                       bc.VBROp:new(6),
                                       bc.VBROp:new(4))
 
+  bc_rtn_info = bc_file:define_abbreviation(4,
+                                      bc.LiteralOp:new(BC_RTN_INFO),
+                                      bc.VBROp:new(6),
+                                      bc.VBROp:new(4))
+
   bc_rtn_state = bc_file:define_abbreviation(5,
                                       bc.LiteralOp:new(BC_RTN_STATE),
                                       bc.VBROp:new(4),
                                       bc.VBROp:new(4),
-                                      bc.FixedOp:new(1))
+                                      bc.FixedOp:new(1),
+                                      bc.VBROp:new(3),
+                                      bc.ArrayOp:new(bc.VBROp:new(6)))
 
   bc_rtn_transition_terminal = bc_file:define_abbreviation(6,
                                       bc.LiteralOp:new(BC_RTN_TRANSITION_TERMINAL),
@@ -217,10 +97,10 @@ function write_grammar(infilename, outfilename)
                                       bc.LiteralOp:new(BC_RTN_IGNORE),
                                       bc.VBROp:new(6))
 
-  bc_rtn_decision = bc_file:define_abbreviation(9,
-                                      bc.LiteralOp:new(BC_RTN_DECISION),
+  bc_rtn_lookahead = bc_file:define_abbreviation(9,
+                                      bc.LiteralOp:new(BC_RTN_LOOKAHEAD),
                                       bc.VBROp:new(6),
-                                      bc.ArrayOp:new(bc.VBROp:new(4)))
+                                      bc.ArrayOp:new(bc.VBROp:new(6)))
 
   bc_file:end_subblock(bc.BLOCKINFO)
 
@@ -425,6 +305,10 @@ function write_grammar(infilename, outfilename)
   bc_file:end_subblock(BC_RTNS)
 end
 
-write_grammar(arg[1], arg[2])
+
+
+
+
+
 
 -- vim:et:sts=2:sw=2

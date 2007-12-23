@@ -76,10 +76,8 @@ function dfs_helper(grammar, state, stack, seen, terminals, k, lookahead)
           local new_stack = shallow_copy_table(stack)
           local new_seen  = Set:new(seen)
           table.insert(new_stack, {edge_val.name, dest_state})
-          print("    Recursing into " .. edge_val.name .. ", seen is " .. seen_str(seen))
           dfs_helper(grammar, grammar[edge_val.name].start, new_stack, new_seen, terminals,
                      k, lookahead)
-          print("    Done recursing")
         else
           local new_terminals = shallow_copy_table(terminals)
           table.insert(new_terminals, edge_val)
@@ -135,19 +133,17 @@ function compute_lookahead(grammar, max_k)
       end
     end
   end
+  local multiple_transition_states = shallow_copy_table(states)
 
   -- now compute progressively more lookahead (up to max_k) for each
   -- state in states, until no more states remain
   local k = 1
   while #states > 0  and k <= max_k do
-    print(string.format("Processing k=%d, remaining nonterms=", k, seen_str(states)))
     local still_conflicting_states = Set:new()
     for state in each(states) do
       state.lookahead = {}
-      print(string.format("++ Processing state in %s", state.rtn.name))
       local lookaheads = {}
       for edge_val, dest_state, properties in state:transitions() do
-        print(string.format("  ++ Processing edge %s, properties=%s", serialize(edge_val), serialize(properties)))
         local terminals = compute_lookahead_for_transition(grammar, state, edge_val, dest_state, k)
         for term_seq in each(terminals) do
           local unique_seq = get_unique_table_for(term_seq)
@@ -157,16 +153,9 @@ function compute_lookahead(grammar, max_k)
             end
           else
             lookaheads[unique_seq] = dest_state
-            -- table.insert(state.lookahead, {unique_seq, edge_val, dest_state})
-            table.insert(state.lookahead, {unique_seq, edge_val})
+            table.insert(state.lookahead, {unique_seq, edge_val, dest_state})
           end
         end
-      end
-      print("  " .. serialize(state.lookahead))
-      if still_conflicting_states:contains(state) then
-        print("(still conflicting)")
-      else
-        print("(no longer conflicting!)")
       end
     end
     states = still_conflicting_states:to_array()
@@ -176,7 +165,7 @@ function compute_lookahead(grammar, max_k)
   if #states > 0 then
     error(string.format("Grammar is not LL(%d)", max_k))
   else
-    return true
+    return multiple_transition_states
   end
 end
 
