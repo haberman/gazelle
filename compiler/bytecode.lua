@@ -12,11 +12,32 @@
 --------------------------------------------------------------------]]--
 
 require "bc"
-require "bc_constants"
 
 TerminalTransition = {name="TerminalTransition", order=1}
 NontermTransition = {name="NontermTransition", order=2}
 Decision = {name="Decision", order=3}
+
+-- See FILEFORMAT for details about what these constants mean
+BC_INTFAS = 8
+BC_INTFA = 9
+BC_STRINGS = 10
+BC_RTNS = 11
+BC_RTN = 12
+
+BC_INTFA_STATE = 0
+BC_INTFA_FINAL_STATE = 1
+BC_INTFA_TRANSITION = 2
+BC_INTFA_TRANSITION_RANGE = 3
+
+BC_STRING = 0
+
+BC_RTN_INFO = 0
+BC_RTN_STATE = 1
+BC_RTN_TRANSITION_TERMINAL = 2
+BC_RTN_TRANSITION_NONTERM = 3
+BC_RTN_DECISION = 4
+BC_RTN_IGNORE = 5
+BC_RTN_LOOKAHEAD = 6
 
 function write_grammar(outfilename)
   local grammar, attributes, intfas = load_grammar(infilename)
