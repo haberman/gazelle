@@ -1,0 +1,45 @@
+#!/usr/bin/env lua
+
+require "bootstrap/rtn"
+require "nfa_to_dfa"
+require "minimize"
+
+function escape(str)
+  return str:gsub("[\"\\]", "\\%1")
+end
+
+grammar, attributes = parse_grammar(CharStream:new(io.stdin:read("*a")))
+if #grammar > 1 then
+  error("This filter can only deal with grammars that have a single nonterminal")
+end
+for _nonterm, _rtn in pairs(grammar) do
+  nonterm = _nonterm
+  rtn = _rtn
+end
+
+rtn = hopcroft_minimize(nfa_to_dfa(rtn))
+
+outfile = io.popen("dot -Tpng -o " .. arg[1], "w")
+
+outfile:write("digraph untitled {\n")
+outfile:write("rankdir=LR;\n")
+outfile:write("fontsize=10;\n")
+for state in each(rtn:states()) do
+  peripheries = 1
+  extra_label = ""
+  if state.final then peripheries = 2 end
+  if rtn.start == state then extra_label = "Start" end
+  outfile:write(string.format('  "%s" [label="%s" peripheries=%d]\n', tostring(state), extra_label, peripheries))
+  for edge_val, target_state in state:transitions() do
+    if fa.is_nonterm(edge_val) then
+      outfile:write(string.format('  "%s" -> "%s" [label="<%s>"]\n', tostring(state), tostring(target_state), escape(edge_val.name)))
+    else
+      outfile:write(string.format('  "%s" -> "%s" [label="%s"]\n', tostring(state), tostring(target_state), escape(edge_val)))
+    end
+  end
+end
+outfile:write("}\n")
+outfile:close()
+
+print(" ")
+

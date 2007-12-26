@@ -1,0 +1,235 @@
+Gazelle Manual
+==============
+Joshua Haberman <joshua@reverberate.org>
+v0.2-prerelease, Dec 2007
+:toc:
+
+Gazelle is a system for parsing context-free grammars.  It takes inspiration
+from parser generator tools like Yacc/Bison and ANTLR, but makes several
+design decisions that set it apart -- namely, the focus on making grammars
+reusable and making them language-agnostic.
+
+Once a grammar is written for a language, it should be possible to use it
+for anything from a compiler to the syntax highlighting component of a text
+editor.
+
+
+Writing Grammars for Gazelle
+----------------------------
+
+Gazelle has been designed to make writing grammars as easy as possible.
+Whether you are working from a published language specification or
+designing your own language, the Gazelle grammar format is designed to
+let you write grammars in the way you think about them.
+
+This chapter focuses on the syntax of Gazelle grammars, and the considerations
+of making your grammar easily parseable.
+
+
+[[X1]]
+Rules
+~~~~~
+
+Rules are at the heart of every grammar.  You use rules to describe
+the patterns of all the constructs in your language.  Here is a simple
+example that describes an assignment statement.
+
+------------------------------------------------
+assign -> ident "=" expr;
+------------------------------------------------
+
+This declares that an assignment statement is an identifier
+followed by the string ``='' followed by an expression.  We assume here
+that ``ident'' and ``expr'' are defined elsewhere in the
+grammar.
+
+For every rule you write, Gazelle builds a graph that describes the
+possible paths that the input can take through this rule.  Since this
+rule is very simple and doesn't have any kind of repetition, the
+graph is just a single path.
+
+["simplerule1.png", "graph 1: assign -> ident \"=\" expr;"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+assign -> ident "=" expr;
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Alternation
+^^^^^^^^^^^
+
+Often you will have a rule that can be expanded in more than one way.
+For example, you might have a boolean expression that can be either ``true'' or
+``false.''  You can specify alternation to Gazelle with the vertical
+bar (+|+).
+
+------------------------------------------------
+boolexpr -> "true" | "false";
+------------------------------------------------
+
+As you would expect, this produces a rule graph with two edges -- one
+for each option.
+
+["altrule1.png", "graph for: boolexpr -> \"true\" | \"false\";"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+boolexpr -> "true" | "false";
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can use alternation freely throughout your rules.  Alternation has
+the lowest precedence, but you can override that with parentheses. Here
+is a more complicated rule that demonstrates more extensive use of
+alternation.
+
+------------------------------------------------
+name -> (fname (mname | minitial) | nickname) surname;
+------------------------------------------------
+
+The graph for this rule is naturally a bit more complicated, but
+looking at it should convince you that the possible paths through this
+rule are what you intended.
+
+["altrule2.png", "graph for: name -> (fname (mname | minitial) | nickname) surname"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+name -> (fname (mname | minitial) | nickname) surname;
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Repetition
+^^^^^^^^^^
+
+Repetition is our other main tool for rule-writing.  Repetition isn't
+strictly necessary for writing context-free grammars (it can always be
+expressed as recursion), but using it can make grammars easier to
+write, understand, and ultimately parse.
+
+Gazelle offers these repetition modifiers; place them after the
+term you want to modify.
+
++?+::
+The +?+ modifier specifies 0 or 1 occurrences of the previous term.
+It corresponds to square brackets (+[]+) in EBNF.
+
++*+::
+The +*+ modifier specifies 0 or more occurrences of the previous term.
+It corresponds to curly brackets (+{}+) in EBNF.
+
++++::
+The +++ modifier specifies 1 or more occurrences of the previous term.
+
+`*(sep)`::
+The `\*(sep)` modifier specifies 0 or more occurrences of the previous
+term, where each occurrence is separated by +sep+.  It is a more
+straightforward way of writing `(term (sep term)*)?`.  +sep+ can be any
+valid term (or in unusual cases, expression of terms) that can
+appear on a right-hand-side of a rule.  
+
+
+`+(sep)`::
+The `\+(sep)` modifier specifies 1 or more occurrences of the previous
+term, where each occurrence is separated by +sep+.  It is a more
+straightforward way of writing `term (sep term)*`.  +sep+ can be any
+valid term (or in unusual cases, expression of terms) that can
+appear on a right-hand-side of a rule.
+
+Here is an example that uses repetition; it is the definition of an
+object in JSON:
+
+------------------------------------------------
+object   -> "{" (string ":" value) *(",") "}";
+------------------------------------------------
+
+["reprule1.png", "Graph for the above JSON object expression."]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+object   -> "{" (string ":" value) *(",") "}";
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+[IMPORTANT]
+One important limitation of the repetition operators is that they
+cannot be nested within a single rule.
+For example, you cannot write `expr -> (mult_term \+("*")) \+("+");`
+This isn't a weakness --
+it is a deliberate choice that makes the process of pulling a
+parse tree apart much more sane.  If you are tempted to nest
+repetitions, make the innermost repetition into its own rule.
+
+
+Terminals
+~~~~~~~~~
+
+So far we have neglected to describe in detail what can appear
+on the right-hand-side of a rule.  There are four fundamental
+kinds of terms.
+
+nonterminals::
+Nonterminals are symbols that are defined by rules, as described in the
+<<X1, Rules>> section.  Each nonterminal that appears on the right-hand-side
+of a rule must at some point be defined by appearing in the left-hand-side
+of a rule.  The definition need not precede the use.
+
+strings::
+A literal string that we expect to see at this point in the input.
+
+regular expressions::
+A _pattern_ of characters we expect to see at this point in the input.
+
+named terminals::
+You can name a string or regex, and later refer to the string or regex
+by name.
+
+Strings and regular expressions, are referred to collectively as
+``terminals,''  because they represent actual strings of the input text.
+
+
+Strings
+^^^^^^^
+
+When a string appears on a right-hand-side, it specifies exactly what string
+we expect to see at this point in the input.  Strings can be either single
+or double quoted.  They interpret some backslash sequences (TODO: there are
+some decisions left to make here -- do both interpret the same sequences?)
+
+
+[[X2]]
+Regular Expressions
+^^^^^^^^^^^^^^^^^^^
+
+Regular expressions (regex for short) describe patterns of text.  Users of
+languages like Perl, Python, or Ruby, or of tools like +grep+, will find the
+regular expressions in Gazelle very familiar.  The main difference that you
+will notice is that spaces in Gazelle regular expressions are insignificant.
+
+Regular expressions in Gazelle are delimited with +/+ (forward slash):
+
+----------------------------------------------
+name: /<body of regex>/
+----------------------------------------------
+
+////////////////////////////////////////
+
+That being said, you will sometimes need to adjust your grammar to work
+with Gazelle.  There are two main reasons for this.  One is that your
+grammar must not be ambiguous.  It is very easy to write a grammar that
+follows Gazelle's syntax rules, but could yield more than one parse
+tree for the same input.  Here is a very simple example:
+
+------------------------------------------------
+# With this grammar, 1+2+3 can be parsed as either (1+2)+3 or 1+(2+3)
+
+expr -> expr "+" expr | /[0-9]+/;
+------------------------------------------------
+
+The other reason is this: while there are a few algorithms that can parse
+any nonambiguous grammar, they are much slower than algorithms than
+algorithms that restrict the language somewhat.  Since speed is another
+focus of Gazelle, and because the grammar restrictions are not that
+onerous, Gazelle focuses on grammars that can be parsed using the
+faster algorithms.
+
+Practical Parsing with Gazelle
+------------------------------
+
+////////////////////////////////////////
+
+
+
+
+
