@@ -1,14 +1,16 @@
 
 CFLAGS=-Wall -g -O6 -std=c99
 SUBDIRS=runtime lang_ext utilities
-TARGETS=all clean
+TARGETS=all clean doc
 
 .PHONY: $(TARGETS)
 all: lua_path
 	@for dir in $(SUBDIRS) ; do make -w -C $$dir $@; done
 
+doc: docs/manual.html
+
 clean:
-	rm -f lua_path *.dot *.png
+	rm -f lua_path *.dot *.png docs/manual.html docs/*.png
 	@for dir in $(SUBDIRS) ; do make -w -C $$dir $@; done
 
 lua_path: Makefile
@@ -17,3 +19,10 @@ lua_path: Makefile
 
 png:
 	for x in *.dot; do echo $$x; dot -Tpng -o `basename $$x .dot`.png $$x; done
+
+doc: docs/manual.html
+docs: docs/manual.html
+
+docs/manual.html: docs/manual.txt
+	asciidoc -a toc -a toclevels=3 docs/manual.txt
+
