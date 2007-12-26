@@ -30,7 +30,7 @@ of making your grammar easily parseable.
 Rules
 ~~~~~
 
-Rules are at the heart of every grammar.  You use rules to describe
+Rules are at the heart of every grammar; they describe
 the patterns of all the constructs in your language.  Here is a simple
 example that describes an assignment statement.
 
@@ -125,8 +125,8 @@ appear on a right-hand-side of a rule.
 
 `+(sep)`::
 The `\+(sep)` modifier specifies 1 or more occurrences of the previous
-term, where each occurrence is separated by +sep+.  It is a more
-straightforward way of writing `term (sep term)*`.  +sep+ can be any
+term, where each occurrence is separated by `sep`.  It is a more
+straightforward way of writing `term (sep term)*`.  `sep` can be any
 valid term (or in unusual cases, expression of terms) that can
 appear on a right-hand-side of a rule.
 
@@ -147,7 +147,7 @@ One important limitation of the repetition operators is that they
 cannot be nested within a single rule.
 For example, you cannot write `expr -> (mult_term \+("*")) \+("+");`
 This isn't a weakness --
-it is a deliberate choice that makes the process of pulling a
+it is a design decision that makes the process of pulling a
 parse tree apart much more sane.  If you are tempted to nest
 repetitions, make the innermost repetition into its own rule.
 
@@ -156,8 +156,12 @@ Terminals
 ~~~~~~~~~
 
 So far we have neglected to describe in detail what can appear
-on the right-hand-side of a rule.  There are four fundamental
-kinds of terms.
+on the right-hand-side of a rule.  In the previous examples we
+have seen strings and nonterminals -- in this section we flesh
+out exactly what can appear there.
+
+There are four fundamental kinds of terms that can appear on a
+right-hand-side.
 
 nonterminals::
 Nonterminals are symbols that are defined by rules, as described in the
@@ -175,8 +179,25 @@ named terminals::
 You can name a string or regex, and later refer to the string or regex
 by name.
 
-Strings and regular expressions, are referred to collectively as
+Strings and regular expressions are referred to collectively as
 ``terminals,''  because they represent actual strings of the input text.
+Gazelle can take the terminals defined in the grammar and use them
+to create a lexer-like component of the parser automatically.  Unlike a
+separated lexer however, the lexer component of a Gazelle parser knows
+exactly what terminals it is expecting.  Using this information, a
+Gazelle parser could, for example, parse a language that allowed
+keywords as variable names, as long as the context was enough to
+disambiguate the two.
+
+A more practical application of this mechanism is the ability to
+nest languages easily.  For example, many web templating systems
+nest a language like Perl, PHP, or Ruby inside of regular HTML,
+by using special tags to delimit the two languages.  In this
+situation, Gazelle automatically knows when to switch to the lexer
+that parses the nested language's tokens.  In many cases the same could be
+accomplished with a traditional lexer by using lexer states, but
+doing so would require far more manual effort; Gazelle can do
+this automatically.
 
 
 Strings
@@ -192,10 +213,11 @@ some decisions left to make here -- do both interpret the same sequences?)
 Regular Expressions
 ^^^^^^^^^^^^^^^^^^^
 
-Regular expressions (regex for short) describe patterns of text.  Users of
+Regular expressions (regexes for short) describe patterns of text.  Users of
 languages like Perl, Python, or Ruby, or of tools like +grep+, will find the
 regular expressions in Gazelle very familiar.  The main difference that you
-will notice is that spaces in Gazelle regular expressions are insignificant.
+will notice is that whitespace in Gazelle regular expressions is insignificant
+(as you would get in Perl with +/x+).
 
 Regular expressions in Gazelle are delimited with +/+ (forward slash):
 
@@ -203,13 +225,187 @@ Regular expressions in Gazelle are delimited with +/+ (forward slash):
 name: /<body of regex>/
 ----------------------------------------------
 
-////////////////////////////////////////
+In a regular expression, characters match themselves with the following
+exceptions:
 
-That being said, you will sometimes need to adjust your grammar to work
-with Gazelle.  There are two main reasons for this.  One is that your
-grammar must not be ambiguous.  It is very easy to write a grammar that
-follows Gazelle's syntax rules, but could yield more than one parse
-tree for the same input.  Here is a very simple example:
++.+::
+A single dot matches any character (including a newline -- as if doing
+a multiline match in Perl, Python, or Ruby).
+
++\+::
+A backslash always escapes the next character, causing it to lose any
+special meaning it would otherwise have.
+
+spaces and newlines::
+To increase readability, whitespace inside regular expressions is
+insignificant .  You are encouraged to use whitespace
+to make your regular expressions more readable.
+
++[]+::
+A left square bracket begins a character class, and a right square
+bracket ends it.
+
++{}+::
+Curly brackets allow you to specify repetition with limits.  The high
+and low limits are separated by a comma, and either limit can be
+omitted to mean 0 and infinite, respectively.
+
++?+::
+A question mark specifies 0 or 1 repetition.
+
++*+::
+An asterisk specifies 0 or more repetition.
+
+`+`::
+A plus sign specifies 1 or more repetition.
+
+/////////////////////////////////////
+TODO: figure out and describe character classes (\w, :alpha:, etc)
+/////////////////////////////////////
+
+Named Terminals
+^^^^^^^^^^^^^^^
+
+A string or regular expression can be named and referred to later by
+using the _named terminal_ syntax.
+
+-------------------------------------------
+term: /<some regex>/;
+-------------------------------------------
+
+This appears to be almost identical to declaring a rule with a single
+regex on the right-hand-side, like so:
+
+-------------------------------------------
+nonterm -> /<some regex>/;
+-------------------------------------------
+
+The primary difference is that the named terminal syntax avoids creating a
+trivial and useless nonterminal graph.  Also, there are a few contexts that
+will only accept terminals, most notably the +ignore+ syntax.
+
+Special Commands
+~~~~~~~~~~~~~~~~
+
+Definitions of nonterminals and terminals will be the bulk of most syntax
+files; however there are several commands that give Gazelle important
+information about the grammar that isn't expressed in rules.
+
++@start+
+^^^^^^^^
+
+The +@start+ command tells Gazelle what the top-level nonterminal for a grammar
+is.  This frees you from having to follow a rule like ``the top level nonterminal
+must be listed first.''  The syntax of this command is simply:
+
+-------------------------------------------
+@start nonterm;
+-------------------------------------------
+
++@start+ must appear once and exactly once in every grammar.
+
++@ignore+
+^^^^^^^^^
+
+The +@ignore+ command lets you tell Gazelle how to do things like whitespace
+removal that are traditionally done by a separate lexer.  The syntax is:
+
+--------------------------------------------
+@ignore term in nonterm1, nonterm2, nonterm3, [...];
+--------------------------------------------
+
+This means that between any two complete terms of any right hand side in
++nonterm1+, +nonterm2+, and +nonterm3+, the terminal +term+ can appear
+an arbitrary number of times.
+
+Although this command is called "ignore," the ignored terminals can be
+preserved if desired, which allows you to do whitespace-preserving
+transformations.
+
+//////////////////
+TODO: ignore *, overriding other ignore rules, etc
+//////////////////
+
+Regular Expressions vs. Repetition Within Rules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You will notice that regular expressions and rules both give you the
++?+, +*+, and `+` operators.  Given this, there are are many situations where you
+will find that you can use either regular expressions or rules.  For example,
+consider this regular expression that describes a number:
+
+-----------------------------------------------
+number:  /(-)?  [0-9]*/
+-----------------------------------------------
+
+You could express the same pattern using a rule instead:
+
+----------------------------------------------------------------------
+number -> "-"? ("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")*;
+----------------------------------------------------------------------
+
+In this case, the rule version is much longer and more verbose, because the
+regular expression offers a useful tool that strings in rules do not offer:
+the character class.  In addition, the second form could make the grammar
+as a whole more expensive to parse by requiring more tokens of lookahead.
+Since a number is no longer a single terminal, it cannot be used as a
+single unit of lookahead.
+
+Does this mean that we should prefer regular expressions whenever we can?
+Not always.  Consider this example of a quoted string that contain
+backslash escapes:
+
+-----------------------------------------------------
+string   -> '"' str_frag* '"';
+str_frag -> /[^\\"]+/ | /\\./
+-----------------------------------------------------
+
+We could rewrite this using a single regular expression:
+
+-----------------------------------------------------
+string: /" ([^\\"]|\\.)* "/
+-----------------------------------------------------
+
+However, if we write it this way, we lose the information about where
+each backslash escape was in the string, because capture groups in a regular
+expression cannot keep track of multiple occurrences.  We would have
+to re-parse the string after the fact to find the escape sequences.
+In this case, writing the pattern using rules is superior, because
+it preserves all the important information about where each sequence
+was seen.
+
+So what general rule can we extrapolate from this?  *In general, you
+should prefer using a regular expression unless it will match a string
+that can contain an arbitrary number of points of interest.*
+
+In the number example, there were two fixed points of interest: the optional
+negative sign and the string of numbers.  In the string example, the string
+could contain an arbitrary number of escape sequences inside it.  If you stick
+to this guideline, you can't go far wrong.
+
+
+Dealing with Conflicts and Ambiguity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+So far we have covered all the components of describing the syntax of your
+language to Gazelle.  At this point there is good news and bad news.
+
+The bad news is that in some cases, even if your grammar is perfectly valid
+Gazelle syntax, Gazelle will not be able to accept your grammar.  The good news
+is that dealing with these problems is not a big deal, and Gazelle will work to
+give you as much information as it possibly can about how to fix them.
+
+[NOTE]
+At this stage in Gazelle development, Gazelle may not be particularly helpful
+in dealing with these bad cases; it may fail to detect the problem, lie to you
+about it, complain when there is no problem, or even insult your mother.
+The tone of this section reflects where I want Gazelle to be -- not where it
+is right now.
+
+There are two main reasons you might have to adjust your grammar.  One possible
+problem is that your grammar could be ambiguous.  It is very easy to write a
+grammar that is perfectly valid Gazelle syntax, but could yield more than one
+parse tree for the same input.  Here is a very simple example:
 
 ------------------------------------------------
 # With this grammar, 1+2+3 can be parsed as either (1+2)+3 or 1+(2+3)
@@ -217,19 +413,13 @@ tree for the same input.  Here is a very simple example:
 expr -> expr "+" expr | /[0-9]+/;
 ------------------------------------------------
 
+Gazelle can't deal with this ambiguity, and will give you a message
+explaining the source of the problem.
+
 The other reason is this: while there are a few algorithms that can parse
 any nonambiguous grammar, they are much slower than algorithms than
 algorithms that restrict the language somewhat.  Since speed is another
 focus of Gazelle, and because the grammar restrictions are not that
 onerous, Gazelle focuses on grammars that can be parsed using the
 faster algorithms.
-
-Practical Parsing with Gazelle
-------------------------------
-
-////////////////////////////////////////
-
-
-
-
 
