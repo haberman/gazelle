@@ -10,7 +10,7 @@
   Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
---
+
 require "misc"
 require "fa"
 
@@ -211,7 +211,7 @@ function parse_term(chars, attributes)
     chars:consume("(")
     ret = parse_derivations(chars, attributes)
     chars:consume(")")
-  elseif chars:lookahead(1) == "e" then
+  elseif chars:match("e[^%w]") then
     chars:consume("e")
     ret = fa.RTN:new{symbol=fa.e, properties={name="e", slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
