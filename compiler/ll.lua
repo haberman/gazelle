@@ -12,26 +12,15 @@
 
 function shallow_copy_table(t)
   local new_t = {}
-  for k, v in pairs(t) do
-    new_t[k] = v
-  end
+  for val in each(t) do table.insert(new_t, val) end
   return new_t
 end
 
 cache = {}
 function get_unique_table_for(val)
-  local str = ""
-  local keys = {}
-  for key in pairs(val) do table.insert(keys, key) end
-  table.sort(keys)
-  for key in each(keys) do
-    if type(val[key]) == "table" and val[key].class == fa.e then
-      str = str .. "|" .. key .. ":e"
-    else
-      str = str .. "|" .. key .. ":s-" .. tostring(val[key])
-    end
-  end
-
+  local string_table = {}
+  for entry in each(val) do table.insert(string_table, tostring(entry)) end
+  local str = table.concat(string_table, "\136")
   if not cache[str] then
     cache[str] = shallow_copy_table(val)
   end
@@ -48,7 +37,7 @@ end
 
 function table_unique_append(set, table)
   for seq in each(table) do
-    unique_seq = get_unique_table_for(seq)
+    local unique_seq = get_unique_table_for(seq)
     set:add(unique_seq)
   end
 end
@@ -66,15 +55,6 @@ function permute(seq_set1, seq_set2)
   return permutations
 end
 
-function first_for_state(grammar, state, k, seen)
-  --print("First for state: " .. state.rtn.name)
-  local first = Set:new()
-  for edge_val, dest_state in state:transitions() do
-    table_unique_append(first, first_for_transition(grammar, state, edge_val, dest_state, k, seen))
-  end
-  return first
-end
-
 function clamp_seq_len(seqs, max_len)
   if max_len < 0 then error("Clamp seq len called with arg " .. max_len) end
   for seq in each(seqs) do
@@ -85,15 +65,49 @@ function clamp_seq_len(seqs, max_len)
   return seqs
 end
 
-function first_for_transition(grammar, state, edge_val, dest_state, k, seen)
+function first_for_state(grammar, state, k, seen, n)
+  if k == 0 then return {{}}
+  elseif k < 0 then error ("first_for_state called with k " .. k)
+  end
+
+  -- for k=1,n do io.stdout:write("  ") end
+  -- print(string.format("+ first_for_state(rtn=%s, k=%d)", state.rtn.name, k))
+  -- n=n+1
+
+  local first = Set:new()
+
+  if state.final then
+    table_unique_append(first, {{}})
+  end
+
+  for edge_val, dest_state in state:transitions() do
+    local seen2 = Set:new(seen)
+    table_unique_append(first, first_for_transition(grammar, state, edge_val, dest_state, k, seen2, n))
+  end
+
+  if first:count() == 0 then
+    error("Count is 0")
+  end
+
+  -- for k=1,n do io.stdout:write("  ") end
+  -- print("First for state returning: " .. serialize(first:to_array()))
+
+  return first
+end
+
+function first_for_transition(grammar, state, edge_val, dest_state, k, seen, n)
   if k == 0 then return {{}}
   elseif k < 0 then error ("first_for_transition called with k " .. k)
   end
-  seen = seen or Set:new()
 
+  seen = seen or Set:new()
   local first = Set:new()
   local one_hop_seqs = Set:new()
-  print("in rtn " .. state.rtn.name .. " considering edge " .. serialize(edge_val))
+
+  -- for k=1,n do io.stdout:write("  ") end
+  -- print(string.format("+ first_for_transition(rtn=%s, edge=%s, k=%d)", state.rtn.name, serialize(edge_val), k))
+  -- n=n+1
+  --
   if fa.is_nonterm(edge_val) then
     local nonterm_start = grammar[edge_val.name].start
 
@@ -102,12 +116,11 @@ function first_for_transition(grammar, state, edge_val, dest_state, k, seen)
     end
     seen:add(nonterm_start)
 
-    table_unique_append(one_hop_seqs, first_for_state(grammar, nonterm_start, k, seen))
+    table_unique_append(one_hop_seqs, first_for_state(grammar, nonterm_start, k, seen, n))
     if nonterm_start.final then
       table_unique_append(one_hop_seqs, {{}})
     end
   else
-    -- print("Appending " .. edge_val)
     table_unique_append(one_hop_seqs, {{edge_val}})
   end
 
@@ -131,7 +144,7 @@ function first_for_transition(grammar, state, edge_val, dest_state, k, seen)
     end
   end
 
-  local trailing_seqs = first_for_state(grammar, dest_state, k - shortest_seq)
+  local trailing_seqs = first_for_state(grammar, dest_state, k - shortest_seq, nil, n)
 
   -- finally, cross all of the sequences we get in one hop with all the
   -- sequences we get with trailing context.  some of the resulting
@@ -142,21 +155,26 @@ function first_for_transition(grammar, state, edge_val, dest_state, k, seen)
   -- follow sets.
   table_unique_append(first, clamp_seq_len(permute(one_hop_seqs, trailing_seqs), k))
 
-  -- print("one_hop_seqs: " .. serialize(one_hop_seqs) .. " trailing_seqs: " .. serialize(trailing_seqs))
-  -- print("permute: " .. serialize(permute(one_hop_seqs, trailing_seqs)))
-  print("First for transition returning: " .. serialize(first))
+  -- for k=1,n do io.stdout:write("  ") end
+  -- print("first_for_transition() = " .. serialize(first:to_array()))
+
   return first
 end
 
-function follow_for_nonterm(grammar, nonterm, k, seen, follow_nonterms)
+function follow_for_nonterm(grammar, nonterm, k, seen, follow_nonterms, n)
   if k == 0 then return {{}}
   elseif k < 0 then error("follow_for_nonterm called with k " .. k)
   end
+
+  --for k=1,n do io.stdout:write("  ") end
+  --print(string.format("+ follow_for_nonterm(nonterm=%s, k=%d)", nonterm, k))
+  --n=n+1
+
   local follow = Set:new()
   seen:add(nonterm)
 
   for state in each(follow_nonterms[nonterm]) do
-    local first = first_for_state(grammar, state, k)
+    local first = first_for_state(grammar, state, k, nil, n)
 
     -- if any of the sequences we got from first are less than k long,
     -- we need to augment them with things that can follow this nonterm
@@ -171,12 +189,27 @@ function follow_for_nonterm(grammar, nonterm, k, seen, follow_nonterms)
       shortest_seq = math.min(shortest_seq, #seq)
     end
 
-    if (state.final or shortest_seq == 0) and not seen:contains(state.rtn.name) then
-      table_unique_append(follow, follow_for_nonterm(grammar, state.rtn.name, k, seen, follow_nonterms))
+    -- if this nonterm can be exited without consuming any input, then
+    -- the entire follow(nonterm, k) set belongs in the follow set we
+    -- are constructing.  however, we have to keep a seen set in case
+    -- we are already in the middle of constructing follow(nonterm, k)
+    if (state.final or shortest_seq == 0) then
+      if seen:contains(state.rtn.name) then
+        -- we won't recursively try to compute follow(nonterm, k)
+        -- (since we're already in the middle of computing it),
+        -- but as a result the follow set we're constructing right
+        -- now may be incomplete, so we won't cache it.
+        cache = false
+      else
+        local follow2 = follow_for_nonterm(grammar, state.rtn.name, k, seen, follow_nonterms, n)
+        table_unique_append(follow, follow2)
+      end
     end
+
     shortest_seq = math.max(shortest_seq, 1)
 
-    local follow_up = follow_for_nonterm(grammar, state.rtn.name, k - shortest_seq, seen, follow_nonterms)
+    local follow_up_seqs = follow_for_nonterm(grammar, state.rtn.name, k - shortest_seq, seen,
+                                              follow_nonterms, n)
     table_unique_append(follow, clamp_seq_len(permute(short_seqs, follow_up_seqs), k))
   end
 
@@ -236,19 +269,31 @@ function compute_lookahead(grammar, max_k)
       for pair in each(ambiguous_edges[state]) do
         local edge_val, dest_state = unpack(pair)
 
-        local terminals = first_for_transition(grammar, state, edge_val, dest_state, k)
+        local terminals = first_for_transition(grammar, state, edge_val, dest_state, k, nil, 0)
 
+        -- split the sequences in to sequences of less than k and sequences of k.
+        -- sequences of less than k need to be augmented with follow info
+        local k_seqs = Set:new()
+        local short_seqs = {}
+        local shortest_seq = math.huge
         for term_seq in each(terminals) do
-
-          -- for any term sequence that is shorter than k, augment it with follow info
           if #term_seq < k then
-            local follow = follow_for_nonterm(grammar, state.rtn.name, k - #term_seq, Set:new(), follow_nonterms)
-            -- TODO: what if follow isn't long enough?
-            for term in each(follow) do
-              table.insert(term_seq, term)
+            table.insert(short_seqs, term_seq)
+            if #term_seq < shortest_seq then
+              shortest_seq = #term_seq
             end
+          else
+            table_unique_append(k_seqs, {{term_seq}})
           end
+        end
 
+        if #short_seqs > 0 then
+          local follow = follow_for_nonterm(grammar, state.rtn.name, k - shortest_seq, Set:new(), follow_nonterms, 0)
+          -- TODO: what if some follow seqs are too short?
+          table_unique_append(k_seqs, clamp_seq_len(permute(short_seqs, follow), k))
+        end
+
+        for term_seq in each(k_seqs) do
           local unique_seq = get_unique_table_for(term_seq)
           if lookaheads[unique_seq] and lookaheads[unique_seq] ~= dest_state then
             still_conflicting_states:add(state)
@@ -264,11 +309,12 @@ function compute_lookahead(grammar, max_k)
         end
       end
 
+     -- print("Inserting lookahead for nonterm " .. state.rtn.name)
       for term_seq, pair in pairs(lookaheads) do
         local edge_val, dest_state = unpack(pair)
-        -- table.insert(state.lookahead, {unique_seq, edge_val, dest_state})
-        print("Inserting lookahead " .. serialize({term_seq, edge_val}))
-        table.insert(state.lookahead, {term_seq, edge_val})
+        table.insert(state.lookahead, {term_seq, edge_val, dest_state})
+        -- print("Inserting lookahead " .. serialize({term_seq, edge_val, tostring(dest_state)}))
+        -- table.insert(state.lookahead, {term_seq, edge_val})
       end
 
       ambiguous_edges[state] = still_conflicting_edges
