@@ -98,14 +98,14 @@ CharStream = {}
 function parse_grammar(chars)
   chars:ignore("whitespace")
   local grammar = {}
-  local attributes = {terminals={}, ignore={}, slot_counts={}}
+  local attributes = {terminals={}, ignore={}, slot_counts={}, regex_text={}}
   while not chars:eof() do
-    if chars:match(" *start") then
-      local start = parse_nonterm(chars)
+    if chars:match(" *@start") then
+      chars:consume_pattern(" *@start")
       attributes.start = parse_nonterm(chars).name;
       chars:consume(";")
-    elseif chars:match(" *allow") then
-      local ignore = parse_nonterm(chars)
+    elseif chars:match(" *@ignore") then
+      chars:consume_pattern(" *@ignore")
       local what_to_ignore = parse_nonterm(chars).name
       local in_ = parse_nonterm(chars)
       local nonterms = {parse_nonterm(chars).name}
@@ -189,7 +189,7 @@ function parse_term(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local name
   local ret
-  if chars:match(" *[%w_]+ *=") then
+  if chars:match(" *%.[%w_]+ *=") then
     name = parse_name(chars)
     chars:consume("=")
   end
@@ -197,7 +197,7 @@ function parse_term(chars, attributes)
   local symbol
   if chars:lookahead(1) == "/" then
     name = name or attributes.nonterm.name
-    attributes.terminals[name] = parse_regex(chars)
+    attributes.terminals[name], attributes.regex_text[name] = parse_regex(chars)
     ret = fa.RTN:new{symbol=name, properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
   elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
@@ -255,6 +255,7 @@ end
 
 function parse_name(chars)
   local old_ignore = chars:ignore()
+  chars:consume(".")
   local ret = chars:consume_pattern("[%w_]+")
   chars:ignore(old_ignore)
   return ret
@@ -321,18 +322,18 @@ end
 function parse_regex(chars)
   local old_ignore = chars:ignore()
   chars:consume("/")
-  local regex = ""
+  local regex_text = ""
   while chars:lookahead(1) ~= "/" do
     if chars:lookahead(1) == "\\" then
-      regex = regex .. chars:consume_pattern("..")
+      regex_text = regex_text .. chars:consume_pattern("..")
     else
-      regex = regex .. chars:consume_pattern(".")
+      regex_text = regex_text .. chars:consume_pattern(".")
     end
   end
-  local regex = regex_parser.parse_regex(regex_parser.TokenStream:new(regex))
+  local regex = regex_parser.parse_regex(regex_parser.TokenStream:new(regex_text))
   chars:consume("/")
   chars:ignore(old_ignore)
-  return regex
+  return regex, regex_text
 end
 
 -- vim:et:sts=2:sw=2

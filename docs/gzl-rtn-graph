@@ -34,6 +34,9 @@ for state in each(rtn:states()) do
     if fa.is_nonterm(edge_val) then
       outfile:write(string.format('  "%s" -> "%s" [label="<%s>"]\n', tostring(state), tostring(target_state), escape(edge_val.name)))
     else
+      if attributes.regex_text[edge_val] then
+        edge_val = "/" .. attributes.regex_text[edge_val] .. "/"
+      end
       outfile:write(string.format('  "%s" -> "%s" [label="%s"]\n', tostring(state), tostring(target_state), escape(edge_val)))
     end
   end

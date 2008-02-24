@@ -476,18 +476,183 @@ recursed nonterminals.
 Grammar Lookahead Automaton (GLA)::
 The LL(k) lookahead information for any nontrivial RTN state is encoded
 in a DFA known as a GLA.  The final states of GLAs indicate what RTN
-transition should be taken.
+transition should be taken.  We choose this approach rather than using
+a table because lookup information is typically extremely sparse, not
+even remotely approaching its theoretical +O(2^k)+ upper limit.
 
 Character-level Integer DFA (IntFA)::
 Serving the role usually played by separate lexers, IntFAs transition
 on individual characters of the input stream and hit a final state
 when a full token is recognized.  The appropriate IntFA is chosen based
-on the current state of the current GLA or RTN.  The parser knows what
-set of tokens it is expecting to see, and can therefore handle
-context-sensitive lexing.
+on the current state of the current GLA or RTN  For example, if the RTN
+state indicates we are expecting a variable name, we can select an IntFA
+that will not recognize keywords, thereby accommodating languages that
+allow variables named after keywords.
 
 Character decoding DFA::
 For any multi-byte encoding, the lowest-level DFA is one that examines
 the input byte-by-byte and assembles the bytes into characters.  (TODO:
 is this the right mechanism for handling things like C trigraphs also?)
+
+Language rules that cannot be represented using pure context-free grammars
+(and all but the simplest languages have such complications) are accommodated
+with a variety of strategies that let the grammar implementor "hook in"
+to the above process with imperative code.
+
+
+A Tour of the Parsing Stack
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This section provides a gentle tour of Gazelle's parsing stack.  It is
+intended that any programmer can follow it, even if you have no parsing
+experience.
+
+Gazelle parses using four layers of state machines, and each layer serves a
+distinct purpose.  While this may sound complicated at first, seeing each of
+the layers in action should convince you that this is a simple, natural, and
+easy-to-understand model.
+
+
+Recursive Transition Network
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We saw in the <<X1, Rules>> section of the manual that every time you write
+a rule, Gazelle creates a graph that describes the paths the parser can take
+through that rule.  Here is an example, describing a part of an arithmetic
+expression grammar using the rule `prim -> /0-9+/ | (expr);`.
+
+["prim.png", "graph 1: prim -> /0-9+/ | (expr);"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+prim -> /0-9+/ | "(" expr ")";
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You should find that you can look at the graph for a rule and intuitively
+understand what it does.  In this case, you should be able to easily see
+that a `prim` starts with either a number (the regular expression `/0-9+/`)
+or a left parenthesis.  If it was a number, the rule is done; if it was
+a left parenthesis, we expect an +expr+ followed by a right parenthesis.
+You should be able to understand the graph for any rule you write in this
+way.
+
+Notice that there are two kinds of transitions in this graph: one that matches
+a string or pattern of strings (`/0-9+/`, +"("+ and +")"+ above) and one that
+refers to another rule (+expr+). For the grammar to be complete, let us also
+define +expr+ and a companion rule +factor+, to make a small but complete set
+of rules:
+
+------------------------------------------------
+expr   -> factor +("+");
+factor -> prim +("*");
+prim   -> /0-9+/ | "(" expr ")";
+------------------------------------------------
+
+Recall that the +++ repetition operator can include a separator as seen here,
+so +expr+ is essentially equivalent to `expr -> factor ("+" factor) *`.
+You wouldn't actually write the grammar this way in Gazelle because expression
+parsing provides a more natural way of writing the same thing, but this example
+will serve well to illustrate the concepts.
+
+Because +expr+ and +factor+ have repetition in them, the graphs that Gazelle
+builds for them have cycles in them, as you can see:
+
+["expr.png", "graph 2: expr -> factor +(\"+\");"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+expr -> factor +("+");
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+["factor.png", "graph 3: factor -> prim +(\"*\");"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+factor -> prim +("*");
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In the field of parsing, this set of graphs (one for each rule in the grammar)
+is known as a "Recursive Transition Network."  We overload this terminology
+slightly by also referring to a single graph in this set as an RTN.  It's
+recursive because every time we take a transition that refers to another rule,
+we push our state within the _current_ rule onto a stack.  When the sub-rule
+"returns," we pop our saved state off the stack.  This concept will become more
+clear in the illustration below.
+
+Once we have the recursive transition network, we can use it to parse
+input text by starting in the "Start" state for the top-level rule and taking
+whatever transitions are indicated by the input text.  Let's walk through
+an example.
+
+TODO: invest the time to make a friendly graphical walkthrough.
+
+
+Grammar Lookahead Automaton
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You may have noticed that we glossed over one important detail in the previous
+section.  How do we decide what transition in the RTN to take?  In some cases
+it seems obvious: if all the outgoing transitions in our RTN state are
+terminals (strings or regular expressions), we can tell by comparing each
+transition with the next characters of the input text.  In some cases, however,
+the decision can be a lot more complicated to make.
+
+There are two situations where knowing what transition to take is difficult.
+First, if any of the transitions that lead out of our RTN state are
+nonterminals (references to other rules), we need a way to know what strings in
+the input imply what transitions.  For example, consider the rule:
+
+["hardrule1.png", "graph 3: word -> numbers | letters;"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+word -> numbers | letters;
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If we are in the start state for +word+ and we see a "5" in the input, what
+transition should we take?  You might guess that we should take +numbers+,
+but that's entirely dependent on the definition of +numbers+ and +letters+.
+We need a way to "see into" those definitions, so we know what transition
+to take based on what we see in the input.
+
+The second difficulty is similar, but slightly different.  What if we are
+in a final state that has transitions out of it?  Consider this rule:
+
+["hardrule2.png", "graph 3: sentence -> word*;"]
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+sentence -> word*;
+gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If we are in the start state for +sentence+, should we return from the
+current rule since we are in a final state, or should we stay and match
+more words?  To answer this question we need not only the ability to "see
+into" +word+, but also the ability to "see up from" whatever set of
+rules we are currently recursed into.
+
+This set of problems turns out to be somewhat difficult to solve -- in fact, it
+is exactly the problem that LL parsing aims to solve.  Part of what makes it
+tricky is that depending on how the grammar is written, we might not have
+enough information at this point in the text to possibly know what transition
+to take.  We always have to look at the next token of input to decide, but
+in some cases we might have to look ahead 2, 3, or even more tokens before we
+have enough information to make a decision.  It is even possible to write
+grammars where the token that tells us the difference is _arbitrarily_ far
+away.  These classes of grammars are known as +LL(k)+ if we have to look
++k+ tokens ahead to make a decision, or +LL(*)+ if that decision can be
+arbitrarily far away.
+
+[NOTE]
+This description of +LL(k)+ only tells part of the story.  LL algorithms
+are further divided into "full" LL, Strong-LL, and Simple-LL.  Nearly
+all practical "LL" algorithms are actually Strong-LL, and this is also
+the case for Gazelle.  Though Strong-LL parsers can only parse a subset
+of the grammars of a full LL parser, they are significantly simpler and
+more efficient, and in practice provide enough power.  For more
+information on the subject, I heartily recommend the book
+http://www.amazon.com/Parsing-Techniques-Practical-Monographs-Computer/dp/038720248X[Parsing
+Techniques: A Practical Guide] by Grune and Jacobs.
+
+So how do we decide what transition to take in the RTN?  The answer is that
+Gazelle analyzes the grammar at compile time, and figures out for each RTN
+state what tokens we expect to see here, and what RTN transition each series of
+tokens implies.  This information is encoded into a DFA known as a _GLA_ -- a
+Grammar Lookahead Automaton.  If after analyzing the grammar Gazelle determines
+that it is possible to build a GLA for every RTN state, it builds them and
+encodes it into the byte-code.  If it is _not_ possible to build the GLA (which
+implies that that the grammar is not +LL(k)+), Gazelle interrupts the
+compilation with an error.
+
+TODO: flesh out this section with more examples
 
