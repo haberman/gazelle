@@ -1,7 +1,7 @@
 Gazelle Manual
 ==============
 Joshua Haberman <joshua@reverberate.org>
-v0.2-prerelease, Dec 2007
+v0.2-prerelease, Feb 2008
 :toc:
 
 Gazelle is a system for parsing context-free grammars.  It takes inspiration
@@ -422,4 +422,72 @@ algorithms that restrict the language somewhat.  Since speed is another
 focus of Gazelle, and because the grammar restrictions are not that
 onerous, Gazelle focuses on grammars that can be parsed using the
 faster algorithms.
+
+
+The Gazelle Algorithm
+---------------------
+
+This section describes Gazelle's parsing algorithm.
+It will primarily be of interest to parsing aficionados, but may also
+provide insight to people who are trying to do tricky or advanced things
+with Gazelle.
+
+Gazelle's parsing algorithm stands on the shoulders of giants.  The field of
+Computer Science has seen decades of high-quality research in parsing, and
+the author has spent many months (and many trips to the library) working
+to understand the existing literature.  There are also many open source
+tools that have provided key insights into the practical applications of
+parsing theory.
+
+That said, the Gazelle algorithm combines some of these concepts in ways
+that have not been previously done, to the author's knowledge.  Gazelle's
+key innovation is combining parsing and lexing into a single automaton,
+which provides key benefits such as easy embedding of one language into
+another.  This technique has been written about using bottom-up algorithms
+like GLR (see Eelco Visser's 1997 paper
+http://www.program-transformation.org/Transform/ScannerlessGeneralizedLRParsing[Scannerless Generalized-LR Parsing]),
+but has not, to the author's knowledge, ever been attempted in a top-down
+parser generator tool.
+
+
+Overview
+~~~~~~~~
+
+What follows is a high-level overview of Gazelle's algorithm that speaks
+using the language of the field.  A gentler explanation follows in the
+next section.
+
+Gazelle is a top-down parser that supports Strong-LL(k) lookahead for
+fixed k.  In the future this may be extended to LL(*) lookahead using
+ANTLR's algorithm (devised by Terence Parr) -- this would expand the
+set of grammars Gazelle can handle, but the parsing algorithm itself
+would remain the same.
+
+Gazelle parses using a stack of discrete finite automata (DFAs) that
+serve distinct purposes.  Four kinds of automata work together to do
+both lexing and parsing.  Starting from the top level and working down
+we have:
+
+Recursive Transition Network (RTN)::
+a DFA is built representing each grammar rule, and this DFA transitions
+once for each token of input.  A runtime stack maintains the list of
+recursed nonterminals.
+
+Grammar Lookahead Automaton (GLA)::
+The LL(k) lookahead information for any nontrivial RTN state is encoded
+in a DFA known as a GLA.  The final states of GLAs indicate what RTN
+transition should be taken.
+
+Character-level Integer DFA (IntFA)::
+Serving the role usually played by separate lexers, IntFAs transition
+on individual characters of the input stream and hit a final state
+when a full token is recognized.  The appropriate IntFA is chosen based
+on the current state of the current GLA or RTN.  The parser knows what
+set of tokens it is expecting to see, and can therefore handle
+context-sensitive lexing.
+
+Character decoding DFA::
+For any multi-byte encoding, the lowest-level DFA is one that examines
+the input byte-by-byte and assembles the bytes into characters.  (TODO:
+is this the right mechanism for handling things like C trigraphs also?)
 

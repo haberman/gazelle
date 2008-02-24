@@ -30,6 +30,15 @@ INTFAS -- the list of all IntFAs (lexing DFAs)
     ...
     (transitions are identified by their offset in this list)
 
+GLAS
+  GLA
+    [GLA_STATE, intfa #, # of transitions, intfa#]
+    [GLA_FINAL_STATE, intfa #, <array of rtn alt offsets>]
+    ...
+
+    [GLA_TRANSITION, terminal_name_int, dest GLA state offset]
+    ...
+
 RTNS -- a list of all the RTNs
   RTN - a single RTN
     [RTN_INFO, nonterm_name_int, # of slots]
@@ -37,11 +46,11 @@ RTNS -- a list of all the RTNs
     [RTN_IGNORE, terminal_name_int]
     ...
 
-    [RTN_STATE, # of transitions+lookahead, intfa #, is final, #of lookahead tokens, <array of DFA offsets>]
+    [RTN_STATE, # of transitions, intfa#, is final]
+    [RTN_GLA_STATE, # of transitions, is final]
     ...
 
     [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
     [RTN_TRANSITION_NONTERM, rtn_offset, dest RTN state offset, slotname_int, slotnum]
-    [RTN_LOOKAHEAD, transition_offset, <array of terminal_name_int's>]
     ...
 
