@@ -11,7 +11,23 @@ reusable and making them language-agnostic.
 
 Once a grammar is written for a language, it should be possible to use it
 for anything from a compiler to the syntax highlighting component of a text
-editor.
+editor.  That is Gazelle's single most fundamental design criterion.
+
+[WARNING]
+This manual is very much a work in progress, just as Gazelle itself it.
+There is a lot of information in here, and it's a great way to get
+acquainted with Gazelle, especially if you are already familiar with
+parsing tools in general.  However, there isn't a lot of friendly
+introductory material yet, and some of the
+information may be out of sync with the implementation.  As Gazelle
+stabilizes, so will the relationship between the manual and reality.
+
+
+An Introductory Tour
+--------------------
+
+This section will walk readers through an example that involves writing
+a grammar and parsing text using that grammar.
 
 
 Writing Grammars for Gazelle
@@ -424,6 +440,17 @@ onerous, Gazelle focuses on grammars that can be parsed using the
 faster algorithms.
 
 
+The C Runtime
+-----------
+
+This section will document the API for the parsing runtime, and explained
+how it can be used for event-based parsing, syntax trees, ASTs, and
+whitespace-preserving transformations.  It will also discuss best
+practices for wrapping the C runtime in other languages.  It will
+_not_ offer documentation about each language's wrappers -- I think
+that belongs in separate manuals, but I may change my mind about that.
+
+
 The Gazelle Algorithm
 ---------------------
 
@@ -440,14 +467,29 @@ tools that have provided key insights into the practical applications of
 parsing theory.
 
 That said, the Gazelle algorithm combines some of these concepts in ways
-that have not been previously done, to the author's knowledge.  Gazelle's
-key innovation is combining parsing and lexing into a single automaton,
-which provides key benefits such as easy embedding of one language into
-another.  This technique has been written about using bottom-up algorithms
-like GLR (see Eelco Visser's 1997 paper
-http://www.program-transformation.org/Transform/ScannerlessGeneralizedLRParsing[Scannerless Generalized-LR Parsing]),
-but has not, to the author's knowledge, ever been attempted in a top-down
-parser generator tool.
+that have not been previously done, to the author's knowledge.
+Gazelle offers these key innovations over existing top-down parsing tools.
+
+* Gazelle combines parsing and lexing into a single unit: users of
+  Gazelle implement both lexing and parsing in a single, unified
+  grammar file.  This
+  provides significant benefits: grammars are easier to read and write,
+  it is easy to embed one language's grammar into another (for example, embedding
+  an imperative language into HTML, as the many templating engines do),
+  and it makes it possible to support context-sensitive lexing decisions,
+  like languages that allow keywords to be variable names.
+  This technique was debuted in Eelco Visser's 1997 paper
+  http://www.program-transformation.org/Transform/ScannerlessGeneralizedLRParsing[Scannerless Generalized-LR Parsing],
+  but has not, to the author's knowledge, been attempted in a top-down
+  parsing tool.
+* Gazelle supports operator-precedence expression parsing, which makes it
+  much easier to describe infix operator expressions, especially if there
+  are many levels of precedence.  It is already known (if not widely
+  advertised) that it is possible to "sandwich" an operator precedence
+  parsing algorithm such as the shunting yard algorithm between two
+  top-down parsers -- indeed, this strategy is used in the current
+  version of GCC's C/C++ parser -- but this feature has not been offered
+  (to the author's knowledge) in a top-down parsing tool.
 
 
 Overview
@@ -494,6 +536,9 @@ For any multi-byte encoding, the lowest-level DFA is one that examines
 the input byte-by-byte and assembles the bytes into characters.  (TODO:
 is this the right mechanism for handling things like C trigraphs also?)
 
+In addition, operator-precedence parsing is supported by sandwiching the
+shunting yard algorithm between layers of the RTN stack.
+
 Language rules that cannot be represented using pure context-free grammars
 (and all but the simplest languages have such complications) are accommodated
 with a variety of strategies that let the grammar implementor "hook in"
@@ -519,9 +564,9 @@ Recursive Transition Network
 We saw in the <<X1, Rules>> section of the manual that every time you write
 a rule, Gazelle creates a graph that describes the paths the parser can take
 through that rule.  Here is an example, describing a part of an arithmetic
-expression grammar using the rule `prim -> /0-9+/ | (expr);`.
+expression grammar using the rule `prim -> /0-9+/ | "("expr ")";`.
 
-["prim.png", "graph 1: prim -> /0-9+/ | (expr);"]
+["prim.png", "graph 1: prim -> /0-9+/ | \"(\" expr \")\";"]
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 prim -> /0-9+/ | "(" expr ")";
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -654,5 +699,103 @@ encodes it into the byte-code.  If it is _not_ possible to build the GLA (which
 implies that that the grammar is not +LL(k)+), Gazelle interrupts the
 compilation with an error.
 
+When Gazelle is actually parsing, it stops at every RTN state and tries to
+determine what transition to take next.  To make this decision, Gazelle
+finds the GLA for this RTN state and runs it for the tokens of the
+input until the it hits a final state.  That final state will tell the
+RTN what transition to take.
+
 TODO: flesh out this section with more examples
+
+
+Character-level Integer DFA
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the previous section, we assumed that we had a stream of tokens to feed
+into the GLA.  But where do these tokens come from?  The answer is that
+another layer of DFA's processes the characters of the input text and
+breaks them into tokens.  These DFAs are known as IntFAs, since the
+characters of the input text are represented as integers (this is not
+a particularly good name, and may change).  IntFAs in
+Gazelle fulfill the role traditionally performed by separate lexers.
+
+Most programmers have some familiarity with regular expressions, because
+they are pervasive in modern programming.  With Gazelle you describe
+tokens using strings and regular expressions, and Gazelle compiles these
+into DFAs using well-known algorithms (unlike what most scripting
+languages do today -- they use an algorithm with much worse worst-case
+performance, as Russ Cox argues in his article
+http://swtch.com/~rsc/regexp/regexp1.html[Regular Expression Matching Can Be
+Simple And Fast]).
+
+Lexing using Gazelle has one key advantage over independent lexers: the Gazelle
+lexing component knows what sorts of language constructs it is expecting to see
+at this point in the input.  A traditional lexer just breaks the input into
+words without having any idea what sort of construct it's in.  For example,
+suppose you are a traditional C lexer and you see the input:
+
+---------------------------------------------------------
+x = while;
+---------------------------------------------------------
+
+A traditional C lexer in this case will return the tokens:
+
+* +IDENTIFIER+ (x)
+* +EQUALS+
+* +WHILE+
+* +SEMICOLON+
+
+It treats "while" as a keyword, even though it is in a context where
+"while" doesn't make sense.  Of course, this is required by the C standard,
+since keywords cannot be variable names, but suppose we were dealing with
+a language that did not have this restriction.  What do we do?  Our traditional
+lexer design is too weak to return the token +WHILE+ in contexts where it makes
+sense and an +IDENTIFIER+ named "while" in contexts where an identifier is
+expected.  Another strategy will be required, adding complexity to the parser.
+
+Gazelle, on the other hand, can handle this situation just fine, because
+parsing and lexing are combined.  The key is that every GLA state knows what
+tokens are valid at this point in the input, so it can choose an IntFA that
+only recognizes the valid tokens.  In the above example, when a Gazelle
+parser/lexer reached +while+ in the input, the current GLA state would select
+an IntFA that recognizes +IDENTIFIER+ tokens (because they make sense here) but
+not a +WHILE+ keyword token (because it does not make sense here).  Therefore
+languages that allow keywords as variables names are easily and naturally
+supported.
+
+Of course, Gazelle also needs to support languages where keywords are not
+allowed to be variable names.  This can be easily achieved by making the
+regular expression for identifiers explicitly exclude all keywords.  This more
+explicitly describes the rules of the language anyway -- when a language
+specifications includes text like "variable names may not be any of these
+reserved words," you can express this directly to Gazelle by explicitly listing
+the patterns an identifier is not allowed to have.
+
+
+Character decoding DFA
+^^^^^^^^^^^^^^^^^^^^^^
+
+There is one final detail that is not handled by any of the previous layers:
+where do the characters come from that are fed into the IntFAs?  In the case of
+ASCII or other single-byte encodings, the answer is simple: the bytes _are_ the
+characters.  However, more and more programming languages are moving towards
+allowing their source to be in encodings other than ASCII, most commonly
+Unicode.  We need a character decoding step to handle the intracacies of
+multi-byte encodings.
+
+Many applications handle Unicode encodings such as UTF-8 without representing
+their character decoding stage as a DFA, so you may wonder why Gazelle takes
+this route.  The benefit of using a DFA is that it provides a way to sanely
+process partial characters.  If we are parsing text that is coming off the
+network, and the final byte of the buffer ends mid-character, what should we
+do?  We could drop it and re-process it later, but that requires either Gazelle
+or the application to store it for later re-processing.  Worse, it throws
+away the work we have already done making sense of this byte or bytes.
+By using a DFA, we can advance the state of the collective machine for every
+single byte of input, whether or not it is a full character.  When we
+are fed more bytes, we pick up exactly where we left off.
+
+It is also possible that introducing custom processing at this stage could
+provide an easy and efficient way to process very difficult language corner
+cases like C's trigraphs.
 
