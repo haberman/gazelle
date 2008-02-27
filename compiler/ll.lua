@@ -4,11 +4,23 @@
 
   ll.lua
 
-  Routines for building LL lookahead tables.
+  Routines for building LL lookahead automata.  We use automata instead
+  of tables because lookahead is almost always extremely sparse.  These
+  automata are referred to as GLA (Grammar Lookahead Automata), a term
+  coined by Terence Parr in his PhD thesis.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Though these GLAs are DFAs, it is not currently supported for them to
+  by cyclic.  This allows us to support LL(k) for fixed k, but not LL(*).
+  This may be expanded to LL(*) (ANTLR's algorithm) at some point in
+  the future.
+
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
+
+ERR_NOT_LL_FOR_GIVEN_K = 1
+ERR_NOT_LL_FOR_ANY_K = 2
+ERR_LEFT_RECURSIVE = 3
 
 function shallow_copy_table(t)
   local new_t = {}

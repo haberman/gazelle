@@ -3,7 +3,7 @@
 
   Gazelle: a system for building fast, reusable parsers
 
-  compile.lua
+  gzlc
 
   The top-level file for compiling an input grammar (written in a
   human-readable text format) into a compiled grammar in Bitcode.
@@ -23,6 +23,7 @@ require "minimize"
 
 -- lookahead calculation
 require "ll"
+require "intfa_combine"
 
 -- output generation
 require "bytecode"
@@ -137,148 +138,47 @@ write_verbose("\n")
 -- do lookahead calculations
 k = 2
 print_verbose(string.format("Doing LL(k) lookahead calculations (capped at k=%d)", k))
-status, err = pcall(compute_lookahead, grammar, k)
-if not status then
-  io.stderr:write(string.format("Error computing lookahead: %s\n", err))
-  os.exit(1)
-end
+-- status, err = pcall(compute_lookahead, grammar, k)
+-- if not status then
+--   io.stderr:write(string.format("Error computing lookahead: %s\n", err))
+--   os.exit(1)
+-- end
+compute_lookahead(grammar, k)
 
-print_verbose("Lookahead calculations complete.  Grammar is:")
-lookahead_hist = {}
-total_states = 0
-for nonterm, rtn in pairs(grammar) do
-  for state in each(rtn:states()) do
-    total_states = total_states + 1
-    if state.lookahead then
-      this_state_k = #state.lookahead[1][1]
-    else
-      this_state_k = 1
+if verbose then
+  print_verbose("Lookahead calculations complete.  Grammar is:")
+  lookahead_hist = {}
+  total_states = 0
+  for nonterm, rtn in pairs(grammar) do
+    for state in each(rtn:states()) do
+      total_states = total_states + 1
+      this_state_k = 0
+      if state.lookahead then
+        for triple in each(state.lookahead) do
+          local seq = unpack(triple)
+          if #seq > this_state_k then
+            this_state_k = #seq
+          end
+        end
+      end
+      lookahead_hist[this_state_k] = lookahead_hist[this_state_k] or 0
+      lookahead_hist[this_state_k] = lookahead_hist[this_state_k] + 1
     end
-    lookahead_hist[this_state_k] = lookahead_hist[this_state_k] or 0
-    lookahead_hist[this_state_k] = lookahead_hist[this_state_k] + 1
   end
-end
 
-for k, count in pairs(lookahead_hist) do
-  print_verbose(string.format("  %5.1f%% LL(%d)  (%d/%d states)", count*100/total_states, k, count, total_states))
+  for this_k = 0,k do
+    if lookahead_hist[this_k] then
+      local count = lookahead_hist[this_k]
+      print_verbose(string.format("  %5.1f%% LL(%d)  (%d/%d states)", count*100/total_states, this_k, count, total_states))
+    end
+  end
 end
 
 -- we now have everything figured out at the RTN level.  Now we just need
 -- to figure out how many IntFAs to generate, which terminals each one
 -- should handle, and generate/determinize/minimize those IntFAs.
+print_verbose("Combining lexer IntFAs...")
+intfas = intfa_combine(attributes.terminals, grammar)
 
---[[
-  -- First, determine what terminals (if any) conflict with each other.
-  -- In this context, "conflict" means that a string of characters can
-  -- be interpreted as one or more terminals.
-  local conflicts = {}
-  do
-    local nfas = {}
-    for name, terminal in pairs(attributes.terminals) do
-      print("Terminal: " .. name )
-      if type(terminal) == "string" then
-        terminal = fa.IntFA:new{string=terminal}
-      end
-      table.insert(nfas, {terminal, name})
-    end
-    local uber_dfa = nfas_to_dfa(nfas, true)
-    for state in each(uber_dfa:states()) do
-      if type(state.final) == "table" then  -- more than one terminal ended in this state
-        for term1 in each(state.final) do
-          for term2 in each(state.final) do
-            if term1 ~= term2 then
-              conflicts[term1] = conflicts[term1] or Set:new()
-              conflicts[term1]:add(term2)
-            end
-          end
-        end
-      end
-    end
-  end
-
-  -- For each state in the grammar, create (or reuse) a DFA to run
-  -- when we hit that state.
-  local dfas = {}
-
-  function has_conflicts(conflicts, dfa, terminals)
-    for term in each(terminals) do
-      if conflicts[term] then
-        for conflict in each(conflicts[term]) do
-          if dfa:contains(conflict) then
-            return true, term, conflict
-          end
-        end
-      end
-    end
-  end
-
-  for nonterm, rtn in pairs(grammar) do
-    -- print(nonterm)
-    -- print(rtn)
-    for state in each(rtn:states()) do
-      local terminals = Set:new()
-      for edge_val in state:transitions() do
-        if not fa.is_nonterm(edge_val) then
-          terminals:add(edge_val)
-        end
-      end
-
-      -- state.lookahead = compute_lookahead_for_state(nonterm, state, first, follow)
-
-      if has_conflicts(conflicts, terminals, terminals) then
-        local has_conflict, c1, c2 = has_conflicts(conflicts, terminals, terminals)
-        error(string.format("Can't build DFA inside %s, because terminals %s and %s conflict",
-                            nonterm, c1, c2))
-      end
-
-      if terminals:count() > 0 then
-        -- We now have a list of terminals we want to find when we are in this RTN
-        -- state.  Now get a DFA that will match all of them, either by creating
-        -- a new DFA or by finding an existing one that will work (without conflicting
-        -- with any of our terminals).
-        local found_dfa = false
-        for i, dfa in ipairs(dfas) do
-          -- will this dfa do?  it will if none of our terminals conflict with any of the
-          -- existing terminals in this dfa.
-          -- (we can probably compute this faster by pre-computing equivalence classes)
-          if not has_conflicts(conflicts, dfa, terminals) then
-            found_dfa = i
-            break
-          end
-        end
-
-        if found_dfa == false then
-          new_dfa = Set:new()
-          table.insert(dfas, new_dfa)
-          found_dfa = #dfas
-        end
-
-        -- add all the terminals for this state to the dfa we found
-        for term in each(terminals) do
-          dfas[found_dfa]:add(term)
-        end
-
-        state.dfa = found_dfa
-      end
-    end
-  end
-
-  local real_dfas = {}
-  for dfa in each(dfas) do
-    local nfas = {}
-    print(serialize(dfa))
-    for term in each(dfa) do
-      local target = attributes.terminals[term]
-      if type(target) == "string" then
-        target = fa.IntFA:new{string=target}
-      end
-      table.insert(nfas, {target, term})
-    end
-    local real_dfa = hopcroft_minimize(nfas_to_dfa(nfas), true)
-    table.insert(real_dfas, real_dfa)
-  end
-
-  return grammar, attributes, real_dfas
-]]--
 
 -- vim:et:sts=2:sw=2
