@@ -7,7 +7,7 @@
   Data structure for representing finite automata.  Both NFAs and DFAs
   can be represented using this class.
 
-  The base class (FA/FAState) has two child classes:
+  The base class (FA/FAState) has three child classes:
 
   - IntFA/IntFAState represents a nonrecursive FA that transitions
     on IntSets or Epsilon.  These represent the machines that recognize
@@ -17,8 +17,15 @@
     that is built to recognize context-free grammars.  These transition
     on strings, regexes, epsilon, or on another RTN.
 
+  - GLA/GLAState represents a lookahead automaton that represents
+    LL lookahead information.
+
   Either child class can be deterministic or nondeterministic.  The only
   difference is whether there are epsilons / redundant transtions.
+
+  This all needs to be refactored quite a bit, now that I have the insight
+  of understanding all the different ways NFAs and DFAs are used throughout
+  Gazelle.
 
   Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
 
@@ -244,6 +251,40 @@ end
 
 --[[--------------------------------------------------------------------
 
+  class GLA/GLAState: Classes for representing machines that represent
+  lookahead information.
+
+--------------------------------------------------------------------]]--
+
+GLA = FA:new()
+GLA.name = "GLA"
+function GLA:new_graph(init)
+  return GLA:new(init)
+end
+
+function GLA:new_state()
+  return GLAState:new()
+end
+
+function GLA:get_outgoing_edge_values(states)
+  local values = {}
+  for state in each(states) do
+    for edge_val, target_state, properties in state:transitions() do
+      if edge_val ~= fa.e then
+        table.insert(values, {edge_val, properties})
+      end
+    end
+  end
+  return values
+end
+
+
+GLAState = FAState:new()
+GLAState.name = "GLAState"
+
+
+--[[--------------------------------------------------------------------
+
   class RTN/RTNState: Classes for representing machines that represent
   context-free grammars.
 
@@ -277,9 +318,19 @@ RTNState.name = "RTNState"
 
 NonTerm = {name="NonTerm"}
 function NonTerm:new(name)
-  obj = newobject(self)
-  obj.name = name
-  return obj
+  -- keep a cache of nonterm objects, so that we always return the same object
+  -- for a given name.  This lets us compare nonterms for equality.
+  if not self.cache then
+    self.cache = {}
+  end
+
+  if not self.cache[name] then
+    obj = newobject(self)
+    obj.name = name
+    self.cache[name] = obj
+  end
+
+  return self.cache[name]
 end
 
 function is_nonterm(thing)

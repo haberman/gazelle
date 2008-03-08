@@ -104,6 +104,11 @@ end
 print_verbose(version)
 
 
+-- We need to generate and emit RTNs, GLAs, and IntFAs.  We work from the
+-- top down: RTNs are generated from parsing the grammar, GLAs are
+-- calculated from the RTNs by LL lookahead routines, and finally
+-- IntFAs are generated from the RTNs and GLAs.
+
 -- open and parse the grammar file
 
 print_verbose(string.format("Opening input file '%s'...", input_filename))
@@ -114,71 +119,26 @@ if not input_file then
 end
 
 print_verbose("Parsing grammar...")
-grammar, attributes = parse_grammar(CharStream:new(grm_str))
-nonterms = {}
-for k, _ in pairs(grammar) do table.insert(nonterms, k) end
+grammar = parse_grammar(CharStream:new(grm_str))
 
 -- make the RTNs in the grammar determistic and minimal
-
 write_verbose("Convering RTN NFAs to DFAs...")
-for nonterm in each(nonterms) do
-  grammar[nonterm] = nfa_to_dfa(grammar[nonterm])
-  write_verbose(".")
-end
-write_verbose("\n")
-
+grammar:determinize_rtns()
 write_verbose("Minimizing RTN DFAs...")
-for nonterm in each(nonterms) do
-  grammar[nonterm] = hopcroft_minimize(grammar[nonterm])
-  write_verbose(".")
-end
-write_verbose("\n")
+grammar:minimize_rtns()
 
-
--- do lookahead calculations
+-- Generate GLAs by doing lookahead calculations.
+-- This annotates every nontrivial state in the grammar with a GLA.
 k = 2
 print_verbose(string.format("Doing LL(k) lookahead calculations (capped at k=%d)", k))
--- status, err = pcall(compute_lookahead, grammar, k)
--- if not status then
---   io.stderr:write(string.format("Error computing lookahead: %s\n", err))
---   os.exit(1)
--- end
 compute_lookahead(grammar, k)
 
-if verbose then
-  print_verbose("Lookahead calculations complete.  Grammar is:")
-  lookahead_hist = {}
-  total_states = 0
-  for nonterm, rtn in pairs(grammar) do
-    for state in each(rtn:states()) do
-      total_states = total_states + 1
-      this_state_k = 0
-      if state.lookahead then
-        for triple in each(state.lookahead) do
-          local seq = unpack(triple)
-          if #seq > this_state_k then
-            this_state_k = #seq
-          end
-        end
-      end
-      lookahead_hist[this_state_k] = lookahead_hist[this_state_k] or 0
-      lookahead_hist[this_state_k] = lookahead_hist[this_state_k] + 1
-    end
-  end
-
-  for this_k = 0,k do
-    if lookahead_hist[this_k] then
-      local count = lookahead_hist[this_k]
-      print_verbose(string.format("  %5.1f%% LL(%d)  (%d/%d states)", count*100/total_states, this_k, count, total_states))
-    end
-  end
-end
 
 -- we now have everything figured out at the RTN level.  Now we just need
 -- to figure out how many IntFAs to generate, which terminals each one
 -- should handle, and generate/determinize/minimize those IntFAs.
-print_verbose("Combining lexer IntFAs...")
-intfas = intfa_combine(attributes.terminals, grammar)
+-- print_verbose("Combining lexer IntFAs...")
+-- intfas = intfa_combine(attributes.terminals, grammar)
 
 
 -- vim:et:sts=2:sw=2

@@ -1,0 +1,177 @@
+
+these are just notes now, will become unit tests:
+
+----
+
+This never terminates, which can be caught:
+
+s -> "X" s;
+
+----
+
+Left recursion is obviously a no-no, and can be easily caught
+during the lookahead stage:
+
+s -> (s "X")?
+
+----
+
+Left-recursion can also appear indirectly:
+
+s -> a;
+a -> s | "X";
+
+----
+
+This is ambiguous, can be caught in the lookahead stage by
+noticing that we arrive in the same state via different
+paths:
+
+a -> b | c;
+b -> c;
+c -> "X";
+
+----
+
+This is ambiguous for a reason similar to the above, but it's
+slightly harder to catch because the recursion stacks of the
+two paths don't differ.
+
+a -> b c "Y";
+b -> "X" ?;
+c -> "X" ?;
+
+
+----
+
+This is sort of like the above, and should be caught by the same
+sort of test.
+
+a -> (b | c) "Y";
+b -> "X";
+c -> "X";
+
+----
+
+Not ambiguous, but not LL(k), because we can't find a distinguishing
+token that correctly tells us to keep looping in b.  On the other
+hand, we can eliminate all other options (eg. returning from b) in
+LL(2) if we don't see EOF.  Maybe we should go there sometime.
+
+a -> b "X";
+b -> c*
+c -> "X";
+
+----
+
+Example from Grune and Jacobs, p.248: the grammar *is* strong-LL (I
+believe) but an error on the input sentence "AACABB" is detected later
+than full-LL would detect it:
+
+s -> "A" a "B" | "B" a "A";
+a -> ("C" s)?;
+
+----
+
+From Grune and Jacobs, p.255: a grammar that is full-LL(2) but not
+strong-LL(2):
+
+s -> "A" a "A" "A" | "B" a "B" "A";
+a -> "B"?;
+
+An interesting note about this example: it seems to me that this could
+be efficiently handled by Gazelle.  Here's how: we can easily see that
+"a" is not reached except as a child of "s", assuming we start with
+"s" (not sure if this is decidable in the general case).  Furthermore,
+if we look ahead far enough when we are still in "s" we can determine
+what prediction should be made while we are in "a".  If we encode that
+*series* of transitions in the GLA for the beginning of "s", we can
+handle this case.
+
+It'd be a lot of tricky work though, and honestly probably not worth
+it (unless we see a real-world example that looks an awful lot like
+this)
+
+----
+
+LL(*) but not LL(k), so we error for now:
+
+s -> "Z"* "X" | "Z"* "Y";
+
+----
+
+Is detected as ambiguous when follow information is used properly:
+
+s -> a "X"?;
+a -> "X"?;
+
+----
+
+*Is* LL(k), when follow information is used properly:
+
+s -> a "X";
+a -> "Y"?;
+
+----
+
+Is properly detected as ambiguous when follow information is used
+properly:
+
+s -> a "X"*;
+s -> "X"*;
+
+----
+
+This is ambiguous (by virtue of allowing a to repeat arbitrarily
+anywhere) and should be caught.
+
+s -> a*;
+a -> "X"?;
+
+----
+
+This is slightly tricky, but it is only LL(1), so we should be able
+to handle it.
+
+s -> "X" s?;
+
+----
+
+Ambiguous.
+
+s -> a? a?;
+a -> "X";
+
+----
+
+Totally legit LL(3), which means that we can't throw things out only because
+an RTN path enters the same state twice.
+
+s -> a a "Y" | a a "Z";
+a -> "X";
+
+----
+
+Terence Parr's demonstration grammar for explaining why his LL(*)
+algorithm needs a stack.  We should be able to handle it, since
+it's LL(k).  It will, however, require that we know how to deal
+with EOF in lookahead.
+
+s -> a "A" | a "B";
+a -> "A"?
+
+----
+
+Should be correctly detected as ambiguous.
+
+s -> a b;
+a -> "X"*;
+b -> "X"*;
+
+----
+
+??
+
+s -> a? ("A" | "B") a;
+a -> "B" *
+

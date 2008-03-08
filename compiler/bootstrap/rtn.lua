@@ -13,6 +13,7 @@
 
 require "misc"
 require "fa"
+require "grammar"
 
 require "bootstrap/regex_parser"
 
@@ -85,53 +86,51 @@ CharStream = {}
 
 -- class TokenStream
 
--- Parse the grammar file given in +chars+ and return:
---
---   grammar: a table of "nonterm name" -> RTN pairs.
---            the RTNs are raw NFAs -- they have not
---            been converted to DFAs or minimized.
---
---   attributes: other grammar information, specifically
---      - terminals: a list of terminal names (strings)
---      - ignore: a map of "nonterm name" -> Set of terminals to ignore
---      - slot_counts: a map of "nonterm name" -> # of slots
+-- Parse the grammar file given in +chars+ and return a Grammar object.
 function parse_grammar(chars)
   chars:ignore("whitespace")
-  local grammar = {}
+  local grammar = Grammar:new()
   local attributes = {terminals={}, ignore={}, slot_counts={}, regex_text={}}
   while not chars:eof() do
     if chars:match(" *@start") then
       chars:consume_pattern(" *@start")
-      attributes.start = parse_nonterm(chars).name;
+      grammar.start = parse_nonterm(chars).name;
       chars:consume(";")
     elseif chars:match(" *@ignore") then
-      chars:consume_pattern(" *@ignore")
-      local what_to_ignore = parse_nonterm(chars).name
-      local in_ = parse_nonterm(chars)
-      local nonterms = {parse_nonterm(chars).name}
-      while chars:match(",") do
-        local comma = chars:consume(",")
-        table.insert(nonterms, parse_nonterm(chars).name)
+      local ignore = parse_ignore(chars)
+      for nonterm in each(ignore.nonterms) do
+        grammar:add_ignore(nonterm, ignore.what_to_ignore)
       end
-      for nonterm in each(nonterms) do
-        attributes.ignore[nonterm] = attributes.ignore[nonterm] or Set:new()
-        attributes.ignore[nonterm]:add(what_to_ignore)
-      end
-      chars:consume(";")
     else
       stmt = parse_statement(chars, attributes)
       if not stmt then
         break
       elseif stmt.nonterm then
         stmt.derivations.final.final = "Final"
-        grammar[stmt.nonterm.name] = stmt.derivations
-        grammar[stmt.nonterm.name].name = stmt.nonterm.name
+        grammar:add_nonterm(stmt.nonterm.name, stmt.derivations, stmt.slot_count)
       elseif stmt.term then
-        attributes.terminals[stmt.term] = stmt.regex
+        grammar:add_terminal(stmt.term, stmt.regex)
       end
     end
   end
-  return grammar, attributes
+
+  grammar:bind_ignore_list()
+
+  return grammar
+end
+
+function parse_ignore(chars)
+  chars:consume_pattern(" *@ignore")
+  local ret = {}
+  ret.what_to_ignore = parse_nonterm(chars).name
+  local in_ = parse_nonterm(chars)
+  ret.nonterms = {parse_nonterm(chars).name}
+  while chars:match(",") do
+    local comma = chars:consume(",")
+    table.insert(ret.nonterms, parse_nonterm(chars).name)
+  end
+  chars:consume(";")
+  return ret
 end
 
 function parse_statement(chars, attributes)
@@ -146,7 +145,7 @@ function parse_statement(chars, attributes)
     chars:consume("->")
     attributes.slotnum = 1
     ret.derivations = parse_derivations(chars, attributes)
-    attributes.slot_counts[ret.nonterm.name] = attributes.slotnum
+    ret.slot_count = attributes.slotnum
   else
     ret.term = ident.name
     chars:consume(":")

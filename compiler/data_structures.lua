@@ -147,6 +147,79 @@ Set = {name="Set"}
   end
 -- class Set
 
+-- OrderedSet
+OrderedSet = {name="OrderedSet"}
+  function OrderedSet:new(init)
+    local obj = newobject(self)
+    obj.element_offsets = {}
+    obj.elements = {}
+    if init then
+      for element in each(init) do
+        self:add(element)
+      end
+    end
+    return obj
+  end
+
+  function OrderedSet:add(elem)
+    if not self.element_offsets[elem] then
+      self.element_offsets[elem] = #self.elements
+      table.insert(self.element, elem)
+    end
+  end
+
+  function OrderedSet:offset_of(elem)
+    return self.element_offsets[elem]
+  end
+
+  function OrderedSet:each()
+    local i = 0
+    return function ()
+      i = i + 1
+      if self.elements[i] then
+        return self.elements[i]
+      else
+        return nil
+      end
+    end
+  end
+
+-- OrderedMap
+OrderedMap = {name="OrderedMap"}
+  function OrderedMap:new()
+    local obj = newobject(self)
+    obj.key_offsets = {}
+    obj.elements = {}
+    return obj
+  end
+
+  function OrderedMap:add(key, value)
+    if not self.key_offsets[key] then
+      self.key_offsets[key] = #self.elements
+      table.insert(self.elements, {key, value})
+    end
+  end
+
+  function OrderedMap:get(key)
+    return self.elements[self.key_offsets[key]][2]
+  end
+
+  function OrderedMap:offset_of_key(elem)
+    return self.key_offsets[elem]
+  end
+
+  function OrderedMap:each()
+    local i = 0
+    return function ()
+      i = i + 1
+      if self.elements[i] then
+        return unpack(self.elements[i])
+      else
+        return nil
+      end
+    end
+  end
+
 -- Range
 -- The Range is *inclusive* at both ends.
 Range = {name="Range"}
