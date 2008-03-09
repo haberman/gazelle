@@ -1,0 +1,214 @@
+--[[--------------------------------------------------------------------
+
+  Gazelle: a system for building fast, reusable parsers
+
+  grammar.lua
+
+  This is the top-level data structure representing a Gazelle grammar.
+
+  It contains all DFAs for all levels of the grammar, as well as all
+  metadata about the grammar, like what the start symbol is and
+  what terminals are ignored within what rules.
+
+  It is created and initially populated by the grammar parser.  The
+  parser adds RTNs for each rule and IntFAs for each terminal, as well
+  as metadata explicitly or implicitly contained in the source file.
+
+  It is annotated with lookahead information in the form of GLAs by
+  the LL lookahead calculation.
+
+  The IntFAs for each terminal are combined into the grammar's master
+  IntFAs by the IntFA-combining step.
+
+  Finally, it is written out to bytecode by the bytecode emitting step.
+
+  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
+
+require "data_structures"
+
+Grammar = {name="Grammar"}
+
+function Grammar:new()
+  local obj = newobject(self)
+  obj.rtns = OrderedMap:new()
+  obj.terminals = {}
+  obj.master_intfas = Set:new()
+  obj.start = nil  -- what rule the entire grammar starts on
+
+  -- A map of {nonterm_name -> set of terminals to ignore}.
+  -- This will ultimately be stored as an attribute of the rtns themselves,
+  -- but we want to support @ignore directives that occur before the
+  -- corresponding rule definition, so we'll bind this list at the end.
+  obj.ignore = {}
+  return obj
+end
+
+-- Cause term_to_ignore to be ignored when parsing nonterm.  Nonterm and
+-- term_to_ignore are both strings referring to the name of a nonterm and
+-- terminal, respectively.  This can be called before either the nonterm
+-- or terminal have been defined.
+function Grammar:add_ignore(nonterm, term_to_ignore)
+  if not self.ignore[nonterm] then
+    self.ignore[nonterm] = Set:new()
+  end
+  self.ignore[nonterm]:add(term_to_ignore)
+end
+
+-- Add a nonterminal and its associated RTN to the grammar.
+-- TODO: how should redefinition be caught and warned/errored?
+function Grammar:add_nonterm(name, rtn, slot_count)
+  rtn.name = name
+  rtn.slot_count = slot_count
+  for state in each(rtn:states()) do
+    state.rtn = rtn
+  end
+  self.rtns:add(name, rtn)
+end
+
+-- Add a terminal and its associated IntFA to the grammar.
+-- TODO: how should redefinition be caught and warned/errored?
+function Grammar:add_terminal(name, intfa)
+  self.terminals[name] = intfa
+end
+
+-- Once all nonterminals and ignore declarations have been made,
+-- this binds the two together.  This is the point where we will
+-- error if the statement referred to terminals or nonterms that are
+-- never defined.
+-- TODO: how should errors be caught and warned/errored?
+function Grammar:bind_ignore_list()
+  for nonterm, ignore_terms in pairs(self.ignore) do
+    local rtn = self.rtns:get(nonterm)
+    rtn.ignore = ignore_terms:to_array()
+    table.sort(rtn.ignore)
+  end
+end
+
+function Grammar:determinize_rtns()
+  local new_rtns = OrderedMap:new()
+  for name, rtn in each(self.rtns) do
+    new_rtns:add(name, nfa_to_dfa(rtn))
+  end
+  self.rtns = new_rtns
+end
+
+function Grammar:minimize_rtns()
+  local new_rtns = OrderedMap:new()
+  for name, rtn in each(self.rtns) do
+    new_rtns:add(name, hopcroft_minimize(rtn))
+  end
+  self.rtns = new_rtns
+end
+
+--[[--------------------------------------------------------------------
+
+  The remaining methods are for linearizing all the graph-like data
+  structures into an ordered form, in preparation for emitting them to
+  an output format like bytecode.
+
+--------------------------------------------------------------------]]--
+
+-- Returns an ordered set that contains all strings needed by any part
+-- of the grammar as it currently stands.
+function Grammar:get_strings()
+  local strings = Set:new()
+
+  -- add the names of all the terminals
+  for term, _ in pairs(attributes.terminals) do
+    strings:add(term)
+  end
+
+  -- add the names of the rtns, and of named edges with the rtns.
+  for name, rtn in each(grammar.rtns) do
+    strings:add(name)
+
+    for rtn_state in each(rtn:states()) do
+      for edge_val, target_state, properties in rtn_state:transitions() do
+        if properties then
+          strings:add(properties.name)
+        end
+      end
+    end
+  end
+
+  -- sort the strings for deterministic output
+  strings = strings:to_array()
+  table.sort(strings)
+  strings_ordered_set = OrderedSet:new()
+  for string in each(strings) do
+    strings_ordered_set:add(string)
+  end
+
+  return strings_ordered_set
+end
+
+
+-- Creates and returns a list of all the RTNs, states, and transitions in
+-- a particular and stable order, ready for emitting to the outside world.
+-- The RTNs themselves are returned in the order they were defined.
+--
+-- Returns:
+--   OrderedMap: {rtn_name -> {
+--     states=OrderedSet {RTNState},
+--     transitions={RTNState -> {list of {edge_val, target_state, properties}}
+--   }
+function Grammar:get_flattened_rtn_list()
+  local rtns = OrderedMap:new()
+
+  -- create each RTN with a list of states
+  for name, rtn in self.rtns:each() do
+
+    -- order states such that the start state is emitted first.
+    -- TODO; make this completely stable.
+    local states = rtn:states()
+    states:remove(rtn.start)
+    states = states:to_array()
+    table.insert(states, 1, rtn.start)
+    states = OrderedSet:new(states)
+
+    rtns:add(name, {states=states})
+  end
+
+  -- create a list of transitions for every state
+  for name, rtn in each(rtns) do
+    for state in each(rtn.states) do
+      transitions = {}
+      for edge_val, target_state, properties in state:transitions() do
+        table.insert(transitions, {edge_val, target_state, properties})
+      end
+
+      -- sort RTN transitions thusly:
+      -- 1. terminal transitions come before nonterminal transitions
+      -- 2. terminal transitions are sorted by the low integer of the range
+      -- 3. nonterminal transitions are sorted by the name of the nonterminal
+      -- 4. transitions with the same edge value are sorted by their order
+      --    in the list of states (which is stable) (TODO: no it's not, yet)
+      sort_func = function (a, b)
+        if not is_nonterm(a[1]) and is_nonterm(b[1]) then
+          return true
+        elseif is_nonterm(a[1]) and not is_nonterm(b[1]) then
+          return false
+        elseif is_nonterm(a[1]) then
+          if a[1] == b[1] then
+            return rtn.states:offset_of(a[2]) < rtn.states:offset_of(b[2])
+          else
+            return a[1] < b[1]
+          end
+        else
+          if a[1].low == b[1].low then
+            return rtn.states:offset_of(a[2]) < rtn.states:offset_of(b[2])
+          else
+            return a[1].low < b[1].low
+          end
+        end
+      end
+      table.sort(transitions, sort_func)
+
+      rtn.transitions[state] = transitions
+    end
+  end
+end
+
+-- vim:et:sts=2:sw=2
