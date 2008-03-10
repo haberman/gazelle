@@ -3,9 +3,20 @@ these are just notes now, will become unit tests:
 
 ----
 
-This never terminates, which can be caught:
+This never terminates.  We could catch this, but it would require
+doing extra analysis on top of LL lookahead, because there are
+no decisions to make in this grammar, and therefore we
+normally would not investigate it.
 
 s -> "X" s;
+
+----
+
+This terminates and is unambiguous, but we re-enter a state when
+following alt1, which will currently cause us to abort.  Let's
+leave this for now, and revisit when/if we do LL(*).
+
+s -> "X" s | "X" "Y";
 
 ----
 
@@ -92,11 +103,23 @@ It'd be a lot of tricky work though, and honestly probably not worth
 it (unless we see a real-world example that looks an awful lot like
 this)
 
+
 ----
 
-LL(*) but not LL(k), so we error for now:
+LL(*) but not LL(k) so we error for now:
 
-s -> "Z"* "X" | "Z"* "Y";
+s -> a "X" | a "Y";
+a -> "Z"*
+
+----
+
+Not LL(k).  Terence Parr says in "The Definitive ANTLR Reference" (p.268)
+that this is not LL(*) either, but I question that, mainly because
+I can easily construct a proper GLA -- I would be surprised if a
+general algorithm can't calculate it also:
+
+s -> a "X" | a "Y";
+a -> ("Z" a)?
 
 ----
 
@@ -162,11 +185,45 @@ a -> "A"?
 
 ----
 
+Simplest possible case of ambiguity.
+
+s -> "X" | "X";
+
+----
+
+Also ambiguous:
+
+s -> "X"? | "X";
+
+----
+
+Also ambiguous:
+
+s -> "X"? | "X"?;
+
+----
+
 Should be correctly detected as ambiguous.
+Also not LL(k).
 
 s -> a b;
 a -> "X"*;
 b -> "X"*;
+
+----
+
+Not ambiguous.  If we supported "else" style ambiguity resolution
+we could resolve this with non-cyclic GLAs.  eg. "well, we can't
+affirmatively detect that we should take option 1, but we can
+rule out everything else in LL(2)"
+
+s -> "X"* | "X" "Y";
+
+----
+
+We need an honest-to-god cyclic GLA to resolve this one:
+
+s -> "X"* "Y" | "X"* "Z";
 
 ----
 

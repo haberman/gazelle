@@ -62,6 +62,10 @@ Stack = {name="Stack"}
     return self.stack[#self.stack]
   end
 
+  function Stack:isempty()
+    return #self.stack > 0
+  end
+
   function Stack:contains(elem)
     for e in each(self.stack) do
       if elem == e then

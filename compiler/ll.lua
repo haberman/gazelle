@@ -113,6 +113,56 @@ function get_follow_states(grammar)
   return follow_states
 end
 
+Path = {name="Path"}
+  function Path:new(start_state, predict_edge_val, predict_dest_state)
+    local obj = newobject(self)
+    obj.stack = Stack:new()
+    obj.current_state = start_state
+    obj.seen_states = Set:new()
+    obj.seen_states:add(obj.current_state)
+    obj.predict_edge_val = predict_edge_val
+    obj.predict_dest_state = predict_dest_state
+    obj.terms = {}
+    return obj
+  end
+
+  function Path:enter_rule(start, return_to)
+    local new_path = self:dup()
+    new_path.stack:push({return_to, new_path.seen_states:dup()})
+    new_path.seen_states:add(start)
+    new_path.current_state = start
+    return new_path
+  end
+
+  function Path:return_from_rule()
+    if self.stack:isempty() then
+      obj.seen_states = Set:new()
+      return nil
+    else
+      local new_path = self:dup()
+      local state
+      state, new_path.seen_states = unpack(new_path.stack:pop())
+      new_path.current_state = state
+      return state, new_path
+    end
+  end
+
+  function Path:enter_state(term, state)
+    local new_path = self:dup()
+    new_path.seen_states:add(state)
+    new_path.current_state = state
+    table.insert(new_path.terms, term)
+    return new_path
+  end
+
+  function Path:have_seen_state(state)
+    return self.seen_states:contains(state)
+  end
+
+  function PathInfo:dup()
+    -- TODO
+  end
+
 
 --[[--------------------------------------------------------------------
 
@@ -123,30 +173,37 @@ end
 --------------------------------------------------------------------]]--
 
 function construct_gla(state, grammar, follow_states)
-  local gla = GLA:new(get_rtn_state_closure({[state.start]={state.rtn.name}}))
-
   -- Each GLA state tracks the set of cumulative RTN paths that are
-  -- represented by this state.  Each RTN path is stored as a
-  -- dictionary entry:
-  --
-  --   {RTN state -> {RTN stack, seen RTN states, predicted alt}}
-  --
-  -- No GLA state can have the same RTN state by two different paths;
-  -- that is by defintion ambiguous.
-  local queue = Queue:new(gla.start)
+  -- represented by this state.
+  local initial_paths = {}
+  for edge_val, dest_state in state:transitions() do
+    local path = Path:new(state, edge_val, dest_state)
+    if fa.is_nonterm(edge_val) then
+      path = path:enter_rule(grammar.rtns:get(edge_val.name).start, dest_state)
+    end
+    table.insert(initial_paths, path)
+  end
+
+  state.gla = GLA:new(get_rtn_state_closure(initial_paths, grammar, follow_states))
+
+  local queue = Queue:new(state.gla.start)
 
   while not queue:isempty() do
     local gla_state = queue:dequeue()
-    for edge_val in each(get_outgoing_term_edges(gla_state.rtn_states)) do
-      local dest_states = get_dest_states(gla_state.rtn_states, edge_val)
-      dest_states = get_rtn_state_closure(dest_states)
+    check_for_ambiguity(gla_state)
+
+    for edge_val in each(get_outgoing_term_edges(gla_state.rtn_paths)) do
+      local dest_states = get_dest_states(gla_state.rtn_paths, edge_val)
+      dest_states = get_rtn_state_closure(dest_states, grammar, follow_states)
+
       local new_gla_state = GLAState:new(dest_states)
       gla_state:add_transition(edge_val, new_gla_state)
 
-      if new_gla_state:unique_predicted_alternative() then
+      local alt = get_unique_predicted_alternative(new_gla_state)
+      if alt then
         -- this DFA path has uniquely predicted an alternative -- set the
         -- state final and stop exploring this path
-        new_gla_state.final = new_gla_state:unique_predicted_alternative()
+        new_gla_state.final = alt
       else
         -- this state is still ambiguous about what rtn transition to take --
         -- explore it further
@@ -159,18 +216,67 @@ end
 
 --[[--------------------------------------------------------------------
 
-  get_outgoing_term_edges(rtn_states): Get a set of terminals that
+  check_for_ambiguity(gla_state): If for any string of terminals
+  (which is what this GLA state represents) we have more than one
+  RTN path which has arrived at the final state for the rule we
+  started from, we have found an ambiguity.
+
+  For example, in the grammar s -> "X" | "X", we will arrive at
+  a GLA state after following the terminal "X" that has two distinct
+  paths that both complete s.  This is ambiguous and should error.
+
+--------------------------------------------------------------------]]--
+
+function check_for_ambiguity(gla_state)
+  completed_paths = {}
+  for path in each(gla_state.rtn_paths) do
+    if path.current_state.final and path.stack:isempty() then
+      table.insert(completed_paths, path)
+    end
+  end
+
+  if #completed_paths > 1 then
+    error("Ambiguous grammar!")
+  end
+end
+
+
+--[[--------------------------------------------------------------------
+
+  get_unique_predicted_alternative(gla_state): If all the RTN paths
+  that arrive at this GLA state predict the same alternative, return
+  it.  Otherwise return nil.
+
+--------------------------------------------------------------------]]--
+
+function get_unique_predicted_alternative(gla_state)
+  local first_path = gla_state.rtn_paths[1]
+  local edge, state = first_path.predict_edge_val, first_path.predict_dest_state
+
+  for path in each(gla_state.rtn_paths) do
+    if path.predict_edge_val ~= edge or path.predict_dest_state ~= state then
+      return nil
+    end
+  end
+
+  return {edge, state}
+end
+
+
+--[[--------------------------------------------------------------------
+
+  get_outgoing_term_edges(rtn_paths): Get a set of terminals that
   represent outgoing transitions from this set of RTN states.  This
   represents the set of terminals that will lead out of this GLA
   state.
 
 --------------------------------------------------------------------]]--
 
-function get_outgoing_term_edges(rtn_states)
+function get_outgoing_term_edges(rtn_paths)
   local edges = Set:new()
 
-  for state, _ in pairs(rtn_states) do
-    for edge_val in state:transitions() do
+  for path in each(rtn_paths) do
+    for edge_val in path.current_state:transitions() do
       if not fa.is_nonterm(edge_val) then
         edges:add(edge_val)
       end
@@ -183,26 +289,18 @@ end
 
 --[[--------------------------------------------------------------------
 
-  get_dest_states(rtn_states, edge_val): Given the set of RTN states
+  get_dest_states(rtn_paths, edge_val): Given the set of RTN states
   we are currently in, and a terminal transition value, return the
   list of RTN states we will be in after transitioning on this terminal.
 
 --------------------------------------------------------------------]]--
 
-function get_dest_states(rtn_states, edge_val)
+function get_dest_states(rtn_paths, edge_val)
   local dest_states = {}
 
-  for state, state_info in pairs(rtn_states) do
-    for dest_state in each(state:transitions_for(edge_val, "ANY")) do
-      local new_state_info = {state_info[1], state_info[2], Set:new(state_info[3])}
-      if dest_states[dest_state] then
-        -- Two different RTN paths have converged on the same state
-        -- for the same input.  You can trigger this error with the grammar:
-        --   s -> a | b;
-        --   a -> b;
-        --   b -> "X";
-        error("Ambiguous grammar!")
-      elseif new_state_info[3]:contains(dest_state) then
+  for path in each(rtn_paths) do
+    for dest_state in each(path.current_state:transitions_for(edge_val, "ANY")) do
+      if path:have_seen_state(dest_state) then
         -- an RTN path has created a cycle within itself.  This is the sort
         -- of thing that could possibly be recognized with LL(*) if we
         -- supported it.  You can trigger this error with the grammar:
@@ -210,8 +308,8 @@ function get_dest_states(rtn_states, edge_val)
         --  s -> "Z"* "X" | "Z"* "Y";
         error("Non-LL(k) grammar!")
       else
-        new_state_info[3]:add(dest_state)
-        dest_states[dest_state] = new_state_info
+        table.insert(dest_states, path:enter_state(dest_state))
+      end
     end
   end
 
@@ -229,62 +327,40 @@ end
 
 --------------------------------------------------------------------]]--
 
-function get_rtn_state_closure(rtn_states, follow_states)
-  local closure_states = {}
+function get_rtn_state_closure(rtn_paths, follow_states)
+  local closure_paths = {}
   local queue = Queue:new()
 
-  for state, triple in pairs(rtn_states) do
-    queue:enqueue({state, triple})
+  for path in each(rtn_paths) do
+    queue:enqueue(path)
   end
 
   while not queue:isempty() do
-    local state, triple = unpack(queue:dequeue())
-    local stack, seen_states, predicted_alt = unpack(triple)
-    if closure_states[state] then
-      -- Two paths converge on the same state, when evaluating epislon
-      -- transitions.  The easiest way to trigger this is with
-      -- left-recursion:
-      --   s -> (s "X")?
-      --
-      -- I haven't convinced myself for sure whether there are
-      -- other ways to trigger this.
-      error("grammar error, probably left-recursion")
-    end
-    closure_states[state] = triple
+    local path = unpack(queue:dequeue())
+    table.insert(closure_paths, path)
 
-    if state.final then
-      if #stack > 0 then
-        local popped_stack = stack:dup()
-      else
-        for upstate in each(follow_states[popped_stack:pop]) do
-          -- what are corner cases here with seen_states?
-          queue:enqueue({upstate, {popped_stack, , predicted_alt}})
+    for edge_val, dest_state in path.current_state:transitions() do
+      if fa.is_nonterm(edge_val) then
+        local subrule_start = grammar.rtns.get(edge_val.name).start
+        if path:have_seen_state(subrule_start) then
+          error("Cyclic grammar!")
         end
 
+        local new_path = path:enter_rule(subrule_start, dest_state)
+        queue:enqueue(new_path)
       end
     end
 
+    if path.current_state.final then
+      local state, new_path = path:return_from_rule()
+      if new_path:have_seen_state(state) then
+        error("Cyclic grammar!")
+      end
+      queue:enqueue(new_path)
+    end
   end
-end
 
-  --   {RTN state -> {RTN stack, seen RTN states, predicted alt}}
-
-function get_rtn_state_closure_dfs(closure, closure_search_stack,
-                                   state, stack, seen_states, alt)
-  if closure_search_stack:contains(state) then
-    -- We have encountered a loop within an epsilon-only path.
-    -- This can occur in a few different situations:
-    --   - left-recursion like: s -> (s "X")?;
-    --   - ambiguous constructs like: s -> a*; a -> "X"?;
-    --
-    -- TODO: return the path of states that loops, for better
-    -- error reporting.
-    error("loop within an epsilon-only path!")
-  elseif seen_states:contains(state) then
-    -- An epsilon path causes us to re-enter a state that we were
-    -- already in earlier on this path.
-  if closure[state] then
-  end
+  return closure_paths
 end
 
 -- vim:et:sts=2:sw=2
