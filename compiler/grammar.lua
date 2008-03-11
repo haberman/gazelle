@@ -86,10 +86,20 @@ function Grammar:bind_ignore_list()
   end
 end
 
+function copy_attributes(rtn, new_rtn)
+  new_rtn.name = rtn.name
+  new_rtn.slot_count = rtn.slot_count
+  for state in each(new_rtn:states()) do
+    state.rtn = new_rtn
+  end
+end
+
 function Grammar:determinize_rtns()
   local new_rtns = OrderedMap:new()
   for name, rtn in each(self.rtns) do
-    new_rtns:add(name, nfa_to_dfa(rtn))
+    local new_rtn = nfa_to_dfa(rtn)
+    copy_attributes(rtn, new_rtn)
+    new_rtns:add(name, new_rtn)
   end
   self.rtns = new_rtns
 end
@@ -97,7 +107,9 @@ end
 function Grammar:minimize_rtns()
   local new_rtns = OrderedMap:new()
   for name, rtn in each(self.rtns) do
-    new_rtns:add(name, hopcroft_minimize(rtn))
+    local new_rtn = hopcroft_minimize(rtn)
+    copy_attributes(rtn, new_rtn)
+    new_rtns:add(name, new_rtn)
   end
   self.rtns = new_rtns
 end

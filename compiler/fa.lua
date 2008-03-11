@@ -281,6 +281,10 @@ end
 
 GLAState = FAState:new()
 GLAState.name = "GLAState"
+function GLAState:new(paths)
+  local obj = FAState:new()
+  obj.rtn_paths = paths
+end
 
 
 --[[--------------------------------------------------------------------

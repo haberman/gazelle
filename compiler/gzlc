@@ -129,9 +129,8 @@ grammar:minimize_rtns()
 
 -- Generate GLAs by doing lookahead calculations.
 -- This annotates every nontrivial state in the grammar with a GLA.
-k = 2
-print_verbose(string.format("Doing LL(k) lookahead calculations (capped at k=%d)", k))
-compute_lookahead(grammar, k)
+print_verbose("Doing LL(k) lookahead calculations...")
+compute_lookahead(grammar)
 
 
 -- we now have everything figured out at the RTN level.  Now we just need

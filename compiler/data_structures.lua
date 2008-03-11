@@ -63,7 +63,13 @@ Stack = {name="Stack"}
   end
 
   function Stack:isempty()
-    return #self.stack > 0
+    return #self.stack == 0
+  end
+
+  function Stack:dup()
+    local new_stack = newobject(Stack)
+    new_stack.stack = table_shallow_copy(self.stack)
+    return new_stack
   end
 
   function Stack:contains(elem)
@@ -128,6 +134,12 @@ Set = {name="Set"}
 
   function Set:isempty()
     return self:count() == 0
+  end
+
+  function Set:dup()
+    local new_set = newobject(Set)
+    new_set.elements = table_shallow_copy(self.elements)
+    return new_set
   end
 
   function Set:count()
@@ -199,8 +211,8 @@ OrderedMap = {name="OrderedMap"}
 
   function OrderedMap:add(key, value)
     if not self.key_offsets[key] then
-      self.key_offsets[key] = #self.elements
       table.insert(self.elements, {key, value})
+      self.key_offsets[key] = #self.elements
     end
   end
 

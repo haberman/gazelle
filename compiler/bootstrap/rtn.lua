@@ -145,7 +145,7 @@ function parse_statement(chars, attributes)
     chars:consume("->")
     attributes.slotnum = 1
     ret.derivations = parse_derivations(chars, attributes)
-    ret.slot_count = attributes.slotnum
+    ret.slot_count = attributes.slotnum - 1
   else
     ret.term = ident.name
     chars:consume(":")

@@ -41,6 +41,14 @@ function table_shallow_eql(tbl1, tbl2)
   return true
 end
 
+function table_shallow_copy(t)
+  local new_t = {}
+  for k, v in pairs(t) do
+    new_t[k] = v
+  end
+  return new_t
+end
+
 -- traverses a graph of some sort -- caller provides a function that gives
 -- children of the current node.
 function breadth_first_traversal(obj, children_func)

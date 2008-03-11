@@ -23,6 +23,8 @@
 
 --------------------------------------------------------------------]]--
 
+require "fa"
+
 
 --[[--------------------------------------------------------------------
 
@@ -60,7 +62,7 @@ function get_nontrivial_states(grammar)
 
       if state.final and state:num_transitions() > 0 then
         is_trivial = false
-      else
+      end
 
       for edge_val in state:transitions() do
         if fa.is_nonterm(edge_val) then
@@ -113,6 +115,16 @@ function get_follow_states(grammar)
   return follow_states
 end
 
+
+--[[--------------------------------------------------------------------
+
+  class Path: objects represent a path through various RTN states
+  of the grammar.  It is used for the NFA-to-DFA construction, because
+  we need to track information about the path leading up to each
+  NFA state.
+
+--------------------------------------------------------------------]]--
+
 Path = {name="Path"}
   function Path:new(start_state, predict_edge_val, predict_dest_state)
     local obj = newobject(self)
@@ -136,7 +148,7 @@ Path = {name="Path"}
 
   function Path:return_from_rule()
     if self.stack:isempty() then
-      obj.seen_states = Set:new()
+      self.seen_states = Set:new()
       return nil
     else
       local new_path = self:dup()
@@ -159,8 +171,15 @@ Path = {name="Path"}
     return self.seen_states:contains(state)
   end
 
-  function PathInfo:dup()
-    -- TODO
+  function Path:dup()
+    local new_path = newobject(Path)
+    new_path.stack = self.stack:dup()
+    new_path.seen_states = self.seen_states:dup()
+    new_path.terms = table_shallow_copy(self.terms)
+    new_path.current_state = self.current_state
+    new_path.predict_edge_val = self.predict_edge_val
+    new_path.predict_dest_state = predict_dest_state
+    return new_path
   end
 
 
@@ -184,7 +203,7 @@ function construct_gla(state, grammar, follow_states)
     table.insert(initial_paths, path)
   end
 
-  state.gla = GLA:new(get_rtn_state_closure(initial_paths, grammar, follow_states))
+  state.gla = fa.GLA:new(get_rtn_state_closure(initial_paths, grammar, follow_states))
 
   local queue = Queue:new(state.gla.start)
 
@@ -193,10 +212,10 @@ function construct_gla(state, grammar, follow_states)
     check_for_ambiguity(gla_state)
 
     for edge_val in each(get_outgoing_term_edges(gla_state.rtn_paths)) do
-      local dest_states = get_dest_states(gla_state.rtn_paths, edge_val)
-      dest_states = get_rtn_state_closure(dest_states, grammar, follow_states)
+      local paths = get_dest_states(gla_state.rtn_paths, edge_val)
+      paths = get_rtn_state_closure(paths, grammar, follow_states)
 
-      local new_gla_state = GLAState:new(dest_states)
+      local new_gla_state = GLAState:new(paths)
       gla_state:add_transition(edge_val, new_gla_state)
 
       local alt = get_unique_predicted_alternative(new_gla_state)
@@ -216,7 +235,7 @@ end
 
 --[[--------------------------------------------------------------------
 
-  check_for_ambiguity(gla_state): If for any string of terminals
+  check_for_ambiguity(gla_state): If for any series of terminals
   (which is what this GLA state represents) we have more than one
   RTN path which has arrived at the final state for the rule we
   started from, we have found an ambiguity.
@@ -281,6 +300,13 @@ function get_outgoing_term_edges(rtn_paths)
         edges:add(edge_val)
       end
     end
+
+    -- add once we decide how to represent EOF
+    --
+    -- local state = path.current_state
+    -- if path.stack:isempty() and state.final and state.rtn == grammar.start then
+    --   edges:add(EOF)
+    -- end
   end
 
   return edges
@@ -306,7 +332,7 @@ function get_dest_states(rtn_paths, edge_val)
         -- supported it.  You can trigger this error with the grammar:
         --
         --  s -> "Z"* "X" | "Z"* "Y";
-        error("Non-LL(k) grammar!")
+        error("Cyclic grammar!")
       else
         table.insert(dest_states, path:enter_state(dest_state))
       end
@@ -327,7 +353,7 @@ end
 
 --------------------------------------------------------------------]]--
 
-function get_rtn_state_closure(rtn_paths, follow_states)
+function get_rtn_state_closure(rtn_paths, grammar, follow_states)
   local closure_paths = {}
   local queue = Queue:new()
 
@@ -336,13 +362,20 @@ function get_rtn_state_closure(rtn_paths, follow_states)
   end
 
   while not queue:isempty() do
-    local path = unpack(queue:dequeue())
+    local path = queue:dequeue()
     table.insert(closure_paths, path)
 
     for edge_val, dest_state in path.current_state:transitions() do
       if fa.is_nonterm(edge_val) then
-        local subrule_start = grammar.rtns.get(edge_val.name).start
+        local subrule_start = grammar.rtns:get(edge_val.name).start
         if path:have_seen_state(subrule_start) then
+          print("Current state: " .. path.current_state.rtn.name)
+          print("Seen states: ")
+          for state in each(path.seen_states) do
+            print("   " .. serialize(state.rtn.name))
+          end
+          print("Attempting to enter state: " .. edge_val.name)
+          print("RTNs: " .. serialize(grammar.rtns, 6, "  "))
           error("Cyclic grammar!")
         end
 
@@ -353,10 +386,17 @@ function get_rtn_state_closure(rtn_paths, follow_states)
 
     if path.current_state.final then
       local state, new_path = path:return_from_rule()
-      if new_path:have_seen_state(state) then
-        error("Cyclic grammar!")
+      if state then
+        -- There was a stack entry indicating a state to return to.
+        if new_path:have_seen_state(state) then
+          error("Cyclic grammar!")
+        end
+        queue:enqueue(new_path)
+      else
+        for state in each(follow_states[path.current_state.rtn.name]) do
+          queue:enqueue(path:return_from_rule_into_state(state))
+        end
       end
-      queue:enqueue(new_path)
     end
   end
 
