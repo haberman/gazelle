@@ -171,7 +171,7 @@ OrderedSet = {name="OrderedSet"}
     obj.elements = {}
     if init then
       for element in each(init) do
-        self:add(element)
+        obj:add(element)
       end
     end
     return obj
@@ -179,9 +179,13 @@ OrderedSet = {name="OrderedSet"}
 
   function OrderedSet:add(elem)
     if not self.element_offsets[elem] then
+      table.insert(self.elements, elem)
       self.element_offsets[elem] = #self.elements
-      table.insert(self.element, elem)
     end
+  end
+
+  function OrderedSet:count()
+    return #self.elements
   end
 
   function OrderedSet:offset_of(elem)
@@ -222,6 +226,10 @@ OrderedMap = {name="OrderedMap"}
 
   function OrderedMap:offset_of_key(elem)
     return self.key_offsets[elem]
+  end
+
+  function OrderedMap:count()
+    return #self.elements
   end
 
   function OrderedMap:each()

@@ -27,6 +27,8 @@
 --------------------------------------------------------------------]]--
 
 require "data_structures"
+require "nfa_to_dfa"
+require "minimize"
 
 Grammar = {name="Grammar"}
 
@@ -122,13 +124,19 @@ end
 
 --------------------------------------------------------------------]]--
 
--- Returns an ordered set that contains all strings needed by any part
--- of the grammar as it currently stands.
+
+--[[--------------------------------------------------------------------
+
+  Grammar:get_strings(): Returns an ordered set that contains all strings
+  needed by any part of the grammar as it currently stands.
+
+--------------------------------------------------------------------]]--
+
 function Grammar:get_strings()
   local strings = Set:new()
 
   -- add the names of all the terminals
-  for term, _ in pairs(attributes.terminals) do
+  for term, _ in pairs(self.terminals) do
     strings:add(term)
   end
 
@@ -157,15 +165,22 @@ function Grammar:get_strings()
 end
 
 
--- Creates and returns a list of all the RTNs, states, and transitions in
--- a particular and stable order, ready for emitting to the outside world.
--- The RTNs themselves are returned in the order they were defined.
---
--- Returns:
---   OrderedMap: {rtn_name -> {
---     states=OrderedSet {RTNState},
---     transitions={RTNState -> {list of {edge_val, target_state, properties}}
---   }
+--[[--------------------------------------------------------------------
+
+  Grammar:get_flattened_rtn_list(): Creates and returns a list of all
+  the RTNs, states, and transitions in a particular and stable order,
+  ready for emitting to the outside world.  The RTNs themselves are
+  returned in the order they were defined.
+
+  Returns:
+    OrderedMap: {rtn_name -> {
+      states=OrderedSet {RTNState},
+      transitions={RTNState -> {list of {edge_val, target_state, properties}}
+      slot_count=slot_count
+    }
+
+--------------------------------------------------------------------]]--
+
 function Grammar:get_flattened_rtn_list()
   local rtns = OrderedMap:new()
 
@@ -180,7 +195,7 @@ function Grammar:get_flattened_rtn_list()
     table.insert(states, 1, rtn.start)
     states = OrderedSet:new(states)
 
-    rtns:add(name, {states=states})
+    rtns:add(name, {states=states, transitions={}, slot_count=rtn.slot_count})
   end
 
   -- create a list of transitions for every state
@@ -198,15 +213,15 @@ function Grammar:get_flattened_rtn_list()
       -- 4. transitions with the same edge value are sorted by their order
       --    in the list of states (which is stable) (TODO: no it's not, yet)
       sort_func = function (a, b)
-        if not is_nonterm(a[1]) and is_nonterm(b[1]) then
+        if not fa.is_nonterm(a[1]) and fa.is_nonterm(b[1]) then
           return true
-        elseif is_nonterm(a[1]) and not is_nonterm(b[1]) then
+        elseif fa.is_nonterm(a[1]) and not fa.is_nonterm(b[1]) then
           return false
-        elseif is_nonterm(a[1]) then
+        elseif fa.is_nonterm(a[1]) then
           if a[1] == b[1] then
             return rtn.states:offset_of(a[2]) < rtn.states:offset_of(b[2])
           else
-            return a[1] < b[1]
+            return a[1].name < b[1].name
           end
         else
           if a[1].low == b[1].low then
@@ -221,6 +236,8 @@ function Grammar:get_flattened_rtn_list()
       rtn.transitions[state] = transitions
     end
   end
+
+  return rtns
 end
 
 -- vim:et:sts=2:sw=2

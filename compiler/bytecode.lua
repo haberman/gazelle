@@ -45,7 +45,7 @@ BC_GLA_FINAL_STATE = 1
 BC_GLA_TRANSITION = 2
 
 
-function write_grammar(grammar, outfilename)
+function write_bytecode(grammar, outfilename)
   -- write Bitcode header
   bc_file = bc.File:new(outfilename, "GH")
   abbrevs = define_abbrevs(bc_file)
@@ -55,13 +55,13 @@ function write_grammar(grammar, outfilename)
   -- Obtain linearized representations of all the DFAs from the Grammar object.
   local strings = grammar:get_strings()
   local rtns = grammar:get_flattened_rtn_list()
-  local intfas = grammar.intfas
+  local intfas = grammar.master_intfas
 
   -- emit the strings
-  print(string.format("Writing %d strings...", #strings))
+  print(string.format("Writing %d strings...", strings:count()))
   bc_file:enter_subblock(BC_STRINGS)
   for string in each(strings) do
-    bc_file:write_abbreviated_record(bc_string, string)
+    bc_file:write_abbreviated_record(abbrevs.bc_string, string)
   end
   bc_file:end_subblock(BC_STRINGS)
 
@@ -75,7 +75,7 @@ function write_grammar(grammar, outfilename)
 
   -- emit the RTNs
   bc_file:enter_subblock(BC_RTNS)
-  print(string.format("Writing %d RTNs...", #rtns))
+  print(string.format("Writing %d RTNs...", rtns:count()))
   for name, rtn in each(rtns) do
     emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
   end
@@ -147,7 +147,7 @@ function emit_intfa(intfa, bc_file, abbrevs, strings)
 end
 
 
-function emit_rtn(name, rtn, rtns, glas, intfas, strings, abbrevs)
+function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
   -- emit RTN name and ignore info
   bc_file:enter_subblock(BC_RTN)
   bc_file:write_abbreviated_record(abbrevs.bc_rtn_info, strings:offset_of(name), rtn.slot_count)
@@ -169,12 +169,12 @@ function emit_rtn(name, rtn, rtns, glas, intfas, strings, abbrevs)
 
     if state.gla then
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_state_with_gla,
-                                       #rtns.transitions[state],
+                                       #rtn.transitions[state],
                                        glas:offset_of(state.gla),
                                        is_final)
     else
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_state,
-                                       #rtns.transitions[state],
+                                       #rtn.transitions[state],
                                        intfas:offset_of(state.intfa),
                                        is_final)
     end

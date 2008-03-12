@@ -12,21 +12,10 @@
 
 --------------------------------------------------------------------]]--
 
--- Include functionality for all parts of the compiler.
-
--- parsing of the input grammar file
 require "bootstrap/rtn"
-
--- FA manipulation
-require "nfa_to_dfa"
-require "minimize"
-
--- lookahead calculation
-require "ll"
-require "intfa_combine"
-
--- output generation
+require "grammar"
 require "bytecode"
+require "ll"
 
 require "pp"
 
@@ -86,7 +75,7 @@ if input_filename == nil then
 end
 
 if output_filename == nil then
-  output_file = input_filename:gsub("%.[^%.]*$", "") .. ".gzc"
+  output_filename = input_filename:gsub("%.[^%.]*$", "") .. ".gzc"
 end
 
 function print_verbose(str)
@@ -122,9 +111,9 @@ print_verbose("Parsing grammar...")
 grammar = parse_grammar(CharStream:new(grm_str))
 
 -- make the RTNs in the grammar determistic and minimal
-write_verbose("Convering RTN NFAs to DFAs...")
+print_verbose("Convering RTN NFAs to DFAs...")
 grammar:determinize_rtns()
-write_verbose("Minimizing RTN DFAs...")
+print_verbose("Minimizing RTN DFAs...")
 grammar:minimize_rtns()
 
 -- Generate GLAs by doing lookahead calculations.
@@ -132,12 +121,14 @@ grammar:minimize_rtns()
 print_verbose("Doing LL(k) lookahead calculations...")
 compute_lookahead(grammar)
 
-
--- we now have everything figured out at the RTN level.  Now we just need
--- to figure out how many IntFAs to generate, which terminals each one
+-- we now have everything figured out at the RTN and GLA levels.  Now we just
+-- need to figure out how many IntFAs to generate, which terminals each one
 -- should handle, and generate/determinize/minimize those IntFAs.
--- print_verbose("Combining lexer IntFAs...")
--- intfas = intfa_combine(attributes.terminals, grammar)
 
+print_verbose("Generating lexer DFAs...")
+grammar:generate_intfas()
+
+print_verbose(string.format("Writing to output file '%s'...", output_filename))
+write_bytecode(grammar, output_filename)
 
 -- vim:et:sts=2:sw=2
