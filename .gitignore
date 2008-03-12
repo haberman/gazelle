@@ -1,0 +1,6 @@
+.*.sw[a-z]
+*.o
+*.so
+*.a
+*.gzc
+lua_path
