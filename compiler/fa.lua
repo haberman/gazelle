@@ -320,6 +320,29 @@ end
 RTNState = FAState:new()
 RTNState.name = "RTNState"
 
+-- A trivial state is one where you can tell just by looking
+-- at the state's transitions and its final status alone what
+-- transition you should take for a given terminal.
+function RTNState:is_trivial()
+  local edge_vals = Set:new()
+
+  if self.final and self:num_transitions() > 0 then
+    return false
+  end
+
+  for edge_val in self:transitions() do
+    if fa.is_nonterm(edge_val) then
+      return false
+    elseif edge_vals:contains(edge_val) then
+      return false
+    else
+      edge_vals:add(edge_val)
+    end
+  end
+
+  return true
+end
+
 NonTerm = {name="NonTerm"}
 function NonTerm:new(name)
   -- keep a cache of nonterm objects, so that we always return the same object

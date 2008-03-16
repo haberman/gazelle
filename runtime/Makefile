@@ -1,7 +1,7 @@
 
 CC=gcc
 AR=ar
-CFLAGS=-Wall -O6 -std=c99
+CFLAGS=-Wall -g -O6 -std=c99
 OBJS=bc_read_stream.o interpreter.o load_grammar.o
 
 all: libparse.a

@@ -90,7 +90,7 @@ CharStream = {}
 function parse_grammar(chars)
   chars:ignore("whitespace")
   local grammar = Grammar:new()
-  local attributes = {terminals={}, ignore={}, slot_counts={}, regex_text={}}
+  local attributes = {ignore={}, slot_counts={}, regex_text={}, grammar=grammar}
   while not chars:eof() do
     if chars:match(" *@start") then
       chars:consume_pattern(" *@start")
@@ -196,12 +196,13 @@ function parse_term(chars, attributes)
   local symbol
   if chars:lookahead(1) == "/" then
     name = name or attributes.nonterm.name
-    attributes.terminals[name], attributes.regex_text[name] = parse_regex(chars)
+    intfa, text = parse_regex(chars)
+    attributes.grammar:add_terminal(name, intfa, text)
     ret = fa.RTN:new{symbol=name, properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
   elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
     local string = parse_string(chars)
-    attributes.terminals[string] = string
+    attributes.grammar:add_terminal(string, string)
     name = name or string
     ret = fa.RTN:new{symbol=string, properties={name=name, slotnum=attributes.slotnum}}
     attributes.slotnum = attributes.slotnum + 1
@@ -218,7 +219,7 @@ function parse_term(chars, attributes)
   else
     local nonterm = parse_nonterm(chars)
     name = name or nonterm.name
-    if attributes.terminals[nonterm.name] then
+    if attributes.grammar.terminals[nonterm.name] then
       ret = fa.RTN:new{symbol=nonterm.name, properties={name=nonterm.name, slotnum=attributes.slotnum}}
     else
       ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}
@@ -273,7 +274,7 @@ function parse_modifier(chars, attributes)
       sep_string = chars:consume_pattern("[^)]*")
     end
     str = fa.RTN:new{symbol=sep_string, properties={slotnum=attributes.slotnum, name=sep_string}}
-    attributes.terminals[sep_string] = sep_string
+    attributes.grammar:add_terminal(sep_string, sep_string)
     attributes.slotnum = attributes.slotnum + 1
     chars:consume(")")
   end

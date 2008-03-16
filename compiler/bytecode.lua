@@ -13,10 +13,6 @@
 
 require "bc"
 
-TerminalTransition = {name="TerminalTransition", order=1}
-NontermTransition = {name="NontermTransition", order=2}
-Decision = {name="Decision", order=3}
-
 -- See FILEFORMAT for details about what these constants mean
 BC_INTFAS = 8
 BC_INTFA = 9
@@ -36,6 +32,7 @@ BC_STRING = 0
 BC_RTN_INFO = 0
 BC_RTN_STATE = 1
 BC_RTN_STATE_WITH_GLA = 4
+BC_RTN_TRIVIAL_FINAL_STATE = 6
 BC_RTN_TRANSITION_TERMINAL = 2
 BC_RTN_TRANSITION_NONTERM = 3
 BC_RTN_IGNORE = 5
@@ -55,6 +52,7 @@ function write_bytecode(grammar, outfilename)
   -- Obtain linearized representations of all the DFAs from the Grammar object.
   local strings = grammar:get_strings()
   local rtns = grammar:get_flattened_rtn_list()
+  local glas = grammar:get_flattened_gla_list()
   local intfas = grammar.master_intfas
 
   -- emit the strings
@@ -66,12 +64,20 @@ function write_bytecode(grammar, outfilename)
   bc_file:end_subblock(BC_STRINGS)
 
   -- emit the intfas
-  print(string.format("Writing %d IntFAs...", #intfas))
+  print(string.format("Writing %d IntFAs...", intfas:count()))
   bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
     emit_intfa(intfa, strings, bc_file, abbrevs)
   end
   bc_file:end_subblock(BC_INTFAS)
+
+  -- emit the GLAs
+  print(string.format("Writing %d GLAs...", glas:count()))
+  bc_file:enter_subblock(BC_GLAS)
+  for gla in each(glas) do
+    emit_gla(gla, bc_file, abbrevs)
+  end
+  bc_file:end_subblock(BC_GLAS)
 
   -- emit the RTNs
   bc_file:enter_subblock(BC_RTNS)
@@ -84,7 +90,7 @@ function write_bytecode(grammar, outfilename)
 end
 
 
-function emit_intfa(intfa, bc_file, abbrevs, strings)
+function emit_intfa(intfa, strings, bc_file, abbrevs)
   bc_file:enter_subblock(BC_INTFA)
 
   local intfa_state_offsets = {}
@@ -98,22 +104,23 @@ function emit_intfa(intfa, bc_file, abbrevs, strings)
 
   -- do a first pass over the states that records their order and builds
   -- each state's list of transitions.
+  local state_transitions = {}
   for i, state in ipairs(states) do
     intfa_state_offsets[state] = i - 1
 
-    local this_state_transitions = {}
+    state_transitions[state] = {}
     for edge_val, target_state, properties in state:transitions() do
       for range in edge_val:each_range() do
-        table.insert(this_state_transitions, {range, target_state})
+        table.insert(state_transitions[state], {range, target_state})
       end
     end
 
     -- sort the transitions into a stable order, to make the output
     -- more deterministic.
-    table.sort(this_state_transitions, function (a, b) return a[1].low < b[1].low end)
+    table.sort(state_transitions[state], function (a, b) return a[1].low < b[1].low end)
 
     -- add this state's transitions to the global list of transitions for the IntFA
-    for t in each(this_state_transitions)
+    for t in each(state_transitions[state])
       do table.insert(intfa_transitions, t)
     end
   end
@@ -124,10 +131,10 @@ function emit_intfa(intfa, bc_file, abbrevs, strings)
   for state in each(states) do
     if state.final then
       bc_file:write_abbreviated_record(abbrevs.bc_intfa_final_state,
-                                       #this_state_transitions,
+                                       #state_transitions[state],
                                        strings:offset_of(state.final))
     else
-      bc_file:write_abbreviated_record(abbrevs.bc_intfa_state, #this_state_transitions)
+      bc_file:write_abbreviated_record(abbrevs.bc_intfa_state, #state_transitions[state])
     end
   end
 
@@ -146,6 +153,22 @@ function emit_intfa(intfa, bc_file, abbrevs, strings)
   bc_file:end_subblock(BC_INTFA)
 end
 
+function emit_gla(gla, strings, bc_file, abbrevs)
+  bc_file:enter_subblock(BC_GLA)
+
+  local states = OrderedSet:new()
+  states:add(gla.start)
+  for state in each(gla:states()) do
+    if state ~= gla.start then
+      states:add(state)
+    end
+  end
+
+  for state in each(states) do
+  end
+
+  bc_file:end_subblock(BC_GLA)
+end
 
 function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
   -- emit RTN name and ignore info
@@ -172,18 +195,20 @@ function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
                                        #rtn.transitions[state],
                                        glas:offset_of(state.gla),
                                        is_final)
-    else
+    elseif state.intfa then
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_state,
                                        #rtn.transitions[state],
                                        intfas:offset_of(state.intfa),
                                        is_final)
+    else
+      bc_file:write_abbreviated_record(abbrevs.bc_rtn_trivial_final_state)
     end
   end
 
   -- emit transitions
   for state in each(rtn.states) do
     for transition in each(rtn.transitions[state]) do
-      local edge_val, dest_state, properties = transition
+      local edge_val, dest_state, properties = unpack(transition)
       if fa.is_nonterm(edge_val) then
         bc_file:write_abbreviated_record(abbrevs.bc_rtn_transition_nonterm,
                                          rtns:offset_of_key(edge_val.name),
@@ -255,27 +280,30 @@ function define_abbrevs(bc_file)
                                       bc.VBROp:new(4),
                                       bc.FixedOp:new(1))
 
-  abbrevs.bc_rtn_state_with_gla = bc_file:define_abbreviation(10,
-                                      bc.LiteralOp:new(BC_RTN_STATE),
+  abbrevs.bc_rtn_state_with_gla = bc_file:define_abbreviation(6,
+                                      bc.LiteralOp:new(BC_RTN_STATE_WITH_GLA),
                                       bc.VBROp:new(4),
                                       bc.VBROp:new(4),
                                       bc.FixedOp:new(1))
 
-  abbrevs.bc_rtn_transition_terminal = bc_file:define_abbreviation(6,
+  abbrevs.bc_rtn_trivial_final_state = bc_file:define_abbreviation(7,
+                                      bc.LiteralOp:new(BC_RTN_TRIVIAL_FINAL_STATE))
+
+  abbrevs.bc_rtn_transition_terminal = bc_file:define_abbreviation(8,
                                       bc.LiteralOp:new(BC_RTN_TRANSITION_TERMINAL),
                                       bc.VBROp:new(6),
                                       bc.VBROp:new(5),
                                       bc.VBROp:new(5),
                                       bc.VBROp:new(4))
 
-  abbrevs.bc_rtn_transition_nonterm = bc_file:define_abbreviation(7,
+  abbrevs.bc_rtn_transition_nonterm = bc_file:define_abbreviation(9,
                                       bc.LiteralOp:new(BC_RTN_TRANSITION_NONTERM),
                                       bc.VBROp:new(6),
                                       bc.VBROp:new(5),
                                       bc.VBROp:new(5),
                                       bc.VBROp:new(4))
 
-  abbrevs.bc_rtn_ignore = bc_file:define_abbreviation(8,
+  abbrevs.bc_rtn_ignore = bc_file:define_abbreviation(10,
                                       bc.LiteralOp:new(BC_RTN_IGNORE),
                                       bc.VBROp:new(6))
 
@@ -287,10 +315,15 @@ function define_abbrevs(bc_file)
                                       bc.VBROp:new(4),
                                       bc.VBROp:new(4))
 
-  abbrevs.bc_final_state = bc_file:define_abbreviation(4,
+  abbrevs.bc_final_state = bc_file:define_abbreviation(5,
                                       bc.LiteralOp:new(BC_GLA_FINAL_STATE),
                                       bc.FixedOp:new(1),
                                       bc.ArrayOp:new(bc.VBROp:new(4)))
+
+  abbrevs.bc_gla_transition = bc_file:define_abbreviation(6,
+                                      bc.LiteralOp:new(BC_GLA_TRANSITION),
+                                      bc.VBROp:new(4),
+                                      bc.VBROp:new(4))
 
   bc_file:end_subblock(bc.BLOCKINFO)
 

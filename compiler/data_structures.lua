@@ -192,6 +192,18 @@ OrderedSet = {name="OrderedSet"}
     return self.element_offsets[elem]
   end
 
+  function OrderedSet:element_at(pos)
+    return self.elements[pos]
+  end
+
+  function OrderedSet:sort(sort_func)
+    table.sort(self.elements, sort_func)
+    self.element_offsets = {}
+    for i, element in ipairs(self.elements) do
+      self.element_offsets[element] = i
+    end
+  end
+
   function OrderedSet:each()
     local i = 0
     return function ()

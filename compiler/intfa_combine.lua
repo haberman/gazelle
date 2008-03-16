@@ -91,43 +91,19 @@ function create_or_reuse_termset_for(terminals, conflicts, termsets, nonterm)
   return found_termset
 end
 
-function intfa_combine(all_terminals, grammar)
+function intfa_combine(all_terminals, state_term_pairs)
   local conflicts = analyze_conflicts(all_terminals)
 
   -- For each state in the grammar, create (or reuse) a DFA to run
-  -- when we hit that state.  If the state requires multiple tokens
-  -- of lookahead to decide, then we will supply it multiple DFAs --
-  -- one per token of lookahead.
+  -- when we hit that state.
   local termsets = {}
-  for nonterm, rtn in pairs(grammar) do
-    for state in each(rtn:states()) do
-
-      state.lookahead_intfas = {}
-      if state.lookahead then
-        -- print(string.format("Lookahead for state in %s: %s", nonterm, serialize(state.lookahead)))
-        local tokens_of_lookahead = #state.lookahead[1][1]
-        for k = 1,tokens_of_lookahead do
-          local terminals = Set:new()
-          for lookahead in each(state.lookahead) do
-            local term_seq, _, _ = unpack(lookahead)
-            terminals:add(term_seq[k])
-          end
-          local intfa_num = create_or_reuse_termset_for(terminals, conflicts, termsets, nonterm)
-          table.insert(state.lookahead_intfas, intfa_num)
-        end
-      else
-        for edge_val in state:transitions() do
-          if not fa.is_nonterm(edge_val) then
-            local intfa_num = create_or_reuse_termset_for({edge_val}, conflicts, termsets)
-            table.insert(state.lookahead_intfas, intfa_num)
-          end
-        end
-      end
-
-    end
+  local intfa_nums = {}
+  for state_term_pair in each(state_term_pairs) do
+    local state, terms = unpack(state_term_pair)
+    intfa_nums[state] = create_or_reuse_termset_for(terms, conflicts, termsets)
   end
 
-  local dfas = {}
+  local dfas = OrderedSet:new()
   for termset in each(termsets) do
     local nfas = {}
     for term in each(termset) do
@@ -135,14 +111,18 @@ function intfa_combine(all_terminals, grammar)
       if type(target) == "string" then
         target = fa.IntFA:new{string=target}
       end
-      if target == nil then
-        print(string.format("Why is the terminal for %s nil?", serialize(term)))
-      end
       table.insert(nfas, {target, term})
     end
     local dfa = hopcroft_minimize(nfas_to_dfa(nfas))
-    table.insert(dfas, dfa)
+    dfa.termset = termset
+    dfas:add(dfa)
   end
+
+  for state, intfa_num in pairs(intfa_nums) do
+    state.intfa = dfas:element_at(intfa_num)
+  end
+
+  dfas:sort(function (a, b) return #b.termset < #a.termset end)
 
   return dfas
 end

@@ -29,6 +29,7 @@
 require "data_structures"
 require "nfa_to_dfa"
 require "minimize"
+require "intfa_combine"
 
 Grammar = {name="Grammar"}
 
@@ -36,7 +37,7 @@ function Grammar:new()
   local obj = newobject(self)
   obj.rtns = OrderedMap:new()
   obj.terminals = {}
-  obj.master_intfas = Set:new()
+  obj.master_intfas = OrderedSet:new()
   obj.start = nil  -- what rule the entire grammar starts on
 
   -- A map of {nonterm_name -> set of terminals to ignore}.
@@ -88,6 +89,32 @@ function Grammar:bind_ignore_list()
   end
 end
 
+function Grammar:get_rtn_states_of_triviality(triviality, exclude_final)
+  local states = Set:new()
+
+  for name, rtn in each(self.rtns) do
+    for state in each(rtn:states()) do
+      if state:is_trivial() == triviality then
+        if state.final and exclude_final then
+          -- don't add
+        else
+          states:add(state)
+        end
+      end
+    end
+  end
+
+  return states
+end
+
+function Grammar:get_nontrivial_rtn_states()
+  return self:get_rtn_states_of_triviality(false)
+end
+
+function Grammar:get_trivial_rtn_states(exclude_final)
+  return self:get_rtn_states_of_triviality(true, exclude_final)
+end
+
 function copy_attributes(rtn, new_rtn)
   new_rtn.name = rtn.name
   new_rtn.slot_count = rtn.slot_count
@@ -114,6 +141,37 @@ function Grammar:minimize_rtns()
     new_rtns:add(name, new_rtn)
   end
   self.rtns = new_rtns
+end
+
+function Grammar:generate_intfas()
+  -- first generate the set of states that need an IntFA: trivial RTN
+  -- states and all nonfinal GLA states
+  local states = self:get_trivial_rtn_states(true)
+  for rtn_state in each(self:get_nontrivial_rtn_states()) do
+    for gla_state in each(rtn_state.gla:states()) do
+      if not gla_state.final then
+        states:add(gla_state)
+      end
+    end
+  end
+
+  -- All states in the "states" set are nonfinal and have only
+  -- terminals as transitions.  Create a list of:
+  --   {state, set of outgoing terms}
+  -- pairs for the states.
+  local state_term_pairs = {}
+  for state in each(states) do
+    local terms = Set:new()
+    for edge_val in state:transitions() do
+      if fa.is_nonterm(edge_val) or terms:contains(edge_val) then
+        error("Internal error")
+      end
+      terms:add(edge_val)
+    end
+    table.insert(state_term_pairs, {state, terms})
+  end
+
+  self.master_intfas = intfa_combine(self.terminals, state_term_pairs)
 end
 
 --[[--------------------------------------------------------------------
@@ -188,7 +246,7 @@ function Grammar:get_flattened_rtn_list()
   for name, rtn in self.rtns:each() do
 
     -- order states such that the start state is emitted first.
-    -- TODO; make this completely stable.
+    -- TODO (maybe): make this completely stable.
     local states = rtn:states()
     states:remove(rtn.start)
     states = states:to_array()
@@ -238,6 +296,20 @@ function Grammar:get_flattened_rtn_list()
   end
 
   return rtns
+end
+
+function Grammar:get_flattened_gla_list()
+  local glas = OrderedSet:new()
+
+  for name, rtn in each(self.rtns) do
+    for state in each(rtn:states()) do
+      if state.gla then
+        glas:add(state.gla)
+      end
+    end
+  end
+
+  return glas
 end
 
 -- vim:et:sts=2:sw=2

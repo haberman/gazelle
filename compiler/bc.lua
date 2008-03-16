@@ -174,8 +174,9 @@ function File:write_abbreviated_val(val, op)
 end
 
 function File:write_abbreviated_record(abbreviation, ...)
-  -- print("Write abbreviated record:" .. serialize({...}))
   local args = {...}
+  -- print("Write abbreviated record:" .. serialize({...}))
+  --      ", #args: " .. #args .. ", expected #args: " .. #abbreviation.ops)
   if #args ~= #abbreviation.ops then
     error("Wrong number of arguments for abbreviated record")
   end

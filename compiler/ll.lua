@@ -34,7 +34,7 @@ require "fa"
 --------------------------------------------------------------------]]--
 
 function compute_lookahead(grammar)
-  local nontrivial_states = get_nontrivial_states(grammar)
+  local nontrivial_states = grammar:get_nontrivial_rtn_states()
   local follow_states = get_follow_states(grammar)
 
   for state in each(nontrivial_states) do
@@ -42,47 +42,6 @@ function compute_lookahead(grammar)
   end
 end
 
-
---[[--------------------------------------------------------------------
-
-  get_nontrivial_states(grammar): Returns a list of nontrivial RTN
-  states.  A nontrivial state is one where you can't tell by looking
-  at the state's transitions and its final status alone what
-  transition you should take for a given terminal.
-
---------------------------------------------------------------------]]--
-
-function get_nontrivial_states(grammar)
-  local nontrivial_states = Set:new()
-
-  for name, rtn in each(grammar.rtns) do
-    for state in each(rtn:states()) do
-      local is_trivial = true
-      local edge_vals = Set:new()
-
-      if state.final and state:num_transitions() > 0 then
-        is_trivial = false
-      end
-
-      for edge_val in state:transitions() do
-        if fa.is_nonterm(edge_val) then
-          is_trivial = false
-        elseif edge_vals:contains(edge_val) then
-          is_trivial = false
-        else
-          edge_vals:add(edge_val)
-        end
-      end
-
-      if is_trivial == false then
-        nontrivial_states:add(state)
-      end
-
-    end
-  end
-
-  return nontrivial_states
-end
 
 
 --[[--------------------------------------------------------------------
@@ -203,9 +162,8 @@ function construct_gla(state, grammar, follow_states)
     table.insert(initial_paths, path)
   end
 
-  state.gla = fa.GLA:new(get_rtn_state_closure(initial_paths, grammar, follow_states))
-
-  local queue = Queue:new(state.gla.start)
+  local gla = fa.GLA:new(get_rtn_state_closure(initial_paths, grammar, follow_states))
+  local queue = Queue:new(gla.start)
 
   while not queue:isempty() do
     local gla_state = queue:dequeue()
@@ -230,6 +188,8 @@ function construct_gla(state, grammar, follow_states)
       end
     end
   end
+
+  return gla
 end
 
 
@@ -369,13 +329,6 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
       if fa.is_nonterm(edge_val) then
         local subrule_start = grammar.rtns:get(edge_val.name).start
         if path:have_seen_state(subrule_start) then
-          print("Current state: " .. path.current_state.rtn.name)
-          print("Seen states: ")
-          for state in each(path.seen_states) do
-            print("   " .. serialize(state.rtn.name))
-          end
-          print("Attempting to enter state: " .. edge_val.name)
-          print("RTNs: " .. serialize(grammar.rtns, 6, "  "))
           error("Cyclic grammar!")
         end
 
