@@ -41,12 +41,19 @@ function table_shallow_eql(tbl1, tbl2)
   return true
 end
 
-function table_shallow_copy(t)
+function table_copy(t, max_depth)
   local new_t = {}
   for k, v in pairs(t) do
+    if max_depth > 1 and type(v) == "table" then
+      v = table_copy(v, max_depth - 1)
+    end
     new_t[k] = v
   end
   return new_t
+end
+
+function table_shallow_copy(t)
+  return table_copy(t, 1)
 end
 
 -- traverses a graph of some sort -- caller provides a function that gives

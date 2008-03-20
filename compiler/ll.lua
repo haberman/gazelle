@@ -88,9 +88,16 @@ Path = {name="Path"}
   function Path:new(start_state, predict_edge_val, predict_dest_state)
     local obj = newobject(self)
     obj.stack = Stack:new()
+
+    obj.current_seq_num = 0
+    obj.next_seq_num = 1
+    obj.states = {{start_state, obj.current_seq_num}}
+    obj.all_stack = {{{start_state.rtn, obj.current_seq_num}}}
+
     obj.current_state = start_state
     obj.seen_states = Set:new()
     obj.seen_states:add(obj.current_state)
+
     obj.predict_edge_val = predict_edge_val
     obj.predict_dest_state = predict_dest_state
     obj.terms = {}
@@ -99,9 +106,19 @@ Path = {name="Path"}
 
   function Path:enter_rule(start, return_to)
     local new_path = self:dup()
-    new_path.stack:push({return_to, new_path.seen_states:dup()})
+
+    new_path.stack:push({return_to, new_path.seen_states:dup(),
+                         new_path.current_seq_num})
+    new_path.current_seq_num = new_path.next_seq_num
+    new_path.next_seq_num = new_path.next_seq_num + 1
+    local st_off = 1 + new_path.stack:count()
+    new_path.all_stack[st_off] = new_path.all_stack[st_off] or {}
+    table.insert(new_path.all_stack[st_off], {start.rtn, new_path.current_seq_num})
+
+    table.insert(new_path.states, {start, new_path.current_seq_num})
     new_path.seen_states:add(start)
     new_path.current_state = start
+
     return new_path
   end
 
@@ -112,8 +129,9 @@ Path = {name="Path"}
     else
       local new_path = self:dup()
       local state
-      state, new_path.seen_states = unpack(new_path.stack:pop())
+      state, new_path.seen_states, new_path.current_seq_num = unpack(new_path.stack:pop())
       new_path.current_state = state
+      table.insert(new_path.states, {state, new_path.current_seq_num})
       return state, new_path
     end
   end
@@ -122,6 +140,7 @@ Path = {name="Path"}
     local new_path = self:dup()
     new_path.seen_states:add(state)
     new_path.current_state = state
+    table.insert(new_path.states, {state, new_path.current_seq_num})
     table.insert(new_path.terms, term)
     return new_path
   end
@@ -133,12 +152,41 @@ Path = {name="Path"}
   function Path:dup()
     local new_path = newobject(Path)
     new_path.stack = self.stack:dup()
+    new_path.current_seq_num = self.current_seq_num
+    new_path.next_seq_num = self.next_seq_num
+    new_path.states = table_shallow_copy(self.states)
+    new_path.all_stack = table_copy(self.all_stack, 2)
     new_path.seen_states = self.seen_states:dup()
     new_path.terms = table_shallow_copy(self.terms)
     new_path.current_state = self.current_state
     new_path.predict_edge_val = self.predict_edge_val
     new_path.predict_dest_state = predict_dest_state
     return new_path
+  end
+
+  function Path:to_dot()
+    local str = "digraph untitled{\n"
+    for i, st_entry in ipairs(self.all_stack) do
+      str = str .. string.format("  subgraph cluster%d {\n", i)
+      str = str .. "    rankdir=LR;\n"
+      for rtn_seq_pair in each(st_entry) do
+        local rtn, seq_num = unpack(rtn_seq_pair)
+        str = str .. string.format("    subgraph clusterrtn%d {\n", seq_num)
+        str = str .. rtn:to_dot("      ", tostring(seq_num))
+        str = str .. "    }\n"
+      end
+      str = str .. "  }\n"
+    end
+
+    for i=1,(#self.states-1) do
+      local st1, seq1 = unpack(self.states[i])
+      local st2, seq2 = unpack(self.states[i+1])
+      str = str .. string.format('  "%s%d" -> "%s%d" [style=bold]\n',
+                                 tostring(st1), seq1, tostring(st2), seq2)
+    end
+    str = str .. "}"
+
+    return str
   end
 
 
@@ -162,7 +210,9 @@ function construct_gla(state, grammar, follow_states)
     table.insert(initial_paths, path)
   end
 
-  local gla = fa.GLA:new(get_rtn_state_closure(initial_paths, grammar, follow_states))
+  local start_paths = get_rtn_state_closure(initial_paths, grammar, follow_states)
+  local start_gla_state = fa.GLAState:new(start_paths)
+  local gla = fa.GLA:new{start=start_gla_state}
   local queue = Queue:new(gla.start)
 
   while not queue:isempty() do
@@ -170,21 +220,24 @@ function construct_gla(state, grammar, follow_states)
     check_for_ambiguity(gla_state)
 
     for edge_val in each(get_outgoing_term_edges(gla_state.rtn_paths)) do
+      print("Outgoing edge: " .. edge_val)
       local paths = get_dest_states(gla_state.rtn_paths, edge_val)
       paths = get_rtn_state_closure(paths, grammar, follow_states)
 
-      local new_gla_state = GLAState:new(paths)
+      local new_gla_state = fa.GLAState:new(paths)
       gla_state:add_transition(edge_val, new_gla_state)
 
       local alt = get_unique_predicted_alternative(new_gla_state)
       if alt then
+        print("unique")
         -- this DFA path has uniquely predicted an alternative -- set the
         -- state final and stop exploring this path
         new_gla_state.final = alt
       else
-        -- this state is still ambiguous about what rtn transition to take --
+        print("not unique")
+        -- this path is still ambiguous about what rtn transition to take --
         -- explore it further
-        queue:enqueue(gla_state)
+        queue:enqueue(new_gla_state)
       end
     end
   end
@@ -215,7 +268,11 @@ function check_for_ambiguity(gla_state)
   end
 
   if #completed_paths > 1 then
-    error("Ambiguous grammar!")
+    local err = "Ambiguous grammar for terms " .. serialize(completed_paths[1].terms) ..
+                ", paths follow:\n"
+    for path in each(completed_paths) do
+      err  = err .. path:to_dot()
+    end
   end
 end
 
@@ -292,9 +349,9 @@ function get_dest_states(rtn_paths, edge_val)
         -- supported it.  You can trigger this error with the grammar:
         --
         --  s -> "Z"* "X" | "Z"* "Y";
-        error("Cyclic grammar!")
+        error("Cyclic grammar detected," .. path:to_dot())
       else
-        table.insert(dest_states, path:enter_state(dest_state))
+        table.insert(dest_states, path:enter_state(edge_val, dest_state))
       end
     end
   end
@@ -329,7 +386,12 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
       if fa.is_nonterm(edge_val) then
         local subrule_start = grammar.rtns:get(edge_val.name).start
         if path:have_seen_state(subrule_start) then
-          error("Cyclic grammar!")
+          local st = {}
+          for entry in each(path.stack:to_array()) do
+            table.insert(st, entry[1].rtn.name)
+          end
+          error("Cyclic grammar attempting to descend into " .. edge_val.name ..
+                "\n" .. path:to_dot())
         end
 
         local new_path = path:enter_rule(subrule_start, dest_state)
@@ -342,12 +404,14 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
       if state then
         -- There was a stack entry indicating a state to return to.
         if new_path:have_seen_state(state) then
-          error("Cyclic grammar!")
+          error("Cyclic grammar returning to rule " .. state.rtn.name ..
+                " from rule " .. path.current_state.rtn.name .. "\n" .. path:to_dot())
         end
         queue:enqueue(new_path)
       else
         for state in each(follow_states[path.current_state.rtn.name]) do
-          queue:enqueue(path:return_from_rule_into_state(state))
+          -- TODO
+          -- queue:enqueue(path:return_from_rule_into_state(state))
         end
       end
     end

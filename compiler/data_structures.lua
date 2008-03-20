@@ -66,6 +66,10 @@ Stack = {name="Stack"}
     return #self.stack == 0
   end
 
+  function Stack:count()
+    return #self.stack
+  end
+
   function Stack:dup()
     local new_stack = newobject(Stack)
     new_stack.stack = table_shallow_copy(self.stack)

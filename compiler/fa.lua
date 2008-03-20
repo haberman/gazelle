@@ -284,6 +284,7 @@ GLAState.name = "GLAState"
 function GLAState:new(paths)
   local obj = FAState:new()
   obj.rtn_paths = paths
+  return obj
 end
 
 
@@ -316,6 +317,38 @@ function RTN:get_outgoing_edge_values(states)
   return values
 end
 
+function escape(str)
+  return str:gsub("[\"\\]", "\\%1")
+end
+
+function RTN:to_dot(indent, suffix)
+  str = indent .. "rankdir=LR;\n"
+  str = str .. indent .. string.format('label="%s"\n', self.name)
+  for state in each(self:states()) do
+    peripheries = 1
+    extra_label = ""
+    if state.final then peripheries = 2 end
+    if self.start == state then extra_label = "Start" end
+    str = str .. string.format('%s"%s" [label="%s" peripheries=%d]\n',
+                                indent, tostring(state) .. suffix, extra_label, peripheries)
+    for edge_val, target_state in state:transitions() do
+      if fa.is_nonterm(edge_val) then
+        str = str .. string.format('%s"%s" -> "%s" [label="<%s>"]\n',
+                      indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
+                      escape(edge_val.name))
+      else
+        --if attributes.regex_text[edge_val] then
+        --  edge_val = "/" .. attributes.regex_text[edge_val] .. "/"
+        --end
+        str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
+                      indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
+                      escape(edge_val))
+      end
+    end
+  end
+  return str
+end
+
 
 RTNState = FAState:new()
 RTNState.name = "RTNState"
@@ -324,23 +357,29 @@ RTNState.name = "RTNState"
 -- at the state's transitions and its final status alone what
 -- transition you should take for a given terminal.
 function RTNState:is_trivial()
-  local edge_vals = Set:new()
-
   if self.final and self:num_transitions() > 0 then
     return false
-  end
-
-  for edge_val in self:transitions() do
-    if fa.is_nonterm(edge_val) then
-      return false
-    elseif edge_vals:contains(edge_val) then
-      return false
-    else
-      edge_vals:add(edge_val)
+  elseif not self.final and self:num_transitions() == 1 then
+    return true
+  else
+    local edge_vals = Set:new()
+    local seen_nonterm_state = false
+    for edge_val in self:transitions() do
+      if fa.is_nonterm(edge_val) then
+        if seen_nonterm_state then
+          return false
+        else
+          seen_nonterm_state = true
+        end
+      elseif edge_vals:contains(edge_val) then
+        return false
+      else
+        edge_vals:add(edge_val)
+      end
     end
-  end
 
-  return true
+    return true
+  end
 end
 
 NonTerm = {name="NonTerm"}

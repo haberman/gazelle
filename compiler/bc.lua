@@ -184,9 +184,16 @@ function File:write_abbreviated_record(abbreviation, ...)
   for i, arg in ipairs(args) do
     local op = abbreviation.ops[i]
     if op.class == ArrayOp then
-      self:write_vbr(arg:len(), 6)
-      for int in each({arg:byte(1, arg:len())}) do
-        self:write_abbreviated_val(int, op.elem_type)
+      if type(arg) == "string" then
+        self:write_vbr(arg:len(), 6)
+        for int in each({arg:byte(1, arg:len())}) do
+          self:write_abbreviated_val(int, op.elem_type)
+        end
+      else
+        self:write_vbr(#arg, 6)
+        for int in each(arg) do
+          self:write_abbreviated_val(int, op.elem_type)
+        end
       end
     else
       self:write_abbreviated_val(arg, op)

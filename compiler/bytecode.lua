@@ -75,7 +75,7 @@ function write_bytecode(grammar, outfilename)
   print(string.format("Writing %d GLAs...", glas:count()))
   bc_file:enter_subblock(BC_GLAS)
   for gla in each(glas) do
-    emit_gla(gla, bc_file, abbrevs)
+    emit_gla(gla, strings, intfas, bc_file, abbrevs)
   end
   bc_file:end_subblock(BC_GLAS)
 
@@ -153,10 +153,11 @@ function emit_intfa(intfa, strings, bc_file, abbrevs)
   bc_file:end_subblock(BC_INTFA)
 end
 
-function emit_gla(gla, strings, bc_file, abbrevs)
+function emit_gla(gla, strings, intfas, bc_file, abbrevs)
   bc_file:enter_subblock(BC_GLA)
 
   local states = OrderedSet:new()
+  --print(serialize(gla))
   states:add(gla.start)
   for state in each(gla:states()) do
     if state ~= gla.start then
@@ -164,7 +165,25 @@ function emit_gla(gla, strings, bc_file, abbrevs)
     end
   end
 
+  -- emit states
   for state in each(states) do
+    if state.final then
+      local transition_array = {}  -- todo
+      bc_file:write_abbreviated_record(abbrevs.bc_gla_final_state, transition_array)
+    else
+      bc_file:write_abbreviated_record(abbrevs.bc_gla_state,
+                                       intfas:offset_of(gla.intfa),
+                                       state:num_transitions())
+    end
+  end
+
+  -- emit transitions
+  for state in each(states) do
+    for edge_val, dest_state in state:transitions() do
+      bc_file:write_abbreviated_record(abbrevs.bc_gla_transition,
+                                       strings:offset_of(edge_val),
+                                       states:offset_of(dest_state))
+    end
   end
 
   bc_file:end_subblock(BC_GLA)
@@ -315,9 +334,8 @@ function define_abbrevs(bc_file)
                                       bc.VBROp:new(4),
                                       bc.VBROp:new(4))
 
-  abbrevs.bc_final_state = bc_file:define_abbreviation(5,
+  abbrevs.bc_gla_final_state = bc_file:define_abbreviation(5,
                                       bc.LiteralOp:new(BC_GLA_FINAL_STATE),
-                                      bc.FixedOp:new(1),
                                       bc.ArrayOp:new(bc.VBROp:new(4)))
 
   abbrevs.bc_gla_transition = bc_file:define_abbreviation(6,
