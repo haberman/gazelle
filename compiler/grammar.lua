@@ -89,30 +89,28 @@ function Grammar:bind_ignore_list()
   end
 end
 
-function Grammar:get_rtn_states_of_triviality(triviality, exclude_final)
+function Grammar:get_rtn_states_needing_intfa()
   local states = Set:new()
-
   for name, rtn in each(self.rtns) do
     for state in each(rtn:states()) do
-      if state:is_trivial() == triviality then
-        if state.final and exclude_final then
-          -- don't add
-        else
-          states:add(state)
-        end
+      if state:needs_intfa() then
+        states:add(state)
       end
     end
   end
-
   return states
 end
 
-function Grammar:get_nontrivial_rtn_states()
-  return self:get_rtn_states_of_triviality(false)
-end
-
-function Grammar:get_trivial_rtn_states(exclude_final)
-  return self:get_rtn_states_of_triviality(true, exclude_final)
+function Grammar:get_rtn_states_needing_gla(exclude_final)
+  local states = Set:new()
+  for name, rtn in each(self.rtns) do
+    for state in each(rtn:states()) do
+      if state:needs_gla() then
+        states:add(state)
+      end
+    end
+  end
+  return states
 end
 
 function copy_attributes(rtn, new_rtn)
@@ -144,13 +142,13 @@ function Grammar:minimize_rtns()
 end
 
 function Grammar:generate_intfas()
-  -- first generate the set of states that need an IntFA: trivial RTN
-  -- states and all nonfinal GLA states
-  local states = self:get_trivial_rtn_states(true)
-  for rtn_state in each(self:get_nontrivial_rtn_states()) do
+  -- first generate the set of states that need an IntFA: some RTN
+  -- states and all nonfinal GLA states.
+  local states = self:get_rtn_states_needing_intfa()
+  for rtn_state in each(self:get_rtn_states_needing_gla()) do
     for gla_state in each(rtn_state.gla:states()) do
       if not gla_state.final then
-        states:add(gla_state)
+        --states:add(gla_state)
       end
     end
   end
@@ -164,7 +162,7 @@ function Grammar:generate_intfas()
     local terms = Set:new()
     for edge_val in state:transitions() do
       if fa.is_nonterm(edge_val) or terms:contains(edge_val) then
-        error("Internal error")
+        error(string.format("Internal error with state %s, edge %s", serialize(state, 6, "  "), serialize(edge_val)))
       end
       terms:add(edge_val)
     end

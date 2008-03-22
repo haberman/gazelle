@@ -356,31 +356,59 @@ RTNState.name = "RTNState"
 -- A trivial state is one where you can tell just by looking
 -- at the state's transitions and its final status alone what
 -- transition you should take for a given terminal.
-function RTNState:is_trivial()
-  if self.final and self:num_transitions() > 0 then
-    return false
-  elseif not self.final and self:num_transitions() == 1 then
-    return true
-  else
-    local edge_vals = Set:new()
-    local seen_nonterm_state = false
-    for edge_val in self:transitions() do
-      if fa.is_nonterm(edge_val) then
-        if seen_nonterm_state then
-          return false
-        else
-          seen_nonterm_state = true
-        end
-      elseif edge_vals:contains(edge_val) then
-        return false
-      else
-        edge_vals:add(edge_val)
-      end
+function RTNState:needs_gla()
+  if self.final then
+    -- a final state needs a GLA if it has any outgoing transitions
+    if self:num_transitions() > 0 then
+      return true
+    else
+      return false
     end
-
-    return true
+  else
+    -- a nonfinal state needs a GLA if it has more than one
+    -- outgoing transition and either:
+    --  - at least one of those transitions is a nonterminal
+    --  - there are two or more terminal transitions for the same state
+    -- TODO: what about states with exactly 1 outgoing nonterminal
+    -- transition?  We don't technically need a GLA's help to
+    -- figure out the right transition.
+    if self:num_transitions() == 1 then
+      return false
+    else
+      local edge_vals = Set:new()
+      for edge_val in self:transitions() do
+        if fa.is_nonterm(edge_val) then
+          return true
+        else
+          if edge_vals:contains(edge_val) then
+            return true
+          end
+          edge_vals:add(edge_val)
+        end
+      end
+      return false
+    end
   end
 end
+
+-- In most cases, a state needs an intfa if it doesn't have a GLA,
+-- but there are a few exceptions.  Final states with no transitions
+-- don't need an intfa.  Neither do states that have only one
+-- nonterminal transition.
+function RTNState:needs_intfa()
+  if self:needs_gla() then
+    return false
+  else
+    if self.final then
+      return false
+    elseif self:num_transitions() == 1 and fa.is_nonterm(self._transitions[1][1]) then
+      return false
+    else
+      return true
+    end
+  end
+end
+
 
 NonTerm = {name="NonTerm"}
 function NonTerm:new(name)

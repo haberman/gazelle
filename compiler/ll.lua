@@ -34,10 +34,10 @@ require "fa"
 --------------------------------------------------------------------]]--
 
 function compute_lookahead(grammar)
-  local nontrivial_states = grammar:get_nontrivial_rtn_states()
+  local gla_needing_rtn_states = grammar:get_rtn_states_needing_gla()
   local follow_states = get_follow_states(grammar)
 
-  for state in each(nontrivial_states) do
+  for state in each(gla_needing_rtn_states) do
     state.gla = construct_gla(state, grammar, follow_states)
   end
 end
@@ -160,7 +160,7 @@ Path = {name="Path"}
     new_path.terms = table_shallow_copy(self.terms)
     new_path.current_state = self.current_state
     new_path.predict_edge_val = self.predict_edge_val
-    new_path.predict_dest_state = predict_dest_state
+    new_path.predict_dest_state = self.predict_dest_state
     return new_path
   end
 
@@ -200,44 +200,55 @@ Path = {name="Path"}
 
 function construct_gla(state, grammar, follow_states)
   -- Each GLA state tracks the set of cumulative RTN paths that are
-  -- represented by this state.
-  local initial_paths = {}
+  -- represented by this state.  To bootstrap the process, we take
+  -- each path to and past its first terminal.
+  local gla = fa.GLA:new{start=start_gla_state}
+  local initial_term_transitions = {}
+
   for edge_val, dest_state in state:transitions() do
     local path = Path:new(state, edge_val, dest_state)
     if fa.is_nonterm(edge_val) then
+      -- we need to expand all paths until they reach a terminal transition.
       path = path:enter_rule(grammar.rtns:get(edge_val.name).start, dest_state)
+      local paths = get_rtn_state_closure({path}, grammar, follow_states)
+      for term in each(get_outgoing_term_edges(paths)) do
+        for one_term_path in each(get_dest_states(paths, term)) do
+          initial_term_transitions[term] = initial_term_transitions[term] or {}
+          table.insert(initial_term_transitions[term], one_term_path)
+        end
+      end
+    else
+      initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or {}
+      table.insert(initial_term_transitions[edge_val], path:enter_state(edge_val, dest_state))
     end
-    table.insert(initial_paths, path)
   end
 
-  local start_paths = get_rtn_state_closure(initial_paths, grammar, follow_states)
-  local start_gla_state = fa.GLAState:new(start_paths)
-  local gla = fa.GLA:new{start=start_gla_state}
-  local queue = Queue:new(gla.start)
+  local queue = Queue:new()
+  for term, paths in pairs(initial_term_transitions) do
+    local new_gla_state = fa.GLAState:new(paths)
+    gla.start:add_transition(term, new_gla_state)
+    queue:enqueue(new_gla_state)
+  end
 
   while not queue:isempty() do
     local gla_state = queue:dequeue()
-    check_for_ambiguity(gla_state)
+    local alt = get_unique_predicted_alternative(gla_state)
+    if alt then
+      -- this DFA path has uniquely predicted an alternative -- set the
+      -- state final and stop exploring this path
+      gla_state.final = alt
+    else
+      -- this path is still ambiguous about what rtn transition to take --
+      -- explore it further
+      local paths = get_rtn_state_closure(gla_state.rtn_paths, grammar, follow_states)
+      check_for_ambiguity(gla_state)
 
-    for edge_val in each(get_outgoing_term_edges(gla_state.rtn_paths)) do
-      print("Outgoing edge: " .. edge_val)
-      local paths = get_dest_states(gla_state.rtn_paths, edge_val)
-      paths = get_rtn_state_closure(paths, grammar, follow_states)
+      for edge_val in each(get_outgoing_term_edges(paths)) do
+        local paths = get_dest_states(paths, edge_val)
 
-      local new_gla_state = fa.GLAState:new(paths)
-      gla_state:add_transition(edge_val, new_gla_state)
+        local new_gla_state = fa.GLAState:new(paths)
+        gla_state:add_transition(edge_val, new_gla_state)
 
-      local alt = get_unique_predicted_alternative(new_gla_state)
-      if alt then
-        print("unique")
-        -- this DFA path has uniquely predicted an alternative -- set the
-        -- state final and stop exploring this path
-        new_gla_state.final = alt
-      else
-        print("not unique")
-        -- this path is still ambiguous about what rtn transition to take --
-        -- explore it further
-        queue:enqueue(new_gla_state)
       end
     end
   end
@@ -291,6 +302,7 @@ function get_unique_predicted_alternative(gla_state)
 
   for path in each(gla_state.rtn_paths) do
     if path.predict_edge_val ~= edge or path.predict_dest_state ~= state then
+      print(string.format("Not unique: %s/%s vs %s/%s", serialize(path.predict_edge_val), tostring(path.predict_dest_state), serialize(edge), tostring(state)))
       return nil
     end
   end
@@ -343,16 +355,7 @@ function get_dest_states(rtn_paths, edge_val)
 
   for path in each(rtn_paths) do
     for dest_state in each(path.current_state:transitions_for(edge_val, "ANY")) do
-      if path:have_seen_state(dest_state) then
-        -- an RTN path has created a cycle within itself.  This is the sort
-        -- of thing that could possibly be recognized with LL(*) if we
-        -- supported it.  You can trigger this error with the grammar:
-        --
-        --  s -> "Z"* "X" | "Z"* "Y";
-        error("Cyclic grammar detected," .. path:to_dot())
-      else
-        table.insert(dest_states, path:enter_state(edge_val, dest_state))
-      end
+      table.insert(dest_states, path:enter_state(edge_val, dest_state))
     end
   end
 
@@ -385,15 +388,6 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
     for edge_val, dest_state in path.current_state:transitions() do
       if fa.is_nonterm(edge_val) then
         local subrule_start = grammar.rtns:get(edge_val.name).start
-        if path:have_seen_state(subrule_start) then
-          local st = {}
-          for entry in each(path.stack:to_array()) do
-            table.insert(st, entry[1].rtn.name)
-          end
-          error("Cyclic grammar attempting to descend into " .. edge_val.name ..
-                "\n" .. path:to_dot())
-        end
-
         local new_path = path:enter_rule(subrule_start, dest_state)
         queue:enqueue(new_path)
       end
@@ -403,10 +397,6 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
       local state, new_path = path:return_from_rule()
       if state then
         -- There was a stack entry indicating a state to return to.
-        if new_path:have_seen_state(state) then
-          error("Cyclic grammar returning to rule " .. state.rtn.name ..
-                " from rule " .. path.current_state.rtn.name .. "\n" .. path:to_dot())
-        end
         queue:enqueue(new_path)
       else
         for state in each(follow_states[path.current_state.rtn.name]) do
