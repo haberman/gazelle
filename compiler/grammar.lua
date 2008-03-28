@@ -27,8 +27,7 @@
 --------------------------------------------------------------------]]--
 
 require "data_structures"
-require "nfa_to_dfa"
-require "minimize"
+require "fa_algorithms"
 require "intfa_combine"
 
 Grammar = {name="Grammar"}

@@ -30,7 +30,7 @@ TestSet = {}
   function TestSet:test_initial_state()
     local set = Set:new()
     assert_equals(true, set:isempty())
-    assert_equals(0, set:num_elements())
+    assert_equals(0, set:count())
     assert_equals({}, set:to_array())
     assert_equals(false, set:contains(5))
     assert_equals(set:hash_key(), set:hash_key())
@@ -41,7 +41,7 @@ TestSet = {}
 
   function test_contains_one_value(set, val)
     assert_equals(false, set:isempty())
-    assert_equals(1, set:num_elements())
+    assert_equals(1, set:count())
     assert_equals({val}, set:to_array())
     assert_equals(true, set:contains(val))
     assert_equals(set:hash_key(), set:hash_key())
@@ -70,7 +70,7 @@ TestSet = {}
     local values = {1, 2, 3, 4, 5}
     set:add_collection(values)
     assert_equals(false, set:isempty())
-    assert_equals(5, set:num_elements())
+    assert_equals(5, set:count())
     assert_equals(values, set:to_array())
     for val in each(values) do
       assert_equals(true, set:contains(val))

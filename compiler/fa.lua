@@ -103,6 +103,21 @@ function FAState:transitions_for(val, prop)
   return targets
 end
 
+function FAState:dest_state_for(val)
+  local states = self:transitions_for(val, "ANY")
+  if states:count() > 1 then
+    error(">1 transition found")
+  elseif states:count() == 0 then
+    return nil
+  else
+    local dest
+    for dest_state in each(states) do
+      dest = dest_state
+    end
+    return dest
+  end
+end
+
 
 --[[--------------------------------------------------------------------
 
@@ -276,6 +291,26 @@ function GLA:get_outgoing_edge_values(states)
     end
   end
   return values
+end
+
+function GLA:to_dot(indent, suffix)
+  local str = ""
+  suffix = suffix or ""
+  indent = indent or ""
+  for state in each(self:states()) do
+    peripheries = 1
+    extra_label = ""
+    if state.final then peripheries = 2 end
+    if self.start == state then extra_label = "Start" end
+    str = str .. string.format('%s"%s" [label="%s" peripheries=%d]\n',
+                                indent, tostring(state) .. suffix, extra_label, peripheries)
+    for edge_val, target_state in state:transitions() do
+      str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
+                    indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
+                    escape(edge_val))
+    end
+  end
+  return str
 end
 
 
