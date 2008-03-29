@@ -47,8 +47,6 @@ function write_bytecode(grammar, outfilename)
   bc_file = bc.File:new(outfilename, "GH")
   abbrevs = define_abbrevs(bc_file)
 
-  print(string.format("Writing grammar to disk..."))
-
   -- Obtain linearized representations of all the DFAs from the Grammar object.
   local strings = grammar:get_strings()
   local rtns = grammar:get_flattened_rtn_list()
@@ -145,8 +143,9 @@ function emit_intfa(intfa, strings, bc_file, abbrevs)
     if range.low == range.high then
       bc_file:write_abbreviated_record(abbrevs.bc_intfa_transition, range.low, target_state_offset)
     else
-      if range.high == math.huge then range.high = 255 end  -- temporary ASCII-specific hack
-      bc_file:write_abbreviated_record(abbrevs.bc_intfa_transition_range, range.low, range.high, target_state_offset)
+      local high = range.high
+      if high == math.huge then high = 255 end  -- temporary ASCII-specific hack
+      bc_file:write_abbreviated_record(abbrevs.bc_intfa_transition_range, range.low, high, target_state_offset)
     end
   end
 

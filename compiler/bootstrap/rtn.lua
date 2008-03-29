@@ -102,12 +102,14 @@ function parse_grammar(chars)
         grammar:add_ignore(nonterm, ignore.what_to_ignore)
       end
     else
+      local before_offset = chars.offset
       stmt = parse_statement(chars, attributes)
       if not stmt then
         break
       elseif stmt.nonterm then
         stmt.derivations.final.final = "Final"
-        grammar:add_nonterm(stmt.nonterm.name, stmt.derivations, stmt.slot_count)
+        local rule_text = chars.string:sub(before_offset, chars.offset-1)
+        grammar:add_nonterm(stmt.nonterm.name, stmt.derivations, stmt.slot_count, rule_text)
       elseif stmt.term then
         grammar:add_terminal(stmt.term, stmt.regex)
       end

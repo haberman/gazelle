@@ -253,7 +253,10 @@ function construct_gla(state, grammar, follow_states)
     end
   end
 
-  return hopcroft_minimize(gla)
+  gla = hopcroft_minimize(gla)
+  gla.longest_path = fa_longest_path(gla)
+
+  return gla
 end
 
 

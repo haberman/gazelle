@@ -308,3 +308,41 @@ function fa_isequal(fa1, fa2)
   return true
 end
 
+
+--[[--------------------------------------------------------------------
+
+  FA longest path
+
+  fa_longest_path(fa): Returns an integer representing how long the
+  longest path from the start state to a final state can be.  Returns
+  math.huge if the graph has cycles.
+
+--------------------------------------------------------------------]]--
+
+function fa_longest_path(fa)
+  local longest = 0
+  local current_depth = 0
+  local seen = Set:new()
+  function dfs_helper(state)
+    seen:add(state)
+    if state.final and current_depth > longest then
+      longest = current_depth
+    end
+
+    for edge_val, dest_state in state:transitions() do
+      if seen:contains(dest_state) then
+        longest = math.huge
+      else
+        current_depth = current_depth + 1
+        dfs_helper(dest_state)
+        current_depth = current_depth - 1
+      end
+    end
+    seen:remove(state)
+  end
+
+  dfs_helper(fa.start)
+
+  return longest
+end
+

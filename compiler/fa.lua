@@ -230,6 +230,46 @@ function IntFA:get_outgoing_edge_values(states)
   return values
 end
 
+function IntFA:to_dot()
+  str = ""
+  states = self:states():to_array()
+  --table.sort(states, function (a, b) return a.statenum < b.statenum end)
+  for i,state in ipairs(states) do
+    local label = ""
+    local peripheries = 1
+    if state == self.start then label = "Begin" end
+    if state == self.final or state.final then
+      if label ~= "" then label = label .. "/" end
+      peripheries = 2
+    end
+    label = label:gsub("[\"\\]", "\\%1")
+    label = label:gsub("NEWLINE", "\\n")
+    str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
+    for char, tostate, attributes in state:transitions() do
+      local print_char
+      if char == fa.e then
+        print_char = "ep"
+      -- elseif char == "(" then
+      --   print_char = "start capture"
+      -- elseif char == ")" then
+      --   print_char = "end capture"
+      elseif type(char) == "string" then
+        print_char = char
+      elseif type(char) == 'table' and char.class == IntSet then
+        if char:isunbounded() then char = char:invert() end
+        print_char = char:toasciistring()
+      else
+        print(serialize(char, 3, true))
+        print_char = string.char(char)
+      end
+      print_char = print_char:gsub("[\"\\]", "\\%1")
+      print_char = print_char:gsub("NEWLINE", "\\n")
+      str = str .. string.format('  "%s" -> "%s" [label="%s"];\n', tostring(state), tostring(tostate), print_char)
+    end
+  end
+  return str
+end
+
 
 IntFAState = FAState:new()
 IntFAState.name = "IntFAState"
@@ -357,15 +397,28 @@ function escape(str)
 end
 
 function RTN:to_dot(indent, suffix)
+  suffix = suffix or ""
   str = indent .. "rankdir=LR;\n"
-  str = str .. indent .. string.format('label="%s"\n', self.name)
+  -- str = str .. indent .. string.format('label="%s"\n', self.name)
   for state in each(self:states()) do
     peripheries = 1
     extra_label = ""
+    color = ""
+    if state.gla then
+      if state.gla.longest_path == 1 then
+        color = " fillcolor=\"cornflowerblue\""
+      elseif state.gla.longest_path == 2 then
+        color = " fillcolor=\"gold\""
+      elseif state.gla.longest_path > 2 then
+        color = " fillcolor=\"firebrick\""
+      end
+      color = color .. " style=\"filled\""
+    end
     if state.final then peripheries = 2 end
     if self.start == state then extra_label = "Start" end
-    str = str .. string.format('%s"%s" [label="%s" peripheries=%d]\n',
-                                indent, tostring(state) .. suffix, extra_label, peripheries)
+    str = str .. string.format('%s"%s" [label="%s" peripheries=%d%s]\n',
+                                indent, tostring(state) .. suffix, extra_label,
+                                peripheries, color)
     for edge_val, target_state in state:transitions() do
       if fa.is_nonterm(edge_val) then
         str = str .. string.format('%s"%s" -> "%s" [label="<%s>"]\n',

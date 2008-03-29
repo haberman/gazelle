@@ -60,9 +60,10 @@ end
 
 -- Add a nonterminal and its associated RTN to the grammar.
 -- TODO: how should redefinition be caught and warned/errored?
-function Grammar:add_nonterm(name, rtn, slot_count)
+function Grammar:add_nonterm(name, rtn, slot_count, text)
   rtn.name = name
   rtn.slot_count = slot_count
+  rtn.text = text
   for state in each(rtn:states()) do
     state.rtn = rtn
   end
@@ -115,6 +116,7 @@ end
 function copy_attributes(rtn, new_rtn)
   new_rtn.name = rtn.name
   new_rtn.slot_count = rtn.slot_count
+  new_rtn.text = rtn.text
   for state in each(new_rtn:states()) do
     state.rtn = new_rtn
   end

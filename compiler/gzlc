@@ -26,6 +26,9 @@ gzlc [options] input-file
 Options:
   -h, --help         you're looking at it.
 
+  -d,                dump detailed output about the grammar to
+                     html/index.html.
+
   -o <file>          output filename.  Default is input filename
                      with extension replaced with .gzc
 
@@ -41,12 +44,15 @@ version = "Gazelle v0.2-prerelease"
 input_filename = nil
 output_filename = nil
 verbose = false
+dump = false
 argnum = 1
 while argnum <= #arg do
   local a = arg[argnum]
   if a == "-h" or a == "--help" then
     stderr:write(usage)
     os.exit(1)
+  elseif a == "-d" then
+    dump = true
   elseif a == "-o" then
     argnum = argnum + 1
     output_filename = arg[argnum]
@@ -130,5 +136,10 @@ grammar:generate_intfas()
 
 print_verbose(string.format("Writing to output file '%s'...", output_filename))
 write_bytecode(grammar, output_filename)
+
+if dump then
+  require "dump_to_html"
+  dump_to_html(input_filename, grammar, "html")
+end
 
 -- vim:et:sts=2:sw=2

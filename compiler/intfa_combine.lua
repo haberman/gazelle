@@ -105,6 +105,7 @@ function intfa_combine(all_terminals, state_term_pairs)
 
   local dfas = OrderedSet:new()
   for termset in each(termsets) do
+    print(serialize(termset))
     local nfas = {}
     for term in each(termset) do
       local target = all_terminals[term]
