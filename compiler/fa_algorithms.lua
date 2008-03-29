@@ -269,6 +269,8 @@ end
 function fa_isequal(fa1, fa2)
   local equivalent_states={[fa1.start]=fa2.start}
   local queue = Queue:new(fa1.start)
+  local fa2_seen_states = Set:new()
+  fa2_seen_states:add(fa2.start)
 
   while not queue:isempty() do
     local s1 = queue:dequeue()
@@ -291,8 +293,13 @@ function fa_isequal(fa1, fa2)
         if equivalent_states[dest_state] ~= s2_dest_state then
           return false
         end
+      elseif fa2_seen_states:contains(s2_dest_state) then
+        -- we have seen this state before, but not as equivalent to
+        -- the dest_state
+        return false
       else
         equivalent_states[dest_state] = s2_dest_state
+        fa2_seen_states:add(s2_dest_state)
         queue:enqueue(dest_state)
       end
     end

@@ -248,12 +248,12 @@ function construct_gla(state, grammar, follow_states)
 
         local new_gla_state = fa.GLAState:new(paths)
         gla_state:add_transition(edge_val, new_gla_state)
-
+        queue:enqueue(new_gla_state)
       end
     end
   end
 
-  return gla
+  return hopcroft_minimize(gla)
 end
 
 
@@ -302,12 +302,12 @@ function get_unique_predicted_alternative(gla_state)
 
   for path in each(gla_state.rtn_paths) do
     if path.predict_edge_val ~= edge or path.predict_dest_state ~= state then
-      print(string.format("Not unique: %s/%s vs %s/%s", serialize(path.predict_edge_val), tostring(path.predict_dest_state), serialize(edge), tostring(state)))
+      --print(string.format("Not unique: %s/%s vs %s/%s", serialize(path.predict_edge_val), tostring(path.predict_dest_state), serialize(edge), tostring(state)))
       return nil
     end
   end
 
-  return {edge, state}
+  return get_unique_table_for({edge, state})
 end
 
 

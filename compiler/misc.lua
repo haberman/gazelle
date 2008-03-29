@@ -56,6 +56,17 @@ function table_shallow_copy(t)
   return table_copy(t, 1)
 end
 
+cache = {}
+function get_unique_table_for(val)
+  local string_table = {}
+  for entry in each(val) do table.insert(string_table, tostring(entry)) end
+  local str = table.concat(string_table, "\136")
+  if not cache[str] then
+    cache[str] = table_shallow_copy(val)
+  end
+  return cache[str]
+end
+
 -- traverses a graph of some sort -- caller provides a function that gives
 -- children of the current node.
 function breadth_first_traversal(obj, children_func)

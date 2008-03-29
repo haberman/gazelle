@@ -76,14 +76,28 @@ function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str)
   compute_lookahead(grammar)
 
   if not fa_isequal(expected_gla, state.gla) then
-    error(string.format("GLAs were not equal: expected=%s, actual=%s",
-                        expected_gla:to_dot(), state.gla:to_dot()))
+    local bad = io.open("bad.dot", "w")
+    bad:write("digraph untitled {\n")
+    bad:write(state.gla:to_dot())
+    bad:write("}")
+    bad:close()
+
+    local good = io.open("good.dot", "w")
+    good:write("digraph untitled {\n")
+    good:write(expected_gla:to_dot())
+    good:write("}")
+    good:close()
+
+    os.execute("dot -Tpng -o good.png good.dot")
+    os.execute("dot -Tpng -o bad.png bad.dot")
+
+    error("GLAs were not equal: expected and actual are " ..
+          "in good.png and bad.png, respectively")
   end
 end
 
-TestLookahead = {}
-
-function TestLookahead:test_simple()
+TestSimple = {}
+function TestSimple:test1()
   assert_lookahead(
   [[
     s -> a | "X";
@@ -97,7 +111,7 @@ function TestLookahead:test_simple()
   )
 end
 
-function TestLookahead:test_multiple_recursions()
+function TestSimple:test_multiple_recursions()
   assert_lookahead(
   [[
     s -> a | "X";
@@ -112,7 +126,8 @@ function TestLookahead:test_multiple_recursions()
   )
 end
 
-function TestLookahead:test_simple_epsilon()
+TestEpsilon = {}
+function TestEpsilon:test1()
   assert_lookahead(
   [[
     s -> a "Z" | "X";
@@ -121,13 +136,13 @@ function TestLookahead:test_simple_epsilon()
   "s", 0,
   [[
     1 -Y-> 2(1);
-    1 -Z-> 3(1);
-    1 -X-> 4(3);
+    1 -Z-> 2;
+    1 -X-> 3(3);
   ]]
   )
 end
 
-function TestLookahead:test_simple_epsilon2()
+function TestEpsilon:test2()
   assert_lookahead(
   [[
     s -> a | "X";
@@ -136,13 +151,13 @@ function TestLookahead:test_simple_epsilon2()
   "s", 0,
   [[
     1 -Y-> 2(1);
-    1 -Z-> 3(1);
-    1 -X-> 4(2);
+    1 -Z-> 2;
+    1 -X-> 3(2);
   ]]
   )
 end
 
-function TestLookahead:test_simple_epsilon3()
+function TestEpsilon:test3()
   assert_lookahead(
   [[
     s -> a "Q" | "X";
@@ -151,14 +166,14 @@ function TestLookahead:test_simple_epsilon3()
   "s", 0,
   [[
     1 -Y-> 2(1);
-    1 -Z-> 3(1);
-    1 -Q-> 4(1);
-    1 -X-> 5(3);
+    1 -Z-> 2;
+    1 -Q-> 2;
+    1 -X-> 3(3);
   ]]
   )
 end
 
-function TestLookahead:test_simple_epsilon4()
+function TestEpsilon:test4()
   assert_lookahead(
   [[
     s -> a "Q" | "X";
@@ -168,14 +183,14 @@ function TestLookahead:test_simple_epsilon4()
   "s", 0,
   [[
     1 -Y-> 2(1);
-    1 -Z-> 3(1);
-    1 -Q-> 4(1);
-    1 -X-> 5(3);
+    1 -Z-> 2;
+    1 -Q-> 2;
+    1 -X-> 3(3);
   ]]
   )
 end
 
-function TestLookahead:test_simple_epsilon5()
+function TestEpsilon:test5()
   assert_lookahead(
   [[
     s -> a "Q" | "X";
@@ -185,14 +200,15 @@ function TestLookahead:test_simple_epsilon5()
   "s", 0,
   [[
     1 -Y-> 2(1);
-    1 -Z-> 3(1);
-    1 -Q-> 4(1);
-    1 -X-> 5(3);
+    1 -Z-> 2;
+    1 -Q-> 2;
+    1 -X-> 3(3);
   ]]
   )
 end
 
-function TestLookahead:test_multiple_nonterms()
+TestMultipleNonterms = {}
+function TestMultipleNonterms:test1()
   assert_lookahead(
   [[
     s -> a | b | c;
@@ -209,7 +225,7 @@ function TestLookahead:test_multiple_nonterms()
   )
 end
 
-function TestLookahead:test_multiple_nonterms2()
+function TestMultipleNonterms:test22()
   assert_lookahead(
   [[
     s -> (a | b | c)? d;
@@ -228,7 +244,8 @@ function TestLookahead:test_multiple_nonterms2()
   )
 end
 
-function TestLookahead:test_ll_2()
+TestLL2 = {}
+function TestLL2:test1()
   assert_lookahead(
   [[
     s -> "X" "Y" | "X" "Z";
@@ -238,6 +255,93 @@ function TestLookahead:test_ll_2()
     1 -X-> 2;
     2 -Y-> 3(1);
     2 -Z-> 4(3);
+  ]]
+  )
+end
+
+function TestLL2:test2()
+  assert_lookahead(
+  [[
+    s -> a "Y" | a "Z";
+    a -> "X";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2;
+    2 -Y-> 3(1);
+    2 -Z-> 4(3);
+  ]]
+  )
+end
+
+function TestLL2:test3()
+  assert_lookahead(
+  [[
+    s -> a "Y" | a "Z";
+    a -> "X" | "Q";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2;
+    1 -Q-> 2;
+    2 -Y-> 3(1);
+    2 -Z-> 4(3);
+  ]]
+  )
+end
+
+function TestLL2:test3()
+  assert_lookahead(
+  [[
+    s -> "X"? "Y" | "X" "Z";
+  ]],
+  "s", 0,
+  [[
+    1 -Y-> 2(2);
+    1 -X-> 3;
+    3 -Y-> 4(1);
+    3 -Z-> 5(3);
+  ]]
+  )
+end
+
+TestLL3 = {}
+function TestLL3:test1()
+  assert_lookahead(
+  [[
+    s -> a "X" | a "Y";
+    a -> ("P" | "Q") ("P" | "Q");
+  ]],
+  "s", 0,
+  [[
+    1 -P-> 2 -P-> 3;
+    1 -Q-> 2 -Q-> 3;
+    2 -Q-> 3;
+    2 -P-> 3;
+    3 -X-> 4(1);
+    3 -Y-> 5(3);
+  ]]
+  )
+end
+
+function TestLL3:test1()
+  assert_lookahead(
+  [[
+    s -> a "X" | a "Y";
+    a -> ("P" | "Q")? ("P" | "Q")?;
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2(1);
+    1 -Y-> 3(3);
+    1 -P-> 4 -P-> 5;
+    4 -Q-> 5;
+    1 -Q-> 4 -Q-> 5;
+    4 -P-> 5;
+    4 -X-> 2;
+    4 -Y-> 3;
+    5 -X-> 2;
+    5 -Y-> 3;
   ]]
   )
 end
