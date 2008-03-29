@@ -115,7 +115,7 @@ end
 function parse_prim(chars)
   local char = chars:lookahead(1)
   while true do
-    if char == " " then chars:get(); char = chars:lookahead(1)
+    if char == " "  or char == "\n" then chars:get(); char = chars:lookahead(1)
     else break end
   end
 

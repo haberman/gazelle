@@ -105,7 +105,6 @@ function intfa_combine(all_terminals, state_term_pairs)
 
   local dfas = OrderedSet:new()
   for termset in each(termsets) do
-    print(serialize(termset))
     local nfas = {}
     for term in each(termset) do
       local target = all_terminals[term]
@@ -123,7 +122,7 @@ function intfa_combine(all_terminals, state_term_pairs)
     state.intfa = dfas:element_at(intfa_num)
   end
 
-  dfas:sort(function (a, b) return #b.termset < #a.termset end)
+  dfas:sort(function (a, b) return b.termset:count() < a.termset:count() end)
 
   return dfas
 end

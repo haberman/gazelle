@@ -239,7 +239,11 @@ function IntFA:to_dot()
     local peripheries = 1
     if state == self.start then label = "Begin" end
     if state == self.final or state.final then
-      if label ~= "" then label = label .. "/" end
+      if label ~= "" then
+        label = label .. "NEWLINE" .. state.final
+      else
+        label = state.final
+      end
       peripheries = 2
     end
     label = label:gsub("[\"\\]", "\\%1")
@@ -396,7 +400,7 @@ function escape(str)
   return str:gsub("[\"\\]", "\\%1")
 end
 
-function RTN:to_dot(indent, suffix)
+function RTN:to_dot(indent, suffix, intfas, glas)
   suffix = suffix or ""
   str = indent .. "rankdir=LR;\n"
   -- str = str .. indent .. string.format('label="%s"\n', self.name)
@@ -416,6 +420,18 @@ function RTN:to_dot(indent, suffix)
     end
     if state.final then peripheries = 2 end
     if self.start == state then extra_label = "Start" end
+    if intfas and state.intfa then
+      if extra_label ~= "" then
+        extra_label = extra_label .. "\\n"
+      end
+      extra_label = extra_label .. "I: " .. tostring(intfas:offset_of(state.intfa))
+    end
+    if glas and state.gla then
+      if extra_label ~= "" then
+        extra_label = extra_label .. "\\n"
+      end
+      extra_label = extra_label .. "G: " .. tostring(glas:offset_of(state.gla))
+    end
     str = str .. string.format('%s"%s" [label="%s" peripheries=%d%s]\n',
                                 indent, tostring(state) .. suffix, extra_label,
                                 peripheries, color)

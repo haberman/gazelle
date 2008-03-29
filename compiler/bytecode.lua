@@ -41,6 +41,11 @@ BC_GLA_STATE = 0
 BC_GLA_FINAL_STATE = 1
 BC_GLA_TRANSITION = 2
 
+if not print_verbose then
+  function print_verbose(str)
+    print(str)
+  end
+end
 
 function write_bytecode(grammar, outfilename)
   -- write Bitcode header
@@ -54,7 +59,7 @@ function write_bytecode(grammar, outfilename)
   local intfas = grammar.master_intfas
 
   -- emit the strings
-  print(string.format("Writing %d strings...", strings:count()))
+  print_verbose(string.format("Writing %d strings...", strings:count()))
   bc_file:enter_subblock(BC_STRINGS)
   for string in each(strings) do
     bc_file:write_abbreviated_record(abbrevs.bc_string, string)
@@ -62,7 +67,7 @@ function write_bytecode(grammar, outfilename)
   bc_file:end_subblock(BC_STRINGS)
 
   -- emit the intfas
-  print(string.format("Writing %d IntFAs...", intfas:count()))
+  print_verbose(string.format("Writing %d IntFAs...", intfas:count()))
   bc_file:enter_subblock(BC_INTFAS)
   for intfa in each(intfas) do
     emit_intfa(intfa, strings, bc_file, abbrevs)
@@ -70,7 +75,7 @@ function write_bytecode(grammar, outfilename)
   bc_file:end_subblock(BC_INTFAS)
 
   -- emit the GLAs
-  print(string.format("Writing %d GLAs...", glas:count()))
+  print_verbose(string.format("Writing %d GLAs...", glas:count()))
   bc_file:enter_subblock(BC_GLAS)
   for gla in each(glas) do
     emit_gla(gla, strings, intfas, bc_file, abbrevs)
@@ -79,7 +84,7 @@ function write_bytecode(grammar, outfilename)
 
   -- emit the RTNs
   bc_file:enter_subblock(BC_RTNS)
-  print(string.format("Writing %d RTNs...", rtns:count()))
+  print_verbose(string.format("Writing %d RTNs...", rtns:count()))
   for name, rtn in each(rtns) do
     emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
   end
@@ -123,7 +128,7 @@ function emit_intfa(intfa, strings, bc_file, abbrevs)
     end
   end
 
-  print(string.format("  %d states, %d transitions", #states, #intfa_transitions))
+  print_verbose(string.format("  %d states, %d transitions", #states, #intfa_transitions))
 
   -- emit the states
   for state in each(states) do
@@ -156,7 +161,6 @@ function emit_gla(gla, strings, intfas, bc_file, abbrevs)
   bc_file:enter_subblock(BC_GLA)
 
   local states = OrderedSet:new()
-  --print(serialize(gla))
   states:add(gla.start)
   for state in each(gla:states()) do
     if state ~= gla.start then

@@ -149,7 +149,7 @@ function Grammar:generate_intfas()
   for rtn_state in each(self:get_rtn_states_needing_gla()) do
     for gla_state in each(rtn_state.gla:states()) do
       if not gla_state.final then
-        --states:add(gla_state)
+        states:add(gla_state)
       end
     end
   end

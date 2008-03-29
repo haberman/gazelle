@@ -49,7 +49,7 @@ argnum = 1
 while argnum <= #arg do
   local a = arg[argnum]
   if a == "-h" or a == "--help" then
-    stderr:write(usage)
+    io.stderr:write(usage)
     os.exit(1)
   elseif a == "-d" then
     dump = true
