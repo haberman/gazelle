@@ -22,6 +22,8 @@
 #define BC_STRINGS 10
 #define BC_RTNS 11
 #define BC_RTN 12
+#define BC_GLAS 13
+#define BC_GLA 14
 
 #define BC_INTFA_STATE 0
 #define BC_INTFA_FINAL_STATE 1
@@ -31,11 +33,16 @@
 #define BC_STRING 0
 
 #define BC_RTN_INFO 0
-#define BC_RTN_STATE 1
-#define BC_RTN_TRANSITION_TERMINAL 2
-#define BC_RTN_TRANSITION_NONTERM 3
-#define BC_RTN_DECISION 4
-#define BC_RTN_IGNORE 5
+#define BC_RTN_IGNORE 1
+#define BC_RTN_STATE_WITH_INTFA 2
+#define BC_RTN_STATE_WITH_GLA 3
+#define BC_RTN_TRIVIAL_STATE 4
+#define BC_RTN_TRANSITION_TERMINAL 5
+#define BC_RTN_TRANSITION_NONTERM 6
+
+#define BC_GLA_STATE 0
+#define BC_GLA_FINAL_STATE 1
+#define BC_GLA_TRANSITION 2
 
 void check_error(struct bc_read_stream *s)
 {
@@ -236,6 +243,114 @@ void load_intfas(struct bc_read_stream *s, struct grammar *g)
     }
 }
 
+void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
+{
+    /* first get a count of the states and transitions */
+    gla->num_states = 0;
+    gla->num_transitions = 0;
+
+    while(1)
+    {
+        struct record_info ri = bc_rs_next_data_record(s);
+        if(ri.record_type == DataRecord)
+        {
+            if(ri.id == BC_GLA_STATE ||
+               ri.id == BC_GLA_FINAL_STATE)
+                gla->num_states++;
+            else if(ri.id == BC_GLA_TRANSITION)
+                gla->num_transitions++;
+        }
+        else if(ri.record_type == EndBlock)
+            break;
+        else
+            unexpected(s, ri);
+    }
+
+    bc_rs_rewind_block(s);
+    gla->states = malloc(gla->num_states * sizeof(*gla->states));
+    gla->transitions = malloc(gla->num_transitions * sizeof(*gla->transitions));
+
+    int state_offset = 0;
+    int transition_offset = 0;
+    int state_transition_offset = 0;
+
+    while(1)
+    {
+        struct record_info ri = bc_rs_next_data_record(s);
+        if(ri.record_type == DataRecord)
+        {
+            if(ri.id == BC_GLA_STATE || ri.id == BC_GLA_FINAL_STATE)
+            {
+                struct gla_state *state = &gla->states[state_offset++];
+
+                if(ri.id == BC_GLA_STATE)
+                {
+                    state->is_final = false;
+                    state->d.nonfinal.intfa = &g->intfas[bc_rs_read_next_32(s)];
+                    state->d.nonfinal.num_transitions = bc_rs_read_next_32(s);
+                    state->d.nonfinal.transitions = &gla->transitions[state_transition_offset];
+                    state_transition_offset += state->d.nonfinal.num_transitions;
+                }
+                else
+                {
+                    state->is_final = true;
+                    state->d.final.num_rtn_transitions = bc_rs_get_record_size(s);
+                    int rtn_transition_offset = 0;
+                    while(bc_rs_get_remaining_record_size(s) > 0)
+                        state->d.final.rtn_transition_offsets[rtn_transition_offset++] = bc_rs_read_next_32(s);
+                }
+            }
+            else if(ri.id == BC_GLA_TRANSITION)
+            {
+                struct gla_transition *transition = &gla->transitions[transition_offset++];
+
+                transition->term = g->strings[bc_rs_read_next_32(s)];
+                transition->dest_state = &gla->states[bc_rs_read_next_32(s)];
+            }
+        }
+        else if(ri.record_type == EndBlock)
+            break;
+        else
+            unexpected(s, ri);
+    }
+}
+
+void load_glas(struct bc_read_stream *s, struct grammar *g)
+{
+    /* first get a count of the glas */
+    g->num_glas = 0;
+    while(1)
+    {
+        struct record_info ri = bc_rs_next_data_record(s);
+        if(ri.record_type == StartBlock && ri.id == BC_GLA)
+        {
+            g->num_glas++;
+            bc_rs_skip_block(s);
+        }
+        else if(ri.record_type == EndBlock)
+            break;
+        else
+            unexpected(s, ri);
+    }
+
+    bc_rs_rewind_block(s);
+    g->glas = malloc(g->num_glas * sizeof(*g->glas));
+    int gla_offset = 0;
+
+    while(1)
+    {
+        struct record_info ri = bc_rs_next_data_record(s);
+        if(ri.record_type == StartBlock && ri.id == BC_GLA)
+        {
+            load_gla(s, &g->glas[gla_offset++], g);
+        }
+        else if(ri.record_type == EndBlock)
+            break;
+        else
+            unexpected(s, ri);
+    }
+}
+
 void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
 {
     /* first get a count of the ignores, states, and transitions */
@@ -250,11 +365,12 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
         {
             if(ri.id == BC_RTN_IGNORE)
                 rtn->num_ignore++;
-            else if(ri.id == BC_RTN_STATE)
+            else if(ri.id == BC_RTN_STATE_WITH_INTFA ||
+                    ri.id == BC_RTN_STATE_WITH_GLA ||
+                    ri.id == BC_RTN_TRIVIAL_STATE)
                 rtn->num_states++;
             else if(ri.id == BC_RTN_TRANSITION_TERMINAL ||
-                    ri.id == BC_RTN_TRANSITION_NONTERM ||
-                    ri.id == BC_RTN_DECISION)
+                    ri.id == BC_RTN_TRANSITION_NONTERM)
                 rtn->num_transitions++;
         }
         else if(ri.record_type == EndBlock)
@@ -287,7 +403,9 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
             {
                 rtn->ignore_terminals[ignore_offset++] = g->strings[bc_rs_read_next_32(s)];
             }
-            else if(ri.id == BC_RTN_STATE)
+            else if(ri.id == BC_RTN_STATE_WITH_INTFA ||
+                    ri.id == BC_RTN_STATE_WITH_GLA ||
+                    ri.id == BC_RTN_TRIVIAL_STATE)
             {
                 struct rtn_state *state = &rtn->states[state_offset++];
 
@@ -295,53 +413,45 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
                 state->transitions = &rtn->transitions[state_transition_offset];
                 state_transition_offset += state->num_transitions;
 
-                state->term_dfa = &g->intfas[bc_rs_read_next_32(s)];
-
                 if(bc_rs_read_next_8(s))
                     state->is_final = true;
                 else
                     state->is_final = false;
+
+                if(ri.id == BC_RTN_STATE_WITH_INTFA)
+                {
+                    state->lookahead_type = STATE_HAS_INTFA;
+                    state->d.state_intfa = &g->intfas[bc_rs_read_next_32(s)];
+                }
+                else if(ri.id == BC_RTN_STATE_WITH_GLA)
+                {
+                    state->lookahead_type = STATE_HAS_GLA;
+                    state->d.state_gla = &g->glas[bc_rs_read_next_32(s)];
+                }
+                else
+                {
+                    state->lookahead_type = STATE_HAS_NEITHER;
+                }
             }
             else if(ri.id == BC_RTN_TRANSITION_TERMINAL ||
-                    ri.id == BC_RTN_TRANSITION_NONTERM ||
-                    ri.id == BC_RTN_DECISION)
+                    ri.id == BC_RTN_TRANSITION_NONTERM)
             {
                 struct rtn_transition *transition = &rtn->transitions[transition_offset++];
 
-                if(ri.id == BC_RTN_TRANSITION_TERMINAL || ri.id == BC_RTN_TRANSITION_NONTERM)
+                if(ri.id == BC_RTN_TRANSITION_TERMINAL)
                 {
-                    if(ri.id == BC_RTN_TRANSITION_TERMINAL)
-                    {
-                        transition->transition_type = TERMINAL_TRANSITION;
-                        transition->edge.terminal_name = g->strings[bc_rs_read_next_32(s)];
-                    }
-                    else if(ri.id == BC_RTN_TRANSITION_NONTERM)
-                    {
-                        transition->transition_type = NONTERM_TRANSITION;
-                        transition->edge.nonterminal = &g->rtns[bc_rs_read_next_32(s)];
-                    }
-
-                    transition->dest_state = &rtn->states[bc_rs_read_next_32(s)];
-                    transition->slotname   = g->strings[bc_rs_read_next_32(s)];
-                    transition->slotnum    = bc_rs_read_next_32(s);
+                    transition->transition_type = TERMINAL_TRANSITION;
+                    transition->edge.terminal_name = g->strings[bc_rs_read_next_32(s)];
                 }
-                else if(ri.id == BC_RTN_DECISION)
+                else if(ri.id == BC_RTN_TRANSITION_NONTERM)
                 {
-                    transition->transition_type = DECISION;
-                    char *terminal_name = g->strings[bc_rs_read_next_32(s)];
-
-                    transition->edge.decision = malloc(sizeof(struct decision) +
-                                                 (sizeof(struct rtn_transition) * bc_rs_get_remaining_record_size(s)));
-
-                    struct decision *d = transition->edge.decision;
-                    d->terminal_name = terminal_name;
-                    d->num_actions = bc_rs_get_remaining_record_size(s);
-
-                    for(int action_num = 0; bc_rs_get_remaining_record_size(s) > 0; action_num++)
-                    {
-                        d->actions[action_num] = bc_rs_read_next_32(s);
-                    }
+                    transition->transition_type = NONTERM_TRANSITION;
+                    transition->edge.nonterminal = &g->rtns[bc_rs_read_next_32(s)];
                 }
+
+                transition->dest_state = &rtn->states[bc_rs_read_next_32(s)];
+                transition->slotname   = g->strings[bc_rs_read_next_32(s)];
+                transition->slotnum    = bc_rs_read_next_32(s);
             }
         }
         else if(ri.record_type == EndBlock)
@@ -400,6 +510,8 @@ struct grammar *load_grammar(struct bc_read_stream *s)
                 g->strings = load_strings(s);
             else if(ri.id == BC_INTFAS)
                 load_intfas(s, g);
+            else if(ri.id == BC_GLAS)
+                load_glas(s, g);
             else if(ri.id == BC_RTNS)
                 load_rtns(s, g);
             else
@@ -425,7 +537,7 @@ struct grammar *load_grammar(struct bc_read_stream *s)
 
 void free_grammar(struct grammar *g)
 {
-    for(int i = 0; g->strings[i] != NULL; i++)  
+    for(int i = 0; g->strings[i] != NULL; i++)
         free(g->strings[i]);
     free(g->strings); 
 
@@ -434,13 +546,17 @@ void free_grammar(struct grammar *g)
         struct rtn *rtn = &g->rtns[i];
         free(rtn->ignore_terminals);
         free(rtn->states);
-
-        for(int j = 0; j < rtn->num_transitions; j++)
-            if(rtn->transitions[j].transition_type == DECISION)
-                free(rtn->transitions[j].edge.decision);
         free(rtn->transitions);
     }
     free(g->rtns);
+
+    for(int i = 0; i < g->num_glas; i++)
+    {
+        struct gla *gla = &g->glas[i];
+        free(gla->states);
+        free(gla->transitions);
+    }
+    free(g->glas);
 
     for(int i = 0; i < g->num_intfas; i++)
     {

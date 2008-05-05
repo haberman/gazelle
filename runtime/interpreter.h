@@ -46,13 +46,11 @@ struct rtn_transition
     enum {
       TERMINAL_TRANSITION,
       NONTERM_TRANSITION,
-      DECISION
     } transition_type;
 
     union {
       char            *terminal_name;
       struct rtn      *nonterminal;
-      struct decision *decision;
     } edge;
 
     struct rtn_state *dest_state;
@@ -60,19 +58,63 @@ struct rtn_transition
     int slotnum;
 };
 
-struct decision
-{
-    char *terminal_name;
-    int num_actions;
-    int actions[];
-};
-
 struct rtn_state
 {
     bool is_final;
-    struct intfa *term_dfa;
+
+    enum {
+      STATE_HAS_INTFA,
+      STATE_HAS_GLA,
+      STATE_HAS_NEITHER
+    } lookahead_type;
+
+    union {
+      struct intfa *state_intfa;
+      struct gla *state_gla;
+    } d;
+
     int num_transitions;
     struct rtn_transition *transitions;
+};
+
+/*
+ * GLA
+ */
+
+struct gla_state;
+struct gla_transition;
+
+struct gla
+{
+    int num_states;
+    struct gla_state *states;   /* start state is first */
+
+    int num_transitions;
+    struct gla_transition *transitions;
+};
+
+struct gla_transition
+{
+    char *term;
+    struct gla_state *dest_state;
+};
+
+struct gla_state
+{
+    bool is_final;
+
+    union {
+        struct nonfinal_info {
+            struct intfa *intfa;
+            int num_transitions;
+            struct gla_transition *transitions;
+        } nonfinal;
+
+        struct final_info {
+            int num_rtn_transitions;
+            int *rtn_transition_offsets;  /* 1-based -- 0 is "return" */
+        } final;
+    } d;
 };
 
 /*
@@ -111,6 +153,9 @@ struct grammar
 
     int num_rtns;
     struct rtn   *rtns;
+
+    int num_glas;
+    struct gla   *glas;
 
     int num_intfas;
     struct intfa *intfas;
@@ -153,11 +198,35 @@ struct parse_val
 
 struct parse_stack_frame
 {
-    struct rtn            *rtn;
-    struct rtn_state      *rtn_state;
-    struct rtn_transition *rtn_transition;
-    struct slotarray      slots;
-    int start_offset;
+    enum {
+      FRAME_TYPE_RTN,
+      FRAME_TYPE_GLA,
+      FRAME_TYPE_INTFA
+    } frame_type;
+
+    union {
+      struct {
+        struct rtn            *rtn;
+        struct rtn_state      *rtn_state;
+        struct rtn_transition *rtn_transition;
+        struct slotarray      slots;
+        int start_offset;
+      } rtn_frame;
+
+      struct {
+        struct gla            *gla;
+        struct gla_state      *gla_state,
+        int                   start_offset;
+      } gla_frame;
+
+      struct {
+        struct intfa          *intfa;
+        struct intfa_state    *intfa_state;
+        int                   start_offset;
+        int                   last_match_offset;
+        struct intfa_state    *last_match_state;
+      } intfa_frame;
+    } f;
 };
 
 struct buffer
@@ -176,27 +245,38 @@ struct completion_callback
     parse_callback_t callback;
 };
 
+/* This structure defines the core state of a parsing stream.  By saving this
+ * state alone, we can resume a parse from the position where we left off. */
 struct parse_state
 {
-    struct grammar *grammar;
-    struct buffer *buffer;
-
+    /* Our current offset in the stream.  We use this to mark the offsets
+     * of all the tokens we lex. */
     int offset;
-    int precious_offset;
 
-    struct parse_stack_frame *parse_stack;
-    int parse_stack_length;
-    int parse_stack_size;
+    /* The parse stack is the main piece of state that the parser keeps.
+     * There is a stack frame for every RTN, GLA, and IntFA state we are
+     * currently in.
+     *
+     * TODO: The right input can make this grow arbitrarily, so we'll need
+     * built-in limits to avoid infinite memory consumption. */
+    DEFINE_DYNARRAY(parse_stack, struct parse_stack_frame);
 
-    struct intfa       *dfa;
-    struct intfa_state *dfa_state;
-    int match_begin;
-    int last_match_end;
-    struct intfa_state *last_match_state;
+    /* The token buffer is where GLA states store the tokens that they
+     * lex.  Once the GLA reaches a final state, it will run this sequence
+     * of terminals through RTN transitions, and keeping those terminals
+     * here prevents us from having to re-lex them.
+     *
+     * TODO: If the grammar is LL(k) for fixed k, the token buffer will never
+     * need to be longer than k elements long.  If the grammar is LL(*),
+     * this can grow arbitrarily depending on the input, and we'll need
+     * a way to clamp its maximum length to prevent infinite memory
+     * consumption. */
+    DEFINE_DYNARRAY(token_buffer, struct terminal);
+};
 
-    struct parse_val *slotbuf;
-    int slotbuf_len;
-    int slotbuf_size;
+    /* Slotbufs are where each RTN on the parse stack stores information
+     * that clients can use to get the results from the parse. */
+    DEFINE_DYNARRAY(slot_stack, struct parse_val);
 
     int num_completion_callbacks;
     struct completion_callback *callbacks;
@@ -205,7 +285,19 @@ struct parse_state
 
 struct grammar *load_grammar(struct bc_read_stream *s);
 void free_grammar(struct grammar *g);
-void parse(struct parse_state *parse_state, bool *eof);
+
+/* Begin or continue a parse using grammar g, with the current state of the
+ * parse represented by s.  It is expected that the text in buf represents the
+ * input file or stream at offset s->offset. */
+enum parse_status {
+  PARSE_STATUS_OK,
+  PARSE_STATUS_CANCELLED,
+  PARSE_STATUS_EOF
+}
+enum parse_status parse(struct grammar *g, struct parse_state *s,
+                        char *buf, int buf_len, bool eof,
+                        int *out_consumed_buf_len);
+
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
 void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file);

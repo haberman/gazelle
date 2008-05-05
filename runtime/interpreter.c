@@ -20,13 +20,6 @@
 #include <string.h>
 #include "interpreter.h"
 
-#define RESIZE_ARRAY_IF_NECESSARY(ptr, size, desired_size) \
-    if(size < desired_size) \
-    { \
-        size *= 2; \
-        ptr = realloc(ptr, size*sizeof(*ptr)); \
-    }
-
 struct parse_stack_frame *init_new_stack_frame(struct parse_state *parse_state, struct rtn *rtn, int begin)
 {
     struct parse_stack_frame *frame = &parse_state->parse_stack[parse_state->parse_stack_length++];
@@ -187,8 +180,82 @@ void refill_buffer(struct parse_state *state)
     b->len += bytes_read;
 }
 
+void push_intfa_frame(struct parse_state *state, struct intfa *intfa)
+{
+    frame->frame_type = FRAME_TYPE_INTFA;
+    frame->f.intfa        = rtn_state->d.state_infta;
+    frame->f.intfa_state  = &rtn_state->d.state_intfa->states[0];
+    frame->f.start_offset = state->offset;
+    frame->f.last_match_offset = 0;
+    frame->f.last_match_state = NULL;
+}
+
 void parse(struct parse_state *parse_state, bool *eof)
 {
+    struct parse_stack_frame *frame = state->parse_stack[state->parse_stack_length-1];
+
+    switch(frame->frame_type)
+    {
+    case FRAME_TYPE_RTN:
+      {
+        struct rtn_state *rtn_state = frame->f.rtn_frame.rtn_state;
+        switch(rtn_state->lookahead_type)
+        {
+          case STATE_HAS_INTFA:
+            frame = push_intfa_frame(state, rtn_state->d.state_intfa);
+            break;
+
+          case STATE_HAS_GLA:
+            frame = push_gla_frame(state, rtn_state->d.state_gla);
+            break;
+
+          case STATE_HAS_NEITHER:
+            if(rtn_state->num_transitions == 0)
+            {
+                /* Final state */
+                frame = pop_frame(state);
+            }
+            else if(rtn_state->num_transitions == 1)
+            {
+                frame = push_rtn_frame(state, &rtn_state->transitions[0]);
+            }
+            else
+            {
+                printf("Internal error\n");
+            }
+            break;
+        }
+      }
+
+    case FRAME_TYPE_GLA:
+      {
+        struct gla_state *gla_state = frame->f.gla_frame.gla_state;
+        if(gla_state->is_final)
+        {
+            /* pop the GLA frame (since now we know what to do) and use its
+             * information to make one or more RTN transitions */
+            struct final_info *info = &gla_state.d.final;
+            frame = pop_frame(state);
+
+            for(int i = 0; i < info.num_rtn_transitions; i++)
+            {
+                int offset = &info.rtn_transition_offsets[i];
+                if(offset == 0)
+                {
+                    frame = pop_frame(state);
+                }
+                else
+                {
+                    struct rtn_transition *t = 
+                }
+            }
+        }
+      }
+    case FRAME_TYPE_INTFA:
+      {
+      }
+    }
+
     bool user_cancelled = false;
 
     while(!parse_state->buffer->is_eof && !user_cancelled && parse_state->parse_stack_length > 0)

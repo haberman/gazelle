@@ -33,7 +33,7 @@ INTFAS -- the list of all IntFAs (lexing DFAs)
 GLAS
   GLA
     [GLA_STATE, intfa #, # of transitions]
-    [GLA_FINAL_STATE, should return?, <array of rtn alt offsets>]
+    [GLA_FINAL_STATE, <1-based array of rtn alt offsets (0 is return from final)>]
     ...
 
     [GLA_TRANSITION, terminal_name_int, dest GLA state offset]
@@ -46,9 +46,9 @@ RTNS -- a list of all the RTNs
     [RTN_IGNORE, terminal_name_int]
     ...
 
-    [RTN_STATE, # of transitions, intfa#, is final]
-    [RTN_STATE_WITH_GLA, # of transitions, gla#, is final]
-    [RTN_TRIVIAL_FINAL_STATE]  -- assumed to have 0 transtions
+    [RTN_STATE_WITH_INTFA, # of transitions, is final, intfa#]
+    [RTN_STATE_WITH_GLA, # of transitions, is final, gla#]
+    [RTN_TRIVIAL_STATE, # of transitions, is final]
     ...
 
     [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
