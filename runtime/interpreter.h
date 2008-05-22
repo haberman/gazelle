@@ -167,6 +167,7 @@ struct grammar
 
 struct terminal
 {
+    char *name;
     int offset;
     int len;
 };
@@ -198,35 +199,32 @@ struct parse_val
 
 struct parse_stack_frame
 {
-    enum {
-      FRAME_TYPE_RTN,
-      FRAME_TYPE_GLA,
-      FRAME_TYPE_INTFA
-    } frame_type;
-
     union {
-      struct {
+      struct rtn_frame {
         struct rtn            *rtn;
         struct rtn_state      *rtn_state;
         struct rtn_transition *rtn_transition;
-        struct slotarray      slots;
-        int start_offset;
+        int                   start_offset;
       } rtn_frame;
 
-      struct {
+      struct gla_frame {
         struct gla            *gla;
         struct gla_state      *gla_state,
         int                   start_offset;
       } gla_frame;
 
-      struct {
+      struct intfa_frame {
         struct intfa          *intfa;
         struct intfa_state    *intfa_state;
         int                   start_offset;
-        int                   last_match_offset;
-        struct intfa_state    *last_match_state;
       } intfa_frame;
     } f;
+
+    enum {
+      FRAME_TYPE_RTN,
+      FRAME_TYPE_GLA,
+      FRAME_TYPE_INTFA
+    } frame_type;
 };
 
 struct buffer
@@ -272,6 +270,7 @@ struct parse_state
      * a way to clamp its maximum length to prevent infinite memory
      * consumption. */
     DEFINE_DYNARRAY(token_buffer, struct terminal);
+    int token_buffer_offset;
 };
 
     /* Slotbufs are where each RTN on the parse stack stores information
@@ -288,15 +287,32 @@ void free_grammar(struct grammar *g);
 
 /* Begin or continue a parse using grammar g, with the current state of the
  * parse represented by s.  It is expected that the text in buf represents the
- * input file or stream at offset s->offset. */
+ * input file or stream at offset s->offset.
+ *
+ * Return values:
+ *  - PARSE_STATUS_OK: the entire buffer has been consumed successfully, and
+ *    s represents the state of the parse as of the last byte of the buffer.
+ *    You may continue parsing this file by calling parse() again with more
+ *    data.
+ *  - PARSE_STATUS_CANCELLED: a callback that was called inside of parse()
+ *    requested that parsing halt.  s is now invalid (I may try to accommodate
+ *    this case better in the future).
+ *  - PARSE_STATUS_EOF: all or part of the buffer was parsed successfully,
+ *    but a state was reached where no more characters could be accepted
+ *    according to the grammar.  out_consumed_buf_len reflects how many
+ *    characters were read before parsing reached this state.
+ *
+ * eof_ok indicates whether the input including this buffer forms a complete
+ * and valid file according to the grammar.
+ */
 enum parse_status {
   PARSE_STATUS_OK,
   PARSE_STATUS_CANCELLED,
-  PARSE_STATUS_EOF
+  PARSE_STATUS_EOF,
 }
 enum parse_status parse(struct grammar *g, struct parse_state *s,
-                        char *buf, int buf_len, bool eof,
-                        int *out_consumed_buf_len);
+                        char *buf, int buf_len,
+                        int *out_consumed_buf_len, bool *out_eof_ok);
 
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
