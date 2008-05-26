@@ -33,7 +33,7 @@ INTFAS -- the list of all IntFAs (lexing DFAs)
 GLAS
   GLA
     [GLA_STATE, intfa #, # of transitions]
-    [GLA_FINAL_STATE, <1-based array of rtn alt offsets (0 is return from final)>]
+    [GLA_FINAL_STATE, 1-based rtn alt offset (0 is return from final)]
     ...
 
     [GLA_TRANSITION, terminal_name_int, dest GLA state offset]

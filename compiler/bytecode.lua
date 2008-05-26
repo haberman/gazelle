@@ -171,8 +171,8 @@ function emit_gla(gla, strings, intfas, bc_file, abbrevs)
   -- emit states
   for state in each(states) do
     if state.final then
-      local transition_array = {}  -- todo
-      bc_file:write_abbreviated_record(abbrevs.bc_gla_final_state, transition_array)
+      local transition = 0 -- TODO
+      bc_file:write_abbreviated_record(abbrevs.bc_gla_final_state, transition)
     else
       bc_file:write_abbreviated_record(abbrevs.bc_gla_state,
                                        intfas:offset_of(gla.intfa),
@@ -218,12 +218,14 @@ function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
                                        glas:offset_of(state.gla),
                                        is_final)
     elseif state.intfa then
-      bc_file:write_abbreviated_record(abbrevs.bc_rtn_state,
+      bc_file:write_abbreviated_record(abbrevs.bc_rtn_state_with_intfa,
                                        #rtn.transitions[state],
                                        intfas:offset_of(state.intfa),
                                        is_final)
     else
-      bc_file:write_abbreviated_record(abbrevs.bc_rtn_trivial_final_state)
+      bc_file:write_abbreviated_record(abbrevs.bc_rtn_trivial_state,
+                                       #rtn.transitions[state],
+                                       is_final)
     end
   end
 
@@ -296,8 +298,8 @@ function define_abbrevs(bc_file)
                                       bc.VBROp:new(6),
                                       bc.VBROp:new(4))
 
-  abbrevs.bc_rtn_state = bc_file:define_abbreviation(5,
-                                      bc.LiteralOp:new(BC_RTN_STATE),
+  abbrevs.bc_rtn_state_with_intfa = bc_file:define_abbreviation(5,
+                                      bc.LiteralOp:new(BC_RTN_STATE_WITH_INTFA),
                                       bc.VBROp:new(4),
                                       bc.VBROp:new(4),
                                       bc.FixedOp:new(1))
@@ -308,8 +310,10 @@ function define_abbrevs(bc_file)
                                       bc.VBROp:new(4),
                                       bc.FixedOp:new(1))
 
-  abbrevs.bc_rtn_trivial_final_state = bc_file:define_abbreviation(7,
-                                      bc.LiteralOp:new(BC_RTN_TRIVIAL_FINAL_STATE))
+  abbrevs.bc_rtn_trivial_state = bc_file:define_abbreviation(7,
+                                      bc.LiteralOp:new(BC_RTN_TRIVIAL_STATE),
+                                      bc.FixedOp:new(1),
+                                      bc.FixedOp:new(1))
 
   abbrevs.bc_rtn_transition_terminal = bc_file:define_abbreviation(8,
                                       bc.LiteralOp:new(BC_RTN_TRANSITION_TERMINAL),
@@ -339,7 +343,7 @@ function define_abbrevs(bc_file)
 
   abbrevs.bc_gla_final_state = bc_file:define_abbreviation(5,
                                       bc.LiteralOp:new(BC_GLA_FINAL_STATE),
-                                      bc.ArrayOp:new(bc.VBROp:new(4)))
+                                      bc.VBROp:new(4))
 
   abbrevs.bc_gla_transition = bc_file:define_abbreviation(6,
                                       bc.LiteralOp:new(BC_GLA_TRANSITION),
