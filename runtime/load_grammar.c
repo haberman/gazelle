@@ -294,10 +294,7 @@ void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
                 else
                 {
                     state->is_final = true;
-                    state->d.final.num_rtn_transitions = bc_rs_get_record_size(s);
-                    int rtn_transition_offset = 0;
-                    while(bc_rs_get_remaining_record_size(s) > 0)
-                        state->d.final.rtn_transition_offsets[rtn_transition_offset++] = bc_rs_read_next_32(s);
+                    state->d.final.transition_offset = bc_rs_read_next_32(s);
                 }
             }
             else if(ri.id == BC_GLA_TRANSITION)

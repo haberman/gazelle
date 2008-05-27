@@ -61,14 +61,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    struct parse_state state;
-    alloc_parse_state(&state);
-    init_parse_state(&state, g, file);
-
-    bool eof;
-    parse(&state, &eof);
-
-    free_parse_state(&state);
     free_grammar(g);
     fclose(file);
 }

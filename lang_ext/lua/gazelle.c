@@ -279,21 +279,6 @@ static int gazelle_rtn_state_transitions(lua_State *L)
       lua_pushnumber(L, t->slotnum);
       lua_rawseti(L, -2, 5);
     }
-    else if(t->transition_type == DECISION)
-    {
-      lua_pushstring(L, "decision");
-      lua_rawseti(L, -2, 1);
-      lua_pushstring(L, t->edge.decision->terminal_name);
-      lua_rawseti(L, -2, 2);
-
-      lua_newtable(L);
-      for(int j = 0; j < t->edge.decision->num_actions; j++)
-      {
-        lua_pushnumber(L, t->edge.decision->actions[j]);
-        lua_rawseti(L, -2, j+1);
-      }
-      lua_rawseti(L, -2, 3);
-    }
     else
     {
       printf("%d\n", t->transition_type);

@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "bc_read_stream.h"
+#include "dynarray.h"
 
 struct parse_state;
 typedef void (*parse_callback_t)(struct parse_state *state, void *user_data);
@@ -111,8 +112,7 @@ struct gla_state
         } nonfinal;
 
         struct final_info {
-            int num_rtn_transitions;
-            int *rtn_transition_offsets;  /* 1-based -- 0 is "return" */
+            int transition_offset; /* 1-based -- 0 is "return" */
         } final;
     } d;
 };
@@ -209,7 +209,7 @@ struct parse_stack_frame
 
       struct gla_frame {
         struct gla            *gla;
-        struct gla_state      *gla_state,
+        struct gla_state      *gla_state;
         int                   start_offset;
       } gla_frame;
 
@@ -225,22 +225,6 @@ struct parse_stack_frame
       FRAME_TYPE_GLA,
       FRAME_TYPE_INTFA
     } frame_type;
-};
-
-struct buffer
-{
-    FILE *file;
-    unsigned char *buf;
-    int len;
-    int size;
-    int base_offset;
-    bool is_eof;
-};
-
-struct completion_callback
-{
-    char *rtn_name;
-    parse_callback_t callback;
 };
 
 /* This structure defines the core state of a parsing stream.  By saving this
@@ -259,10 +243,10 @@ struct parse_state
      * built-in limits to avoid infinite memory consumption. */
     DEFINE_DYNARRAY(parse_stack, struct parse_stack_frame);
 
-    /* The token buffer is where GLA states store the tokens that they
-     * lex.  Once the GLA reaches a final state, it will run this sequence
-     * of terminals through RTN transitions, and keeping those terminals
-     * here prevents us from having to re-lex them.
+    /* The token buffer stores tokens that have already been used to transition
+     * the current GLA, but will be used to transition an RTN (and perhaps
+     * other GLAs) when the current GLA hits a final state.  Keeping those
+     * terminals here prevents us from having to re-lex them.
      *
      * TODO: If the grammar is LL(k) for fixed k, the token buffer will never
      * need to be longer than k elements long.  If the grammar is LL(*),
@@ -270,16 +254,6 @@ struct parse_state
      * a way to clamp its maximum length to prevent infinite memory
      * consumption. */
     DEFINE_DYNARRAY(token_buffer, struct terminal);
-    int token_buffer_offset;
-};
-
-    /* Slotbufs are where each RTN on the parse stack stores information
-     * that clients can use to get the results from the parse. */
-    DEFINE_DYNARRAY(slot_stack, struct parse_val);
-
-    int num_completion_callbacks;
-    struct completion_callback *callbacks;
-    void *user_data;
 };
 
 struct grammar *load_grammar(struct bc_read_stream *s);
@@ -309,7 +283,7 @@ enum parse_status {
   PARSE_STATUS_OK,
   PARSE_STATUS_CANCELLED,
   PARSE_STATUS_EOF,
-}
+};
 enum parse_status parse(struct grammar *g, struct parse_state *s,
                         char *buf, int buf_len,
                         int *out_consumed_buf_len, bool *out_eof_ok);
