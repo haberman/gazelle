@@ -220,7 +220,7 @@ struct parse_stack_frame
       } intfa_frame;
     } f;
 
-    enum {
+    enum frame_type {
       FRAME_TYPE_RTN,
       FRAME_TYPE_GLA,
       FRAME_TYPE_INTFA

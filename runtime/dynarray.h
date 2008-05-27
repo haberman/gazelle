@@ -19,12 +19,12 @@
   if(name ## _size < desired_len) \
   { \
     name ## _size *= 2; \
-    ptr = realloc(name, name ## _size * sizeof(*name)); \
+    name = realloc(name, name ## _size * sizeof(*name)); \
   } \
   else if(name ## _size > desired_len * 4) \
   { \
     name ## _size /= 2; \
-    ptr = realloc(name, name ## _size * sizeof(*name)); \
+    name = realloc(name, name ## _size * sizeof(*name)); \
   } \
   name ## _len = desired_len;
 
@@ -36,4 +36,7 @@
 
 #define FREE_DYNARRAY(name) \
   free(name);
+
+#define DYNARRAY_GET_TOP(name) \
+  (&name[name ## _len - 1])
 
