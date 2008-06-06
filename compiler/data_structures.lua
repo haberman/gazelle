@@ -192,8 +192,11 @@ OrderedSet = {name="OrderedSet"}
     return #self.elements
   end
 
+  -- though this is against Lua convention, this method returns 0-based offsets,
+  -- since this function is primarily used to generate the output byte-code
+  -- file (which is based on 0-offsets).
   function OrderedSet:offset_of(elem)
-    return self.element_offsets[elem]
+    return self.element_offsets[elem] - 1
   end
 
   function OrderedSet:element_at(pos)
@@ -236,12 +239,25 @@ OrderedMap = {name="OrderedMap"}
     end
   end
 
+  function OrderedMap:insert_front(key, value)
+    local new_key_offsets = {}
+    for k, o in pairs(self.key_offsets) do
+      new_key_offsets[k] = o + 1
+    end
+    self.key_offsets = new_key_offsets
+    self.key_offsets[key] = 1
+    table.insert(self.elements, 1, {key, value})
+  end
+
   function OrderedMap:get(key)
     return self.elements[self.key_offsets[key]][2]
   end
 
+  -- though this is against Lua convention, this method returns 0-based offsets,
+  -- since this function is primarily used to generate the output byte-code
+  -- file (which is based on 0-offsets).
   function OrderedMap:offset_of_key(elem)
-    return self.key_offsets[elem]
+    return self.key_offsets[elem] - 1
   end
 
   function OrderedMap:count()

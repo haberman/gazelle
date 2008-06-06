@@ -175,7 +175,7 @@ function emit_gla(gla, strings, intfas, bc_file, abbrevs)
       bc_file:write_abbreviated_record(abbrevs.bc_gla_final_state, transition)
     else
       bc_file:write_abbreviated_record(abbrevs.bc_gla_state,
-                                       intfas:offset_of(gla.intfa),
+                                       intfas:offset_of(state.intfa),
                                        state:num_transitions())
     end
   end

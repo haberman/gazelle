@@ -101,12 +101,14 @@ function Grammar:get_rtn_states_needing_intfa()
   return states
 end
 
-function Grammar:get_rtn_states_needing_gla(exclude_final)
+function Grammar:get_rtn_states_needing_gla()
   local states = Set:new()
   for name, rtn in each(self.rtns) do
     for state in each(rtn:states()) do
       if state:needs_gla() then
         states:add(state)
+      elseif state.gla then
+        printf("Why does rtn state " .. state .. "have a GLA but not need one?  This befuddles ms.")
       end
     end
   end
@@ -149,6 +151,7 @@ function Grammar:generate_intfas()
   for rtn_state in each(self:get_rtn_states_needing_gla()) do
     for gla_state in each(rtn_state.gla:states()) do
       if not gla_state.final then
+        print("Adding gla state " .. tostring(gla_state))
         states:add(gla_state)
       end
     end
@@ -227,7 +230,8 @@ end
   Grammar:get_flattened_rtn_list(): Creates and returns a list of all
   the RTNs, states, and transitions in a particular and stable order,
   ready for emitting to the outside world.  The RTNs themselves are
-  returned in the order they were defined.
+  returned in the order they were defined, except that the start RTN
+  is always emitted first.
 
   Returns:
     OrderedMap: {rtn_name -> {
@@ -252,7 +256,12 @@ function Grammar:get_flattened_rtn_list()
     table.insert(states, 1, rtn.start)
     states = OrderedSet:new(states)
 
-    rtns:add(name, {states=states, transitions={}, slot_count=rtn.slot_count})
+    -- ensure that start RTN is emitted first
+    if name == self.start then
+      rtns:insert_front(name, {states=states, transitions={}, slot_count=rtn.slot_count})
+    else
+      rtns:add(name, {states=states, transitions={}, slot_count=rtn.slot_count})
+    end
   end
 
   -- create a list of transitions for every state
