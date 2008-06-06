@@ -290,8 +290,8 @@ enum parse_status parse(struct grammar *g, struct parse_state *s,
 
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
-void init_parse_state(struct parse_state *state, struct grammar *g, FILE *file);
-void reinit_parse_state(struct parse_state *state);
+void init_parse_state(struct parse_state *state, struct grammar *g);
+void reinit_parse_state(struct parse_state *state, struct grammar *g);
 
 void register_callback(struct parse_state *state, char *rtn_name, parse_callback_t callback, void *user_data);
 

@@ -61,6 +61,24 @@ int main(int argc, char *argv[])
         }
     }
 
+    struct parse_state state;
+    init_parse_state(&state, g);
+
+    char buf[1];
+    int total_read = 0;
+    while(1) {
+        int consumed_buf_len;
+        int read = fread(buf, 1, sizeof(buf), file);
+        enum parse_status status = parse(g, &state, buf, read, &consumed_buf_len, NULL);
+        total_read += consumed_buf_len;
+
+        if(status == PARSE_STATUS_EOF || read == 0)
+            break;
+    }
+
+    printf("%d bytes parsed.\n", total_read);
+
+    free_parse_state(&state);
     free_grammar(g);
     fclose(file);
 }
