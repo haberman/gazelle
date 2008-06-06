@@ -241,3 +241,7 @@ a -> "B" *
 
 No final GLA state should ever have a transition out of it.
 
+----
+
+s -> "X" s | "X";
+
