@@ -19,6 +19,8 @@
   avoid are having Gazelle hanging forever, or worse, producing
   incorrect lookahead.
 
+  TODO: add support for GLAs that instruct a final RTN state to return.
+
   Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
@@ -39,6 +41,7 @@ function compute_lookahead(grammar)
 
   for state in each(gla_needing_rtn_states) do
     state.gla = construct_gla(state, grammar, follow_states)
+    state.gla.rtn_state = state
   end
 end
 

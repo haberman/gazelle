@@ -77,7 +77,7 @@ function write_bytecode(grammar, outfilename)
   print_verbose(string.format("Writing %d GLAs...", glas:count()))
   bc_file:enter_subblock(BC_GLAS)
   for gla in each(glas) do
-    emit_gla(gla, strings, intfas, bc_file, abbrevs)
+    emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
   end
   bc_file:end_subblock(BC_GLAS)
 
@@ -156,7 +156,7 @@ function emit_intfa(intfa, strings, bc_file, abbrevs)
   bc_file:end_subblock(BC_INTFA)
 end
 
-function emit_gla(gla, strings, intfas, bc_file, abbrevs)
+function emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
   bc_file:enter_subblock(BC_GLA)
 
   local states = OrderedSet:new()
@@ -170,8 +170,21 @@ function emit_gla(gla, strings, intfas, bc_file, abbrevs)
   -- emit states
   for state in each(states) do
     if state.final then
-      local transition = 0 -- TODO
-      bc_file:write_abbreviated_record(abbrevs.bc_gla_final_state, transition)
+      -- figure out the offset of the RTN transition this GLA final state implies.
+      local ordered_rtn = rtns:get(gla.rtn_state.rtn.name)
+      local transitions = ordered_rtn.transitions[gla.rtn_state]
+      local transition_offset = nil
+      for i=1,#transitions do
+        if transitions[i][1] == state.final[1] and transitions[i][2] == state.final[2] then
+          transition_offset = i
+          break
+        end
+      end
+
+      if transition_offset == nil then
+        error("GLA final state indicated a state that was not found in the RTN state.")
+      end
+      bc_file:write_abbreviated_record(abbrevs.bc_gla_final_state, transition_offset)
     else
       bc_file:write_abbreviated_record(abbrevs.bc_gla_state,
                                        intfas:offset_of(state.intfa),
@@ -206,15 +219,16 @@ function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
     end
 
     if state.gla then
+      print(glas:offset_of(state.gla))
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_state_with_gla,
                                        #rtn.transitions[state],
-                                       glas:offset_of(state.gla),
-                                       is_final)
+                                       is_final,
+                                       glas:offset_of(state.gla))
     elseif state.intfa then
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_state_with_intfa,
                                        #rtn.transitions[state],
-                                       intfas:offset_of(state.intfa),
-                                       is_final)
+                                       is_final,
+                                       intfas:offset_of(state.intfa))
     else
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_trivial_state,
                                        #rtn.transitions[state],
@@ -294,14 +308,14 @@ function define_abbrevs(bc_file)
   abbrevs.bc_rtn_state_with_intfa = bc_file:define_abbreviation(5,
                                       bc.LiteralOp:new(BC_RTN_STATE_WITH_INTFA),
                                       bc.VBROp:new(4),
-                                      bc.VBROp:new(4),
-                                      bc.FixedOp:new(1))
+                                      bc.FixedOp:new(1),
+                                      bc.VBROp:new(4))
 
   abbrevs.bc_rtn_state_with_gla = bc_file:define_abbreviation(6,
                                       bc.LiteralOp:new(BC_RTN_STATE_WITH_GLA),
                                       bc.VBROp:new(4),
-                                      bc.VBROp:new(4),
-                                      bc.FixedOp:new(1))
+                                      bc.FixedOp:new(1),
+                                      bc.VBROp:new(4))
 
   abbrevs.bc_rtn_trivial_state = bc_file:define_abbreviation(7,
                                       bc.LiteralOp:new(BC_RTN_TRIVIAL_STATE),

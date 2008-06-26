@@ -113,6 +113,7 @@ struct parse_stack_frame *push_rtn_frame_for_transition(struct parse_state *s,
 
 struct parse_stack_frame *pop_frame(struct parse_state *s)
 {
+    assert(s->parse_stack_len > 0);
     RESIZE_DYNARRAY(s->parse_stack, s->parse_stack_len-1);
     dump_stack(s, NULL, stderr);
     return DYNARRAY_GET_TOP(s->parse_stack);
@@ -120,16 +121,19 @@ struct parse_stack_frame *pop_frame(struct parse_state *s)
 
 struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
 {
+    assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_RTN);
     return pop_frame(s);
 }
 
 struct parse_stack_frame *pop_gla_frame(struct parse_state *s)
 {
+    assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_GLA);
     return pop_frame(s);
 }
 
 struct parse_stack_frame *pop_intfa_frame(struct parse_state *s)
 {
+    assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_INTFA);
     return pop_frame(s);
 }
 

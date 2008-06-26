@@ -76,8 +76,6 @@ function Grammar:get_rtn_states_needing_gla()
     for state in each(rtn:states()) do
       if state:needs_gla() then
         states:add(state)
-      elseif state.gla then
-        printf("Why does rtn state " .. state .. "have a GLA but not need one?  This befuddles ms.")
       end
     end
   end

@@ -359,8 +359,8 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
         if(ri.record_type == DataRecord)
         {
             if(ri.id == BC_RTN_STATE_WITH_INTFA ||
-                    ri.id == BC_RTN_STATE_WITH_GLA ||
-                    ri.id == BC_RTN_TRIVIAL_STATE)
+               ri.id == BC_RTN_STATE_WITH_GLA ||
+               ri.id == BC_RTN_TRIVIAL_STATE)
                 rtn->num_states++;
             else if(ri.id == BC_RTN_TRANSITION_TERMINAL ||
                     ri.id == BC_RTN_TRANSITION_NONTERM)

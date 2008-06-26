@@ -207,6 +207,23 @@ function TestEpsilon:test5()
   )
 end
 
+--[=[
+  TODO: add this test when GLAs that tell RTNs to return are supported.
+function TestEpsilon:test5()
+  assert_lookahead(
+  [[
+    s -> a "X";
+    a -> "Y"* "Z";
+  ]],
+  "a", 1,
+  [[
+    1 -Y-> 2(1);
+    1 -X-> 3(0);
+  ]]
+  )
+end
+]=]
+
 TestMultipleNonterms = {}
 function TestMultipleNonterms:test1()
   assert_lookahead(
