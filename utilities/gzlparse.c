@@ -27,7 +27,6 @@ void usage()
 
 int main(int argc, char *argv[])
 {
-    printf("Size: %zd\n", sizeof(struct parse_stack_frame));
     if(argc < 3)
     {
         usage();
@@ -65,7 +64,7 @@ int main(int argc, char *argv[])
     struct parse_state state;
     init_parse_state(&state, g);
 
-    char buf[1];
+    char buf[4096];
     int total_read = 0;
     while(1) {
         int consumed_buf_len;

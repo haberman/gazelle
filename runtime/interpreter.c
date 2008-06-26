@@ -21,9 +21,12 @@
 #include <string.h>
 #include "interpreter.h"
 
+struct grammar *global_g;
+
 void dump_stack(struct parse_state *s, struct grammar *g, FILE *output)
 {
     fprintf(output, "Stack dump:\n");
+    if(g == NULL) g = global_g;
     for(int i = 0; i < s->parse_stack_len; i++)
     {
         struct parse_stack_frame *frame = &s->parse_stack[i];
@@ -65,48 +68,53 @@ struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_typ
     return frame;
 }
 
-struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa)
+struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa, int start_offset)
 {
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_INTFA);
     struct intfa_frame *intfa_frame = &frame->f.intfa_frame;
     intfa_frame->intfa        = intfa;
     intfa_frame->intfa_state  = &intfa->states[0];
-    intfa_frame->start_offset = s->offset;
+    intfa_frame->start_offset = start_offset;
+    dump_stack(s, NULL, stderr);
     return intfa_frame;
 }
 
-struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla)
+struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla, int start_offset)
 {
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_GLA);
     struct gla_frame *gla_frame = &frame->f.gla_frame;
     gla_frame->gla          = gla;
     gla_frame->gla_state    = &gla->states[0];
-    gla_frame->start_offset = s->offset;
+    gla_frame->start_offset = start_offset;
+    dump_stack(s, NULL, stderr);
     return frame;
 }
 
-struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn)
+struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn, int start_offset)
 {
     struct parse_stack_frame *new_frame = push_empty_frame(s, FRAME_TYPE_RTN);
     struct rtn_frame *new_rtn_frame = &new_frame->f.rtn_frame;
 
     new_rtn_frame->rtn            = rtn;
     new_rtn_frame->rtn_state      = &new_rtn_frame->rtn->states[0];
-    new_rtn_frame->start_offset   = s->offset;
+    new_rtn_frame->start_offset   = start_offset;
+    dump_stack(s, NULL, stderr);
     return new_frame;
 }
 
 struct parse_stack_frame *push_rtn_frame_for_transition(struct parse_state *s,
-                                                        struct rtn_transition *t)
+                                                        struct rtn_transition *t,
+                                                        int start_offset)
 {
     struct rtn_frame *old_rtn_frame = &DYNARRAY_GET_TOP(s->parse_stack)->f.rtn_frame;
     old_rtn_frame->rtn_transition = t;
-    return push_rtn_frame(s, t->edge.nonterminal);
+    return push_rtn_frame(s, t->edge.nonterminal, start_offset);
 }
 
 struct parse_stack_frame *pop_frame(struct parse_state *s)
 {
     RESIZE_DYNARRAY(s->parse_stack, s->parse_stack_len-1);
+    dump_stack(s, NULL, stderr);
     return DYNARRAY_GET_TOP(s->parse_stack);
 }
 
@@ -137,7 +145,7 @@ struct parse_stack_frame *pop_intfa_frame(struct parse_state *s)
  * - the current frame is an RTN frame or a GLA frame.  If a new GLA frame was
  *   entered, entered_gla is set to true.
  */
-struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gla)
+struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gla, int start_offset)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     *entered_gla = false;
@@ -153,7 +161,7 @@ struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gl
 
           case STATE_HAS_GLA:
             *entered_gla = true;
-            return push_gla_frame(s, rtn_frame->rtn_state->d.state_gla);
+            return push_gla_frame(s, rtn_frame->rtn_state->d.state_gla, start_offset);
             break;
 
           case STATE_HAS_NEITHER:
@@ -170,7 +178,8 @@ struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gl
             else if(rtn_frame->rtn_state->num_transitions == 1)
             {
                 assert(rtn_frame->rtn_state->transitions[0].transition_type == NONTERM_TRANSITION);
-                frame = push_rtn_frame_for_transition(s, &rtn_frame->rtn_state->transitions[0]);
+                frame = push_rtn_frame_for_transition(s, &rtn_frame->rtn_state->transitions[0],
+                                                      start_offset);
             }
             break;
         }
@@ -178,17 +187,19 @@ struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gl
     return frame;
 }
 
-struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s)
+struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s, int start_offset)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     if(frame->frame_type == FRAME_TYPE_GLA)
     {
-        return push_intfa_frame(s, frame->f.gla_frame.gla_state->d.nonfinal.intfa);
+        assert(frame->f.gla_frame.gla_state->is_final == false);
+        return push_intfa_frame(s, frame->f.gla_frame.gla_state->d.nonfinal.intfa, start_offset);
     }
     else if(frame->frame_type == FRAME_TYPE_RTN)
     {
-        return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa);
+        return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa, start_offset);
     }
+    dump_stack(s, NULL, stderr);
     assert(false);
     return NULL;
 }
@@ -197,6 +208,7 @@ struct parse_stack_frame *do_rtn_terminal_transition(struct parse_state *s,
                                                      struct rtn_transition *t)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
+    assert(frame->frame_type == FRAME_TYPE_RTN);
     struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
     assert(t->transition_type == TERMINAL_TRANSITION);
     rtn_frame->rtn_state = t->dest_state;
@@ -234,14 +246,14 @@ struct rtn_transition *find_rtn_terminal_transition(struct parse_state *s,
  *   an RTN frame (indicating we *have* hit a final state in the GLA)
  */
 struct parse_stack_frame *do_gla_transition(struct parse_state *s,
-                                            int *gla_term_offset,
+                                            struct terminal *gla_term,
                                             int *rtn_term_offset)
 {
     struct parse_stack_frame *frame = &s->parse_stack[s->parse_stack_len-1];
     assert(frame->frame_type == FRAME_TYPE_GLA);
     assert(frame->f.gla_frame.gla_state->is_final == false);
     struct gla_state *gla_state = frame->f.gla_frame.gla_state;
-    struct terminal *gla_term = &s->token_buffer[(*gla_term_offset)++];
+    struct gla_state *dest_gla_state;
 
     bool found_transition = false;
     for(int i = 0; i < gla_state->d.nonfinal.num_transitions; i++)
@@ -250,16 +262,16 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
         if(t->term == gla_term->name)
         {
             found_transition = true;
-            frame->f.gla_frame.gla_state = t->dest_state;
+            frame->f.gla_frame.gla_state = dest_gla_state = t->dest_state;
         }
     }
     assert(found_transition);
 
-    if(gla_state->is_final)
+    if(dest_gla_state->is_final)
     {
         /* pop the GLA frame (since now we know what RTN transition to take)
          * and use its information to make an RTN transition */
-        int offset = gla_state->d.final.transition_offset;
+        int offset = dest_gla_state->d.final.transition_offset;
         frame = pop_gla_frame(s);
         if(offset == 0)
         {
@@ -268,16 +280,17 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
         else
         {
             struct rtn_transition *t = &frame->f.rtn_frame.rtn_state->transitions[offset-1];
+            struct terminal *next_term = &s->token_buffer[*rtn_term_offset];
             if(t->transition_type == TERMINAL_TRANSITION)
             {
                 /* The transition must match what we have in the token buffer */
-                struct terminal *term = &s->token_buffer[(*rtn_term_offset)++];
-                assert(term->name == t->edge.terminal_name);
+                (*rtn_term_offset)++;
+                assert(next_term->name == t->edge.terminal_name);
                 frame = do_rtn_terminal_transition(s, t);
             }
             else
             {
-                frame = push_rtn_frame_for_transition(s, t);
+                frame = push_rtn_frame_for_transition(s, t, next_term->offset+next_term->len);
             }
         }
     }
@@ -303,6 +316,7 @@ struct intfa_frame *process_terminal(struct parse_state *s,
                                      int start_offset,
                                      int len)
 {
+    printf("Lexed a %s\n", term_name);
     pop_intfa_frame(s);
 
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
@@ -316,21 +330,24 @@ struct intfa_frame *process_terminal(struct parse_state *s,
     term->len = len;
 
     /* Feed tokens to RTNs and GLAs until we have processed all the tokens we have */
-    while((frame->frame_type = FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
+    while((frame->frame_type == FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
           (frame->frame_type == FRAME_TYPE_GLA && gla_term_offset < s->token_buffer_len))
     {
+        struct terminal *rtn_term = &s->token_buffer[rtn_term_offset];
         if(frame->frame_type == FRAME_TYPE_RTN)
         {
             struct rtn_transition *t;
-            t = find_rtn_terminal_transition(s, &s->token_buffer[rtn_term_offset++]);
+            rtn_term_offset++;
+            t = find_rtn_terminal_transition(s, rtn_term);
             frame = do_rtn_terminal_transition(s, t);
         }
         else
         {
-            frame = do_gla_transition(s, &gla_term_offset, &rtn_term_offset);
+            struct terminal *gla_term = &s->token_buffer[gla_term_offset++];
+            frame = do_gla_transition(s, gla_term, &rtn_term_offset);
         }
         bool entered_gla;
-        frame = descend_to_gla(s, &entered_gla);
+        frame = descend_to_gla(s, &entered_gla, rtn_term->offset+rtn_term->len);
         if(entered_gla)
         {
             gla_term_offset = rtn_term_offset;
@@ -348,7 +365,7 @@ struct intfa_frame *process_terminal(struct parse_state *s,
 
     /* Now that we have processed all terminals that we currently can, push
      * an intfa frame to handle the next bytes */
-    return push_intfa_frame_for_gla_or_rtn(s);
+    return push_intfa_frame_for_gla_or_rtn(s, start_offset+len);
 }
 
 /*
@@ -428,15 +445,16 @@ enum parse_status parse(struct grammar *g, struct parse_state *s,
                         int *out_consumed_buf_len, bool *out_eof_ok)
 {
     struct intfa_frame *intfa_frame;
+    global_g = g;
 
     /* For the first parse, we need to descend from the starting frame
      * until we hit an IntFA frame. */
-    dump_stack(s, g, stderr);
     if(s->offset == 0)
     {
+        dump_stack(s, g, stderr);
         bool entered_gla;
-        descend_to_gla(s, &entered_gla);
-        intfa_frame = push_intfa_frame_for_gla_or_rtn(s);
+        descend_to_gla(s, &entered_gla, 0);
+        intfa_frame = push_intfa_frame_for_gla_or_rtn(s, 0);
         dump_stack(s, g, stderr);
     }
     else
@@ -450,6 +468,7 @@ enum parse_status parse(struct grammar *g, struct parse_state *s,
 
     for(int i = 0; i < buf_len; i++)
     {
+        printf("processing character %c\n", buf[i]);
         intfa_frame = do_intfa_transition(s, intfa_frame, buf[i]);
         s->offset++;
         dump_stack(s, g, stderr);
@@ -480,7 +499,7 @@ void reinit_parse_state(struct parse_state *s, struct grammar *g)
     s->offset = 0;
     RESIZE_DYNARRAY(s->parse_stack, 0);
     RESIZE_DYNARRAY(s->token_buffer, 0);
-    push_rtn_frame(s, &g->rtns[0]);
+    push_rtn_frame(s, &g->rtns[0], 0);
 }
 
 void free_parse_state(struct parse_state *s)
@@ -494,7 +513,7 @@ void init_parse_state(struct parse_state *s, struct grammar *g)
     s->offset = 0;
     INIT_DYNARRAY(s->parse_stack, 0, 16);
     INIT_DYNARRAY(s->token_buffer, 0, 2);
-    push_rtn_frame(s, &g->rtns[0]);
+    push_rtn_frame(s, &g->rtns[0], 0);
 }
 
 
