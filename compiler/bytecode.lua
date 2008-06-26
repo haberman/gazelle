@@ -219,7 +219,6 @@ function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
     end
 
     if state.gla then
-      print(glas:offset_of(state.gla))
       bc_file:write_abbreviated_record(abbrevs.bc_rtn_state_with_gla,
                                        #rtn.transitions[state],
                                        is_final,

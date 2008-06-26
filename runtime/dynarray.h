@@ -1,16 +1,18 @@
 
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 #define DEFINE_DYNARRAY(name, type) \
   type *name; \
   int name ## _len; \
   int name ## _size;
 
 #define RESIZE_DYNARRAY(name, desired_len) \
-  if(name ## _size < desired_len) \
+  if(name ## _size < (desired_len)) \
   { \
     name ## _size *= 2; \
     name = realloc(name, name ## _size * sizeof(*name)); \
   } \
-  else if(name ## _size > desired_len * 16) \
+  else if(name ## _size > (MAX(desired_len, 1) * 32)) \
   { \
     name ## _size /= 2; \
     name = realloc(name, name ## _size * sizeof(*name)); \
@@ -20,7 +22,7 @@
 #define INIT_DYNARRAY(name, initial_len, initial_size) \
   name ## _len = initial_len; \
   name ## _size = initial_size; \
-  name = realloc(NULL, name ## _size)
+  name = realloc(NULL, name ## _size * sizeof(*name))
 
 #define FREE_DYNARRAY(name) \
   free(name);
