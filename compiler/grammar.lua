@@ -7,8 +7,7 @@
   This is the top-level data structure representing a Gazelle grammar.
 
   It contains all DFAs for all levels of the grammar, as well as all
-  metadata about the grammar, like what the start symbol is and
-  what terminals are ignored within what rules.
+  metadata about the grammar, like what the start symbol is.
 
   It is created and initially populated by the grammar parser.  The
   parser adds RTNs for each rule and IntFAs for each terminal, as well
@@ -38,24 +37,7 @@ function Grammar:new()
   obj.terminals = {}
   obj.master_intfas = OrderedSet:new()
   obj.start = nil  -- what rule the entire grammar starts on
-
-  -- A map of {nonterm_name -> set of terminals to ignore}.
-  -- This will ultimately be stored as an attribute of the rtns themselves,
-  -- but we want to support @ignore directives that occur before the
-  -- corresponding rule definition, so we'll bind this list at the end.
-  obj.ignore = {}
   return obj
-end
-
--- Cause term_to_ignore to be ignored when parsing nonterm.  Nonterm and
--- term_to_ignore are both strings referring to the name of a nonterm and
--- terminal, respectively.  This can be called before either the nonterm
--- or terminal have been defined.
-function Grammar:add_ignore(nonterm, term_to_ignore)
-  if not self.ignore[nonterm] then
-    self.ignore[nonterm] = Set:new()
-  end
-  self.ignore[nonterm]:add(term_to_ignore)
 end
 
 -- Add a nonterminal and its associated RTN to the grammar.
@@ -74,19 +56,6 @@ end
 -- TODO: how should redefinition be caught and warned/errored?
 function Grammar:add_terminal(name, intfa)
   self.terminals[name] = intfa
-end
-
--- Once all nonterminals and ignore declarations have been made,
--- this binds the two together.  This is the point where we will
--- error if the statement referred to terminals or nonterms that are
--- never defined.
--- TODO: how should errors be caught and warned/errored?
-function Grammar:bind_ignore_list()
-  for nonterm, ignore_terms in pairs(self.ignore) do
-    local rtn = self.rtns:get(nonterm)
-    rtn.ignore = ignore_terms:to_array()
-    table.sort(rtn.ignore)
-  end
 end
 
 function Grammar:get_rtn_states_needing_intfa()
@@ -151,7 +120,6 @@ function Grammar:generate_intfas()
   for rtn_state in each(self:get_rtn_states_needing_gla()) do
     for gla_state in each(rtn_state.gla:states()) do
       if not gla_state.final then
-        print("Adding gla state " .. tostring(gla_state))
         states:add(gla_state)
       end
     end

@@ -96,11 +96,6 @@ function parse_grammar(chars)
       chars:consume_pattern(" *@start")
       grammar.start = parse_nonterm(chars).name;
       chars:consume(";")
-    elseif chars:match(" *@ignore") then
-      local ignore = parse_ignore(chars)
-      for nonterm in each(ignore.nonterms) do
-        grammar:add_ignore(nonterm, ignore.what_to_ignore)
-      end
     else
       local before_offset = chars.offset
       stmt = parse_statement(chars, attributes)
@@ -116,23 +111,8 @@ function parse_grammar(chars)
     end
   end
 
-  grammar:bind_ignore_list()
-
+  grammar.attributes = attributes
   return grammar
-end
-
-function parse_ignore(chars)
-  chars:consume_pattern(" *@ignore")
-  local ret = {}
-  ret.what_to_ignore = parse_nonterm(chars).name
-  local in_ = parse_nonterm(chars)
-  ret.nonterms = {parse_nonterm(chars).name}
-  while chars:match(",") do
-    local comma = chars:consume(",")
-    table.insert(ret.nonterms, parse_nonterm(chars).name)
-  end
-  chars:consume(";")
-  return ret
 end
 
 function parse_statement(chars, attributes)

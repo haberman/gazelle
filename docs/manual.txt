@@ -297,8 +297,7 @@ nonterm -> /<some regex>/;
 -------------------------------------------
 
 The primary difference is that the named terminal syntax avoids creating a
-trivial and useless nonterminal graph.  Also, there are a few contexts that
-will only accept terminals, most notably the +ignore+ syntax.
+trivial and useless nonterminal graph.
 
 Special Commands
 ~~~~~~~~~~~~~~~~
@@ -319,28 +318,6 @@ must be listed first.''  The syntax of this command is simply:
 -------------------------------------------
 
 +@start+ must appear once and exactly once in every grammar.
-
-+@ignore+
-^^^^^^^^^
-
-The +@ignore+ command lets you tell Gazelle how to do things like whitespace
-removal that are traditionally done by a separate lexer.  The syntax is:
-
---------------------------------------------
-@ignore term in nonterm1, nonterm2, nonterm3, [...];
---------------------------------------------
-
-This means that between any two complete terms of any right hand side in
-+nonterm1+, +nonterm2+, and +nonterm3+, the terminal +term+ can appear
-an arbitrary number of times.
-
-Although this command is called "ignore," the ignored terminals can be
-preserved if desired, which allows you to do whitespace-preserving
-transformations.
-
-//////////////////
-TODO: ignore *, overriding other ignore rules, etc
-//////////////////
 
 Regular Expressions vs. Repetition Within Rules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

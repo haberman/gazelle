@@ -33,7 +33,6 @@
 #define BC_STRING 0
 
 #define BC_RTN_INFO 0
-#define BC_RTN_IGNORE 1
 #define BC_RTN_STATE_WITH_INTFA 2
 #define BC_RTN_STATE_WITH_GLA 3
 #define BC_RTN_TRIVIAL_STATE 4
@@ -350,8 +349,7 @@ void load_glas(struct bc_read_stream *s, struct grammar *g)
 
 void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
 {
-    /* first get a count of the ignores, states, and transitions */
-    rtn->num_ignore = 0;
+    /* first get a count of the states and transitions */
     rtn->num_states = 0;
     rtn->num_transitions = 0;
 
@@ -360,9 +358,7 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
         struct record_info ri = bc_rs_next_data_record(s);
         if(ri.record_type == DataRecord)
         {
-            if(ri.id == BC_RTN_IGNORE)
-                rtn->num_ignore++;
-            else if(ri.id == BC_RTN_STATE_WITH_INTFA ||
+            if(ri.id == BC_RTN_STATE_WITH_INTFA ||
                     ri.id == BC_RTN_STATE_WITH_GLA ||
                     ri.id == BC_RTN_TRIVIAL_STATE)
                 rtn->num_states++;
@@ -377,11 +373,9 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
     }
 
     bc_rs_rewind_block(s);
-    rtn->ignore_terminals = malloc(rtn->num_ignore * sizeof(*rtn->ignore_terminals));
     rtn->states = malloc(rtn->num_states * sizeof(*rtn->states));
     rtn->transitions = malloc(rtn->num_transitions * sizeof(*rtn->transitions));
 
-    int ignore_offset = 0;
     int state_offset = 0;
     int transition_offset = 0;
     int state_transition_offset = 0;
@@ -395,10 +389,6 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
             {
                 rtn->name = g->strings[bc_rs_read_next_32(s)];
                 rtn->num_slots = bc_rs_read_next_32(s);
-            }
-            else if(ri.id == BC_RTN_IGNORE)
-            {
-                rtn->ignore_terminals[ignore_offset++] = g->strings[bc_rs_read_next_32(s)];
             }
             else if(ri.id == BC_RTN_STATE_WITH_INTFA ||
                     ri.id == BC_RTN_STATE_WITH_GLA ||
@@ -541,7 +531,6 @@ void free_grammar(struct grammar *g)
     for(int i = 0; i < g->num_rtns; i++)
     {
         struct rtn *rtn = &g->rtns[i];
-        free(rtn->ignore_terminals);
         free(rtn->states);
         free(rtn->transitions);
     }

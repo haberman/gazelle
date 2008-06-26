@@ -203,18 +203,6 @@ static int gazelle_rtn_num_slots(lua_State *L)
   return 1;
 }
 
-static int gazelle_rtn_ignore_terminals(lua_State *L)
-{
-  struct gazelle_rtn_lua *rtn = luaL_checkudata(L, 1, "gazelle.rtn");
-  lua_newtable(L);
-  for(int i = 0; i < rtn->rtn->num_ignore; i++)
-  {
-    lua_pushstring(L, rtn->rtn->ignore_terminals[i]);
-    lua_rawseti(L, -2, i+1);
-  }
-  return 1;
-}
-
 static int gazelle_rtn_states(lua_State *L)
 {
   struct gazelle_rtn_lua *rtn = luaL_checkudata(L, 1, "gazelle.rtn");
@@ -231,7 +219,6 @@ static const luaL_reg rtn_methods[] =
 {
   {"name", gazelle_rtn_name},
   {"num_slots", gazelle_rtn_num_slots},
-  {"ignore_terminals", gazelle_rtn_ignore_terminals},
   {"states", gazelle_rtn_states},
   {NULL, NULL}
 };

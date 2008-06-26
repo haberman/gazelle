@@ -1,5 +1,13 @@
 
-whitespace: /[\r\n\s\t]+/;
+@start object;
+
+object   -> "{" (string ":" value) *(,) "}";
+array    -> "[" value *(,)              "]";
+
+str_frag -> .chars=/[^\\"]+/ |
+            .unicode_char=/\\u ([0-9A-Fa-f]{4})/ |
+            .backslash_char=/\\[ntbr"\/\\]/;
+string   -> '"' str_frag* '"';
 
 number: /(-)?
          ( 0 | ([1-9][0-9]*) )
@@ -7,12 +15,7 @@ number: /(-)?
          ([eE] [+-]? [0-9]+ )?
         /;
 
-str_frag -> .chars=/[^\\"]+/ | .unicode_char=/\\u ([0-9A-Fa-f]{4})/ | .backslash_char=/\\[ntbr"\/\\]/;
-string   -> '"' str_frag* '"';
 value    -> string | number | "true" | "false" | "null" | object | array;
-object   -> "{" (string ":" value) *(,) "}";
-array    -> "[" value *(,)              "]";
 
-@start object;
-@ignore whitespace in object, array;
+whitespace: /[\r\n\s\t]+/;
 

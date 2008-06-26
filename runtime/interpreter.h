@@ -32,9 +32,6 @@ struct rtn
     char *name;
     int num_slots;
 
-    int num_ignore;
-    char **ignore_terminals;
-
     int num_states;
     struct rtn_state *states;  /* start state is first */
 

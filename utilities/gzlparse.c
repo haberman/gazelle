@@ -27,6 +27,7 @@ void usage()
 
 int main(int argc, char *argv[])
 {
+    printf("Size: %zd\n", sizeof(struct parse_stack_frame));
     if(argc < 3)
     {
         usage();

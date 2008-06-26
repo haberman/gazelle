@@ -1,18 +1,17 @@
 #!/usr/bin/env lua
 
 require "bootstrap/rtn"
-require "nfa_to_dfa"
-require "minimize"
+require "fa_algorithms"
 
 function escape(str)
   return str:gsub("[\"\\]", "\\%1")
 end
 
-grammar, attributes = parse_grammar(CharStream:new(io.stdin:read("*a")))
-if #grammar > 1 then
+grammar = parse_grammar(CharStream:new(io.stdin:read("*a")))
+if grammar.rtns:count() ~= 1 then
   error("This filter can only deal with grammars that have a single nonterminal")
 end
-for _nonterm, _rtn in pairs(grammar) do
+for _nonterm, _rtn in grammar.rtns:each() do
   nonterm = _nonterm
   rtn = _rtn
 end
@@ -34,8 +33,8 @@ for state in each(rtn:states()) do
     if fa.is_nonterm(edge_val) then
       outfile:write(string.format('  "%s" -> "%s" [label="<%s>"]\n', tostring(state), tostring(target_state), escape(edge_val.name)))
     else
-      if attributes.regex_text[edge_val] then
-        edge_val = "/" .. attributes.regex_text[edge_val] .. "/"
+      if grammar.attributes.regex_text[edge_val] then
+        edge_val = "/" .. grammar.attributes.regex_text[edge_val] .. "/"
       end
       outfile:write(string.format('  "%s" -> "%s" [label="%s"]\n', tostring(state), tostring(target_state), escape(edge_val)))
     end

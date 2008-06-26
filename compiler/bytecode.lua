@@ -30,7 +30,6 @@ BC_INTFA_TRANSITION_RANGE = 3
 BC_STRING = 0
 
 BC_RTN_INFO = 0
-BC_RTN_IGNORE = 1
 BC_RTN_STATE_WITH_INTFA = 2
 BC_RTN_STATE_WITH_GLA = 3
 BC_RTN_TRIVIAL_STATE = 4
@@ -193,15 +192,9 @@ function emit_gla(gla, strings, intfas, bc_file, abbrevs)
 end
 
 function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
-  -- emit RTN name and ignore info
+  -- emit RTN name
   bc_file:enter_subblock(BC_RTN)
   bc_file:write_abbreviated_record(abbrevs.bc_rtn_info, strings:offset_of(name), rtn.slot_count)
-
-  if rtn.ignore then
-    for ign_terminal in each(rtn.ignore) do
-      bc_file:write_abbreviated_record(abbrevs.bc_rtn_ignore, strings:offset_of(ign_terminal))
-    end
-  end
 
   -- emit states
   for state in each(rtn.states) do
@@ -328,10 +321,6 @@ function define_abbrevs(bc_file)
                                       bc.VBROp:new(5),
                                       bc.VBROp:new(5),
                                       bc.VBROp:new(4))
-
-  abbrevs.bc_rtn_ignore = bc_file:define_abbreviation(10,
-                                      bc.LiteralOp:new(BC_RTN_IGNORE),
-                                      bc.VBROp:new(6))
 
   -- GLA abbreviations
   bc_file:write_unabbreviated_record(bc.SETBID, BC_GLA)

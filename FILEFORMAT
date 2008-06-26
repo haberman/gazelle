@@ -43,9 +43,6 @@ RTNS -- a list of all the RTNs
   RTN - a single RTN
     [RTN_INFO, nonterm_name_int, # of slots]
 
-    [RTN_IGNORE, terminal_name_int]
-    ...
-
     [RTN_STATE_WITH_INTFA, # of transitions, is final, intfa#]
     [RTN_STATE_WITH_GLA, # of transitions, is final, gla#]
     [RTN_TRIVIAL_STATE, # of transitions, is final]
