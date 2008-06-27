@@ -2,7 +2,7 @@
 
 COMPILER_LINES=`find compiler | grep lua$ | xargs cat | wc -l`
 RUNTIME_LINES=`find runtime | grep '\.[hc]$' | xargs cat | wc -l`
-let CORE_LINES=$COMPILER_LINES+$RUNTIME_LINES
+CORE_LINES=`perl -e "print $COMPILER_LINES+$RUNTIME_LINES;"`
 echo compiler_lines=$COMPILER_LINES
 echo runtime_lines=$RUNTIME_LINES
 echo core_lines=$CORE_LINES

@@ -97,6 +97,13 @@ struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn,
     new_rtn_frame->rtn_transition = NULL;
     new_rtn_frame->rtn_state      = &new_rtn_frame->rtn->states[0];
     new_rtn_frame->start_offset   = start_offset;
+
+    /* Call start rule callback if set */
+    if(s->bound_grammar->start_rule_cb)
+    {
+        s->bound_grammar->start_rule_cb(s);
+    }
+
     return new_frame;
 }
 
@@ -126,6 +133,13 @@ struct parse_stack_frame *pop_frame(struct parse_state *s)
 struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
 {
     assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_RTN);
+
+    /* Call end rule callback if set */
+    if(s->bound_grammar->end_rule_cb)
+    {
+        s->bound_grammar->end_rule_cb(s);
+    }
+
     struct parse_stack_frame *frame = pop_frame(s);
     if(frame != NULL)
     {
@@ -221,11 +235,20 @@ struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s, int s
 }
 
 struct parse_stack_frame *do_rtn_terminal_transition(struct parse_state *s,
-                                                     struct rtn_transition *t)
+                                                     struct rtn_transition *t,
+                                                     struct terminal *terminal)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
     struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
+
+    /* Call terminal callback if set */
+    if(s->bound_grammar->terminal_cb)
+    {
+        rtn_frame->rtn_transition = t;
+        s->bound_grammar->terminal_cb(s, terminal);
+    }
+
     assert(t->transition_type == TERMINAL_TRANSITION);
     rtn_frame->rtn_state = t->dest_state;
     return frame;
@@ -300,7 +323,7 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
                 /* The transition must match what we have in the token buffer */
                 (*rtn_term_offset)++;
                 assert(next_term->name == t->edge.terminal_name);
-                frame = do_rtn_terminal_transition(s, t);
+                frame = do_rtn_terminal_transition(s, t, next_term);
             }
             else
             {
@@ -353,7 +376,7 @@ struct intfa_frame *process_terminal(struct parse_state *s,
             struct rtn_transition *t;
             rtn_term_offset++;
             t = find_rtn_terminal_transition(s, rtn_term);
-            frame = do_rtn_terminal_transition(s, t);
+            frame = do_rtn_terminal_transition(s, t, rtn_term);
         }
         else
         {
@@ -462,12 +485,11 @@ struct intfa_frame *do_intfa_transition(struct parse_state *s,
     return intfa_frame;
 }
 
-enum parse_status parse(struct grammar *g, struct parse_state *s,
-                        char *buf, int buf_len,
+enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
                         int *out_consumed_buf_len, bool *out_eof_ok)
 {
     struct intfa_frame *intfa_frame;
-    global_g = g;
+    global_g = s->bound_grammar->grammar;
 
     /* For the first parse, we need to descend from the starting frame
      * until we hit an IntFA frame. */
@@ -510,12 +532,13 @@ enum parse_status parse(struct grammar *g, struct parse_state *s,
     return PARSE_STATUS_OK;
 }
 
-void reinit_parse_state(struct parse_state *s, struct grammar *g)
+void reinit_parse_state(struct parse_state *s, struct bound_grammar *bg)
 {
     s->offset = 0;
+    s->bound_grammar = bg;
     RESIZE_DYNARRAY(s->parse_stack, 0);
     RESIZE_DYNARRAY(s->token_buffer, 0);
-    push_rtn_frame(s, &g->rtns[0], 0);
+    push_rtn_frame(s, &bg->grammar->rtns[0], 0);
 }
 
 void free_parse_state(struct parse_state *s)
@@ -524,12 +547,13 @@ void free_parse_state(struct parse_state *s)
     FREE_DYNARRAY(s->token_buffer);
 }
 
-void init_parse_state(struct parse_state *s, struct grammar *g)
+void init_parse_state(struct parse_state *s, struct bound_grammar *bg)
 {
     s->offset = 0;
+    s->bound_grammar = bg;
     INIT_DYNARRAY(s->parse_stack, 0, 16);
     INIT_DYNARRAY(s->token_buffer, 0, 2);
-    push_rtn_frame(s, &g->rtns[0], 0);
+    push_rtn_frame(s, &bg->grammar->rtns[0], 0);
 }
 
 

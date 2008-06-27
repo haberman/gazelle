@@ -18,7 +18,10 @@
 #include "dynarray.h"
 
 struct parse_state;
-typedef void (*parse_callback_t)(struct parse_state *state, void *user_data);
+struct terminal;
+typedef void (*rule_callback_t)(struct parse_state *state);
+typedef void (*terminal_callback_t)(struct parse_state *state,
+                                    struct terminal *terminal);
 
 /*
  * RTN
@@ -224,10 +227,36 @@ struct parse_stack_frame
     } frame_type;
 };
 
+/* A bound_grammar struct represents a grammar which has had callbacks bound
+ * to it and has possibly been JIT-compiled.  Though JIT compilation is not
+ * supported yet, the APIs are in-place to anticipate this feature.
+ *
+ * At the moment you initialize a bound_grammar structure directly, but in the
+ * future there will be a set of functions that do so, possibly doing JIT
+ * compilation and other such things in the process. */
+struct bound_grammar
+{
+    struct grammar *grammar;
+    terminal_callback_t terminal_cb;
+    rule_callback_t start_rule_cb;
+    rule_callback_t end_rule_cb;
+};
+
 /* This structure defines the core state of a parsing stream.  By saving this
- * state alone, we can resume a parse from the position where we left off. */
+ * state alone, we can resume a parse from the position where we left off.
+ *
+ * However, this state can only be resumed in the context of this process
+ * with one particular bound_grammar.  To save it for loading into another
+ * process, it must be serialized using a different API (which is not yet
+ * written). */
 struct parse_state
 {
+    /* The bound_grammar instance this state is being parsed with. */
+    struct bound_grammar *bound_grammar;
+
+    /* A pointer that the client can use for their own purposes. */
+    void *user_data;
+
     /* Our current offset in the stream.  We use this to mark the offsets
      * of all the tokens we lex. */
     int offset;
@@ -281,16 +310,13 @@ enum parse_status {
   PARSE_STATUS_CANCELLED,
   PARSE_STATUS_EOF,
 };
-enum parse_status parse(struct grammar *g, struct parse_state *s,
-                        char *buf, int buf_len,
+enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
                         int *out_consumed_buf_len, bool *out_eof_ok);
 
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
-void init_parse_state(struct parse_state *state, struct grammar *g);
-void reinit_parse_state(struct parse_state *state, struct grammar *g);
-
-void register_callback(struct parse_state *state, char *rtn_name, parse_callback_t callback, void *user_data);
+void init_parse_state(struct parse_state *state, struct bound_grammar *bg);
+void reinit_parse_state(struct parse_state *state, struct bound_grammar *bg);
 
 /*
  * Local Variables:
