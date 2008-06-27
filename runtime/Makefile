@@ -1,10 +1,7 @@
 
-CC=gcc
-AR=ar
-CFLAGS=-Wall -g -O0 -std=c99
 OBJS=bc_read_stream.o interpreter.o load_grammar.o
 
-all: libparse.a
+default: libparse.a
 
 clean:
 	rm -f libparse.a $(OBJS)

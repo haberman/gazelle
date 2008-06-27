@@ -1,7 +1,7 @@
 
-CC=gcc
-CFLAGS=-Wall -O6 -std=c99
-all: bitcode_dump gzlparse
+default: bitcode_dump gzlparse
+all: default
+
 clean:
 	rm -rf bitcode_dump.o bitcode_dump gzlparse.o gzlparse
 

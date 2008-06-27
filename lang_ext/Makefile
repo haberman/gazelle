@@ -1,7 +1,7 @@
 
 CFLAGS=-Wall -g -O6 -std=c99
 SUBDIRS=lua
-TARGETS=all clean
+TARGETS=default all clean
 
 .PHONY: $(TARGETS)
 $(TARGETS):

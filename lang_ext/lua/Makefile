@@ -2,12 +2,14 @@
 CFLAGS=-Wall -g -O6 -std=c99
 EXTS=bc_read_stream.so gazelle.so
 
-all: $(EXTS)
+default: $(EXTS)
+
+all: default
 
 clean:
 	rm -f $(EXTS) bc_read_stream.o gazelle.o
 
-.PHONY: all clean
+.PHONY: all clean default
 
 bc_read_stream.o: bc_read_stream.c ../../runtime/bc_read_stream.h
 	gcc $(CFLAGS) -o bc_read_stream.o -c bc_read_stream.c -I../../runtime -I/usr/include/lua5.1

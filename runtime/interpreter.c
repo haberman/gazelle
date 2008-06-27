@@ -75,7 +75,6 @@ struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa,
     intfa_frame->intfa        = intfa;
     intfa_frame->intfa_state  = &intfa->states[0];
     intfa_frame->start_offset = start_offset;
-    dump_stack(s, NULL, stderr);
     return intfa_frame;
 }
 
@@ -86,7 +85,6 @@ struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla,
     gla_frame->gla          = gla;
     gla_frame->gla_state    = &gla->states[0];
     gla_frame->start_offset = start_offset;
-    dump_stack(s, NULL, stderr);
     return frame;
 }
 
@@ -99,7 +97,6 @@ struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn,
     new_rtn_frame->rtn_transition = NULL;
     new_rtn_frame->rtn_state      = &new_rtn_frame->rtn->states[0];
     new_rtn_frame->start_offset   = start_offset;
-    dump_stack(s, NULL, stderr);
     return new_frame;
 }
 
@@ -123,7 +120,6 @@ struct parse_stack_frame *pop_frame(struct parse_state *s)
     else
         frame = NULL;
 
-    dump_stack(s, NULL, stderr);
     return frame;
 }
 
@@ -220,7 +216,6 @@ struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s, int s
     {
         return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa, start_offset);
     }
-    dump_stack(s, NULL, stderr);
     assert(false);
     return NULL;
 }
@@ -337,7 +332,6 @@ struct intfa_frame *process_terminal(struct parse_state *s,
                                      int start_offset,
                                      int len)
 {
-    fprintf(stderr, "Lexed a %s\n", term_name);
     pop_intfa_frame(s);
 
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
@@ -481,11 +475,9 @@ enum parse_status parse(struct grammar *g, struct parse_state *s,
      * until we hit an IntFA frame. */
     if(s->offset == 0)
     {
-        dump_stack(s, g, stderr);
         bool entered_gla;
         descend_to_gla(s, &entered_gla, 0);
         intfa_frame = push_intfa_frame_for_gla_or_rtn(s, 0);
-        dump_stack(s, g, stderr);
     }
     else
     {
@@ -494,14 +486,10 @@ enum parse_status parse(struct grammar *g, struct parse_state *s,
         intfa_frame = &frame->f.intfa_frame;
     }
 
-    dump_stack(s, g, stderr);
-
     for(int i = 0; i < buf_len; i++)
     {
-        fprintf(stderr, "processing character %c (0x%hhx)\n", buf[i], buf[i]);
         intfa_frame = do_intfa_transition(s, intfa_frame, buf[i]);
         s->offset++;
-        dump_stack(s, g, stderr);
         if(intfa_frame == NULL)
         {
             if (out_consumed_buf_len) *out_consumed_buf_len = i;
