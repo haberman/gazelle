@@ -76,8 +76,6 @@ int main(int argc, char *argv[])
             break;
     }
 
-    printf("%d bytes parsed.\n", total_read);
-
     free_parse_state(&state);
     free_grammar(g);
     fclose(file);

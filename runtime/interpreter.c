@@ -269,19 +269,17 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
     assert(frame->frame_type == FRAME_TYPE_GLA);
     assert(frame->f.gla_frame.gla_state->is_final == false);
     struct gla_state *gla_state = frame->f.gla_frame.gla_state;
-    struct gla_state *dest_gla_state;
+    struct gla_state *dest_gla_state = NULL;
 
-    bool found_transition = false;
     for(int i = 0; i < gla_state->d.nonfinal.num_transitions; i++)
     {
         struct gla_transition *t = &gla_state->d.nonfinal.transitions[i];
         if(t->term == gla_term->name)
         {
-            found_transition = true;
             frame->f.gla_frame.gla_state = dest_gla_state = t->dest_state;
         }
     }
-    assert(found_transition);
+    assert(dest_gla_state);
 
     if(dest_gla_state->is_final)
     {
