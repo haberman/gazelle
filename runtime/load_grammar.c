@@ -7,7 +7,7 @@
   This file contains the code to load data from a bitcode stream into
   the data structures that the interpreter uses to parse.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 

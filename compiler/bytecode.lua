@@ -7,7 +7,7 @@
   Code that takes the final optimized parsing structures and emits them
   to bytecode (in Bitcode format).
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
 

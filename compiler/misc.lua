@@ -6,6 +6,8 @@
 
   Miscellaneous algorithms that don't belong anywhere else.
 
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
+
 --------------------------------------------------------------------]]--
 
 function newobject(class)

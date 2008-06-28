@@ -1,4 +1,16 @@
 #!/usr/bin/env lua
+--[[--------------------------------------------------------------------
+
+  Gazelle: a system for building fast, reusable parsers
+
+  gzl-rtn-graph
+
+  A script for generating graphics for the manual.  It parses Gazelle
+  language excerpts in manual.txt and emits pngs using graphviz.
+
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 
 require "bootstrap/rtn"
 require "fa_algorithms"

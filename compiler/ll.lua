@@ -19,8 +19,6 @@
   avoid are having Gazelle hanging forever, or worse, producing
   incorrect lookahead.
 
-  TODO: add support for GLAs that instruct a final RTN state to return.
-
   Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--

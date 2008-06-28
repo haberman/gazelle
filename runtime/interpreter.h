@@ -8,7 +8,7 @@
   parsing text using Gazelle.  There are a lot of structures, but they
   should all be considered read-only.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 

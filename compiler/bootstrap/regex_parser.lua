@@ -8,7 +8,7 @@
   Hopefully this could eventually be implemented using the engine itself,
   but even then you need a way to bootstrap.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 --------------------------------------------------------------------]]--
 

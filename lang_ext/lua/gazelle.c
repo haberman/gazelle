@@ -6,7 +6,7 @@
 
   These are Lua wrappers for Gazelle.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 

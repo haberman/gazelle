@@ -11,7 +11,7 @@
   generated or executed.  Despite this, it is still quite fast, and
   has a very low memory footprint.
 
-  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 
