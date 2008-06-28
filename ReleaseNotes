@@ -1,0 +1,46 @@
+
+Gazelle 0.2, released June XX, 2008  ===========================================
+
+  Overview: This is a major overhaul of Gazelle's guts.  It also has
+  significant usability improvements in its documentation and command-line
+  tools.  It is the first release of Gazelle I would actually recommend
+  that people try out.
+
+  Core Parsing Algorithm:
+  * The compiler now calculates true Strong-LL(k) lookahead.  As a result,
+    it supports far more grammars than Gazelle 0.1 did.
+  * The runtime component now represents all of its state explicitly in its
+    stack.  As a result, parsing can be interrupted and resumed on arbitrary
+    byte boundaries.
+  * The "ignore" feature was completely removed, because experience and deeper
+    thought revealed that it was not the right abstraction.  As a result, this
+    version of Gazelle has no way to deal with arbitrary whitespace.  A
+    replacement feature will come in the future to fill this gap.
+
+  Usability:
+  * There is a manual (though very much in-progress).
+  * The compiler is easier to invoke and has useful --help.
+  * The compiler is capable of dumping a visual representation of the grammar
+    to HTML if graphviz is installed.
+  * gzlparse can dump the parse tree into JSON format.
+
+  Caveats (all of these will be fixed sooner or later):
+  * The language and all APIs are still very much subject to change.
+  * The current release cannot handle whitespace/comments/etc. in languages.
+  * Parse errors will exit the program, instead of being reported to the API.
+  * There are lots of edge cases the compiler doesn't properly deal with yet.
+    Some will make the compiler go into an infinite loop, others will cause
+    it to generate incorrect output.
+
+Gazelle 0.1, released December 16, 2007  =======================================
+
+  Overview: This is a preliminary release of Gazelle, and is not very usable.
+  It can parse only a very small class of languages, and all tools/APIs are
+  very rough around the edges.
+
+  Core Parsing Algorithm:
+  * The supported lookahead is weak: only Simple-LL(1) parsing.
+  * The runtime is reasonably fast and has a very low memory footprint.
+  * The compiler and runtime support loading and storing the compiled version
+    of the grammar to bytecode.
+

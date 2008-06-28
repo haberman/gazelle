@@ -1,0 +1,29 @@
+
+This is a list of things I definitely want to do.  I don't go into too many
+specifics, because the specifics change often as I think about the problem
+harder.
+
+Core Parsing Algorithm (all changes should have test-cases):
+* properly support EOF in lookahead (like s -> "A" | "A" "B"; should predict 1).
+* properly support lookahead that predicts a return from a final RTN state
+  like s -> a "X"; a -> "Y"*;
+* try to detect when we are in an infinite loop (requires much thought).
+* detect cases where some RTN alternatives have no GLA final state.
+* deal with lexer-level ambiguity.  longest match will do for now, but
+  we're not currently detecting s -> "A" | "AB";
+
+Runtime:
+* Richer callback specifiers.
+* Bring back slotbufs: a cheap (stack only, no heap) way of saving parse_vals for
+  the currently-open nodes of the parse tree.
+* Provide a buffering layer.
+* As the runtime starts to mature: language bindings.
+
+Major design areas that exist only in my head:
+* Embedding Lua to do things only an imperative language can do.
+* Operator-precedence parsing using the shunting yard algorithm.
+* Parallel parsers (for both embedded languages and things like whitespace/comments)
+* Error recovery (basically: just yield to an imperative function).
+* Generate imperative bytecode / JIT compile.
+* AST-building.
+

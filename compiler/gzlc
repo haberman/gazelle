@@ -20,10 +20,11 @@ require "ll"
 require "pp"
 
 usage = [[
-Gazelle grammar compiler (v0.2-prerelase)
-gzlc [options] input-file
+gzlc -- Gazelle grammar compiler.
+Gazelle v0.2-prerelase  http://www.reverberate.org/gazelle/
 
-Options:
+Usage: gzlc [options] input-file
+
   -h, --help         you're looking at it.
 
   -d,                dump detailed output about the grammar to
