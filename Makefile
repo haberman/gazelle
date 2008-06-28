@@ -1,7 +1,7 @@
 
 export CC=gcc
 export AR=ar
-export CFLAGS=-Wall -g -O6 -std=c99
+export CFLAGS=-Wall -g -O0 -std=c99
 SUBDIRS=runtime lang_ext utilities
 ALLSUBDIRS=$(SUBDIRS) docs
 TARGETS=all clean docs doc default

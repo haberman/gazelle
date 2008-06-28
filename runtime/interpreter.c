@@ -376,6 +376,13 @@ struct intfa_frame *process_terminal(struct parse_state *s,
             struct rtn_transition *t;
             rtn_term_offset++;
             t = find_rtn_terminal_transition(s, rtn_term);
+            if(!t)
+            {
+                fprintf(stderr, "Parse error: unexpected terminal %s at offset %d\n",
+                        rtn_term->name, rtn_term->offset);
+                exit(1);
+            }
+
             frame = do_rtn_terminal_transition(s, t, rtn_term);
         }
         else

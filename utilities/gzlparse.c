@@ -8,7 +8,7 @@
   very minimal at the moment, but the intention is for it to grow
   into a very rich and useful utility for doing all sorts of things.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 
@@ -21,9 +21,15 @@
 
 void usage()
 {
-    printf("gzlparse: parse input text, given a compiled grammar\n");
-    printf("Usage: gzlparse <grammar bitcode file> <input file>\n");
-    printf("Input file can be '-' for stdin\n");
+    fprintf(stderr, "gzlparse -- A command-line tool for parsing input text.\n");
+    fprintf(stderr, "Gazelle %s  %s.\n", GAZELLE_VERSION, GAZELLE_WEBPAGE);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Usage: gzlparse [OPTIONS] GRAMMAR.gzc INFILE\n");
+    fprintf(stderr, "Input file can be '-' for stdin.\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "  --dump-json     Dump a parse tree in JSON as text is parsed.\n");
+    fprintf(stderr, "  --dump-total   When parsing finishes, print the number of bytes parsed.\n");
+    fprintf(stderr, "\n");
 }
 
 struct gzlparse_state
@@ -31,12 +37,11 @@ struct gzlparse_state
     DEFINE_DYNARRAY(first_child, bool);
 };
 
-void print_newline(struct gzlparse_state *user_state)
+void print_newline(struct gzlparse_state *user_state, bool suppress_comma)
 {
-    if(user_state->first_child_len > 0)
+    if(user_state->first_child_len > 0 || suppress_comma == true)
     {
-    printf("Foo: %d\n", *DYNARRAY_GET_TOP(user_state->first_child));
-        if(*DYNARRAY_GET_TOP(user_state->first_child))
+        if(*DYNARRAY_GET_TOP(user_state->first_child) || suppress_comma)
         {
             *DYNARRAY_GET_TOP(user_state->first_child) = false;
             fputs("\n", stdout);
@@ -62,7 +67,7 @@ void terminal_callback(struct parse_state *parse_state,
     assert(frame->frame_type == FRAME_TYPE_RTN);
     struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
-    print_newline(user_state);
+    print_newline(user_state, false);
     print_indent(user_state);
     printf("{\"terminal\": \"%s\", \"slotname\": \"%s\", \"slotnum\": %d, \"offset\": %d, \"len\": %d}",
            terminal->name, rtn_frame->rtn_transition->slotname, rtn_frame->rtn_transition->slotnum,
@@ -76,7 +81,7 @@ void start_rule_callback(struct parse_state *parse_state)
     assert(frame->frame_type == FRAME_TYPE_RTN);
     struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
-    print_newline(user_state);
+    print_newline(user_state, false);
     print_indent(user_state);
     printf("{\"rule\":\"%s\", \"start\": %d, ", rtn_frame->rtn->name, rtn_frame->start_offset);
 
@@ -89,7 +94,7 @@ void start_rule_callback(struct parse_state *parse_state)
                prev_rtn_frame->rtn_transition->slotnum);
     }
 
-    printf("\"children\": [\n");
+    printf("\"children\": [");
     RESIZE_DYNARRAY(user_state->first_child, user_state->first_child_len+1);
     *DYNARRAY_GET_TOP(user_state->first_child) = true;
 }
@@ -102,7 +107,7 @@ void end_rule_callback(struct parse_state *parse_state)
     struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
     RESIZE_DYNARRAY(user_state->first_child, user_state->first_child_len-1);
-    print_newline(user_state);
+    print_newline(user_state, true);
     print_indent(user_state);
     printf("], \"len\": %d}", parse_state->offset - rtn_frame->start_offset);
 }
@@ -111,12 +116,37 @@ int main(int argc, char *argv[])
 {
     if(argc < 3)
     {
+        fprintf(stderr, "Not enough arguments.\n");
         usage();
         return 1;
     }
 
+    int arg_offset = 1;
+    bool dump_json = false;
+    bool dump_total = false;
+    while(arg_offset < argc && argv[arg_offset][0] == '-')
+    {
+        if(strcmp(argv[arg_offset], "--dump-json") == 0)
+            dump_json = true;
+        else if(strcmp(argv[arg_offset], "--dump-total") == 0)
+            dump_total = true;
+        else
+        {
+            fprintf(stderr, "Unrecognized option '%s'.\n", argv[arg_offset]);
+            usage();
+            exit(1);
+        }
+        arg_offset++;
+    }
+
     /* Load the grammar file. */
-    struct bc_read_stream *s = bc_rs_open_file(argv[1]);
+    if(arg_offset+1 >= argc)
+    {
+        fprintf(stderr, "Must specify grammar file and input file.\n");
+        usage();
+        return 1;
+    }
+    struct bc_read_stream *s = bc_rs_open_file(argv[arg_offset++]);
     if(!s)
     {
         printf("Couldn't open bitcode file '%s'!\n\n", argv[1]);
@@ -128,13 +158,13 @@ int main(int argc, char *argv[])
 
     /* Open the input file. */
     FILE *file;
-    if(strcmp(argv[2], "-") == 0)
+    if(strcmp(argv[arg_offset], "-") == 0)
     {
         file = stdin;
     }
     else
     {
-        file = fopen(argv[2], "r");
+        file = fopen(argv[arg_offset], "r");
         if(!file)
         {
             printf("Couldn't open file '%s' for reading: %s\n\n", argv[2], strerror(errno));
@@ -144,18 +174,18 @@ int main(int argc, char *argv[])
     }
 
     struct gzlparse_state user_state;
-    INIT_DYNARRAY(user_state.first_child, 0, 16);
+    INIT_DYNARRAY(user_state.first_child, 1, 16);
     struct parse_state state = {
         .user_data = &user_state
     };
     struct bound_grammar bg = {
         .grammar = g,
     };
-    bool dump_json = false;
     if(dump_json) {
         bg.terminal_cb = terminal_callback;
         bg.start_rule_cb = start_rule_callback;
         bg.end_rule_cb = end_rule_callback;
+        fputs("{\"parse_tree\":", stdout);
     }
     init_parse_state(&state, &bg);
 
@@ -170,6 +200,12 @@ int main(int argc, char *argv[])
         if(status == PARSE_STATUS_EOF || read == 0)
             break;
     }
+
+    if(dump_json)
+        fputs("\n}\n", stdout);
+
+    if(dump_total)
+        printf("%d bytes parsed.\n", total_read);
 
     free_parse_state(&state);
     free_grammar(g);

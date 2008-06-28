@@ -17,6 +17,9 @@
 #include "bc_read_stream.h"
 #include "dynarray.h"
 
+#define GAZELLE_VERSION "0.2-prerelease"
+#define GAZELLE_WEBPAGE "http://www.reverberate.org/gazelle/"
+
 struct parse_state;
 struct terminal;
 typedef void (*rule_callback_t)(struct parse_state *state);
