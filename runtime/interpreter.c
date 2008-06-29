@@ -552,10 +552,9 @@ enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
         intfa_frame = do_intfa_transition(s, intfa_frame, buf[i]);
         if(intfa_frame == NULL)
         {
-            if(out_consumed_buf_len) *out_consumed_buf_len = i;
+            if(out_consumed_buf_len) *out_consumed_buf_len = i+1;
             if(out_eof_ok) *out_eof_ok = true;
-            assert(s->parse_stack_len == 1);
-            pop_rtn_frame(s);
+            assert(s->parse_stack_len == 0);
             return PARSE_STATUS_EOF;
         }
     }
