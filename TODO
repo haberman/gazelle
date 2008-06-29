@@ -19,6 +19,11 @@ Runtime:
 * Provide a buffering layer.
 * As the runtime starts to mature: language bindings.
 
+Tests!  Everything should have tests, as much as possible:
+* all aspects of compilation
+* bitcode format (both reading and writing)
+* JSON output from gzlparse.  Both well-formedness and accuracy.
+
 Major design areas that exist only in my head:
 * Embedding Lua to do things only an imperative language can do.
 * Operator-precedence parsing using the shunting yard algorithm.

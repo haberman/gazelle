@@ -23,35 +23,12 @@ Ubuntu Linux and Mac OS X are tested.  Just type make:
 
 $ make
 
-TRYING IT OUT
-=============
+To build the documentation, you need to have asciidoc installed, as well
+as graphviz if you want to see the graphics.
 
-Now you can do fun things.  First you'll want to set up your LUA_PATH,
-which you can do using the easy "lua_path" script:
+$ make doc
 
-$ . lua_path
-
-Now you can compile a grammar into byte-code.
-
-$ lua compiler/compile.lua sketches/json.parser json.bc
-Writing grammar to disk...
-[...]
-
-You can use dump_grammar to generate visual diagrams of the grammar in
-graphviz format.
-
-$ lua utilities/dump_grammar.lua json.bc 
-Writing 1.dot...
-[...]
-$ dot -Tpng -o 1.png 1.dot  (you have to have Graphviz installed for this)
-$ view 1.png
-
-You can also parse some data using gzlparse.  However, you won't get
-anything interesting from this (except a syntax error message if there
-is a syntax error).  Well, you can use this to find out how fast Gazelle
-is at the moment.
-
-$ time ./utilities/gzlparse json.bc my-json-data.txt
+Alternatively you can just read the manual on the Gazelle website.
 
 ROADMAP OF THE SOURCE
 =====================
@@ -74,5 +51,10 @@ utilities/
 CONTACT
 =======
 
+For questions, comments, etc. please post to the gazelle-users group.  I read
+and respond to posts on this list.
+http://groups.google.com/group/gazelle-users
+
+If you need to contact me directly, I am:
 Joshua Haberman <joshua@reverberate.org>
 
