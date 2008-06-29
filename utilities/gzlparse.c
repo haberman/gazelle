@@ -83,7 +83,7 @@ void start_rule_callback(struct parse_state *parse_state)
 
     print_newline(user_state, false);
     print_indent(user_state);
-    printf("{\"rule\":\"%s\", \"start\": %d, ", rtn_frame->rtn->name, rtn_frame->start_offset);
+    printf("{\"rule\":\"%s\", \"start\": %d, ", rtn_frame->rtn->name, frame->start_offset);
 
     if(parse_state->parse_stack_len > 1)
     {
@@ -104,12 +104,11 @@ void end_rule_callback(struct parse_state *parse_state)
     struct gzlparse_state *user_state = (struct gzlparse_state*)parse_state->user_data;
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
-    struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
     RESIZE_DYNARRAY(user_state->first_child, user_state->first_child_len-1);
     print_newline(user_state, true);
     print_indent(user_state);
-    printf("], \"len\": %d}", parse_state->offset - rtn_frame->start_offset);
+    printf("], \"len\": %d}", parse_state->offset - frame->start_offset);
 }
 
 int main(int argc, char *argv[])
@@ -193,19 +192,35 @@ int main(int argc, char *argv[])
     int total_read = 0;
     while(1) {
         int consumed_buf_len;
+        bool eof_ok;
         int read = fread(buf, 1, sizeof(buf), file);
-        enum parse_status status = parse(&state, buf, read, &consumed_buf_len, NULL);
+        enum parse_status status = parse(&state, buf, read, &consumed_buf_len, &eof_ok);
         total_read += consumed_buf_len;
 
-        if(status == PARSE_STATUS_EOF || read == 0)
+        if(read == 0)
+        {
+            if(eof_ok)
+                finish_parse(&state);
+            else
+            {
+                printf("\n");
+                fprintf(stderr, "Premature end-of-file.\n");
+                dump_json = false;
+            }
+
             break;
+        }
+        else if(status == PARSE_STATUS_EOF)
+        {
+            break;
+        }
     }
 
     if(dump_json)
         fputs("\n}\n", stdout);
 
     if(dump_total)
-        printf("%d bytes parsed.\n", total_read);
+        fprintf(stderr, "%d bytes parsed.\n", total_read);
 
     free_parse_state(&state);
     free_grammar(g);

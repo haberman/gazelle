@@ -14,6 +14,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stddef.h>
 #include "bc_read_stream.h"
 #include "dynarray.h"
 
@@ -207,21 +208,21 @@ struct parse_stack_frame
         struct rtn            *rtn;
         struct rtn_state      *rtn_state;
         struct rtn_transition *rtn_transition;
-        int                   start_offset;
       } rtn_frame;
 
       struct gla_frame {
         struct gla            *gla;
         struct gla_state      *gla_state;
-        int                   start_offset;
       } gla_frame;
 
       struct intfa_frame {
         struct intfa          *intfa;
         struct intfa_state    *intfa_state;
-        int                   start_offset;
       } intfa_frame;
     } f;
+
+    bool eof_ok;
+    int start_offset;
 
     enum frame_type {
       FRAME_TYPE_RTN,
@@ -229,6 +230,9 @@ struct parse_stack_frame
       FRAME_TYPE_INTFA
     } frame_type;
 };
+
+#define GET_PARSE_STACK_FRAME(ptr) \
+    (struct parse_stack_frame*)((char*)ptr-offsetof(struct parse_stack_frame,f))
 
 /* A bound_grammar struct represents a grammar which has had callbacks bound
  * to it and has possibly been JIT-compiled.  Though JIT compilation is not
@@ -315,6 +319,11 @@ enum parse_status {
 };
 enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
                         int *out_consumed_buf_len, bool *out_eof_ok);
+
+/* If parse() above has previously returned out_eof_ok==true and there is
+ * no more input, call this function to complete the parse.  This primarily
+ * involves calling all the final callbacks. */
+void finish_parse(struct parse_state *s);
 
 void alloc_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
