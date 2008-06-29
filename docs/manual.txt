@@ -1,7 +1,7 @@
 Gazelle Manual
 ==============
 Joshua Haberman <joshua@reverberate.org>
-v0.2-prerelease, Feb 2008
+v0.2, Feb 2008
 :toc:
 
 Gazelle is a system for parsing context-free grammars.  It takes inspiration
@@ -103,7 +103,7 @@ If you want to see a bit more verbose output, run +gzlc+ with +-v+.
 
 ------------------------------------------------
 $ ./compiler/gzlc -v hello.gzl
-Gazelle v0.2-prerelease
+Gazelle v0.2
 Opening input file 'hello.gzl'...
 Parsing grammar...
 Convering RTN NFAs to DFAs...

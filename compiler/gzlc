@@ -39,7 +39,7 @@ Usage: gzlc [options] input-file
   --version          dump Gazelle version
 ]]
 
-version = "Gazelle v0.2-prerelease"
+version = "Gazelle v0.2"
 
 -- parse options
 input_filename = nil
