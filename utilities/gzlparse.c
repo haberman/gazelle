@@ -37,6 +37,36 @@ struct gzlparse_state
     DEFINE_DYNARRAY(first_child, bool);
 };
 
+char *get_json_escaped_string(char *str)
+{
+    // The longest possible escaped string of this length has every character
+    // escaped and a quote on each end, plus a NULL.
+    char *return_str = malloc(strlen(str)*2 + 3);
+    char *source = str;
+    char *dest = return_str;
+    *dest++ = '"';
+    while(*source)
+    {
+        if(*source == '"' || *source == '\\')
+        {
+            // Escape backslashes and double quotes.
+            *dest++ = '\\';
+            *dest++ = *source++;
+        }
+        else if(*source < 32)
+        {
+            // Escape control characters.
+            sprintf(dest, "\\u%04x", *source++);
+            dest += 6;
+        }
+        else
+            *dest++ = *source++;
+    }
+    *dest++ = '"';
+    *dest++ = '\0';
+    return return_str;
+}
+
 void print_newline(struct gzlparse_state *user_state, bool suppress_comma)
 {
     if(user_state->first_child_len > 0 || suppress_comma == true)
@@ -69,9 +99,14 @@ void terminal_callback(struct parse_state *parse_state,
 
     print_newline(user_state, false);
     print_indent(user_state);
-    printf("{\"terminal\": \"%s\", \"slotname\": \"%s\", \"slotnum\": %d, \"offset\": %d, \"len\": %d}",
-           terminal->name, rtn_frame->rtn_transition->slotname, rtn_frame->rtn_transition->slotnum,
+
+    char *terminal_name = get_json_escaped_string(terminal->name);
+    char *slotname = get_json_escaped_string(rtn_frame->rtn_transition->slotname);
+    printf("{\"terminal\": %s, \"slotname\": %s, \"slotnum\": %d, \"offset\": %d, \"len\": %d}",
+           terminal_name, slotname, rtn_frame->rtn_transition->slotnum,
            terminal->offset, terminal->len);
+    free(terminal_name);
+    free(slotname);
 }
 
 void start_rule_callback(struct parse_state *parse_state)
@@ -83,15 +118,17 @@ void start_rule_callback(struct parse_state *parse_state)
 
     print_newline(user_state, false);
     print_indent(user_state);
-    printf("{\"rule\":\"%s\", \"start\": %d, ", rtn_frame->rtn->name, frame->start_offset);
+    char *rule = get_json_escaped_string(rtn_frame->rtn->name);
+    printf("{\"rule\":%s, \"start\": %d, ", rule, frame->start_offset);
+    free(rule);
 
     if(parse_state->parse_stack_len > 1)
     {
         frame--;
         struct rtn_frame *prev_rtn_frame = &frame->f.rtn_frame;
-        printf("\"slotname\":\"%s\", \"slotnum\":%d, ",
-               prev_rtn_frame->rtn_transition->slotname,
-               prev_rtn_frame->rtn_transition->slotnum);
+        char *slotname = get_json_escaped_string(prev_rtn_frame->rtn_transition->slotname);
+        printf("\"slotname\":%s, \"slotnum\":%d, ",
+               slotname, prev_rtn_frame->rtn_transition->slotnum);
     }
 
     printf("\"children\": [");
