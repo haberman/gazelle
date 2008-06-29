@@ -18,8 +18,8 @@ BUILDING
 You need to have Lua installed to do anything interesting.  The C runtime
 doesn't need Lua, but without Lua you can't compile any grammars.
 
-Gazelle should build out-of-the-box on UNIX-like systems if Lua is installed.
-Ubuntu Linux and Mac OS X are tested.  Just type make:
+Gazelle should build out-of-the-box on UNIX-like systems if Lua 5.1 is
+installed.  Ubuntu Linux and Mac OS X are tested.  Just type make:
 
 $ make
 
