@@ -21,11 +21,15 @@
 #define GAZELLE_VERSION "0.2-prerelease"
 #define GAZELLE_WEBPAGE "http://www.reverberate.org/gazelle/"
 
-struct parse_state;
-struct terminal;
-typedef void (*rule_callback_t)(struct parse_state *state);
-typedef void (*terminal_callback_t)(struct parse_state *state,
-                                    struct terminal *terminal);
+/*
+ * This group of structures are for storing a complete grammar in the form as
+ * it is emitted from the compiler.  There are structures for each RTN, GLA,
+ * and IntFA, states and transitions for each.
+ */
+
+/* Functions for loading a grammar from a bytecode file. */
+struct grammar *load_grammar(struct bc_read_stream *s);
+void free_grammar(struct grammar *g);
 
 /*
  * RTN
@@ -201,6 +205,7 @@ struct parse_val
     } val;
 };
 
+/* This structure is the format for every stack frame of the parse stack. */
 struct parse_stack_frame
 {
     union {
@@ -241,6 +246,11 @@ struct parse_stack_frame
  * At the moment you initialize a bound_grammar structure directly, but in the
  * future there will be a set of functions that do so, possibly doing JIT
  * compilation and other such things in the process. */
+
+struct parse_state;
+typedef void (*rule_callback_t)(struct parse_state *state);
+typedef void (*terminal_callback_t)(struct parse_state *state,
+                                    struct terminal *terminal);
 struct bound_grammar
 {
     struct grammar *grammar;
@@ -288,9 +298,6 @@ struct parse_state
      * consumption. */
     DEFINE_DYNARRAY(token_buffer, struct terminal);
 };
-
-struct grammar *load_grammar(struct bc_read_stream *s);
-void free_grammar(struct grammar *g);
 
 /* Begin or continue a parse using grammar g, with the current state of the
  * parse represented by s.  It is expected that the text in buf represents the

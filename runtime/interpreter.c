@@ -11,6 +11,9 @@
   generated or executed.  Despite this, it is still quite fast, and
   has a very low memory footprint.
 
+  The interpreter primarily consists of maintaining the parse stack
+  properly and transitioning the frames in response to the input.
+
   Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
@@ -21,12 +24,13 @@
 #include <string.h>
 #include "interpreter.h"
 
-struct grammar *global_g;
-
-void dump_stack(struct parse_state *s, struct grammar *g, FILE *output)
+/*
+ * A diagnostic function for dumping the current state of the stack.
+ */
+void dump_stack(struct parse_state *s, FILE *output)
 {
     fprintf(output, "Stack dump:\n");
-    if(g == NULL) g = global_g;
+    struct grammar *g = s->bound_grammar->grammar;
     for(int i = 0; i < s->parse_stack_len; i++)
     {
         struct parse_stack_frame *frame = &s->parse_stack[i];
@@ -530,7 +534,6 @@ enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
                         int *out_consumed_buf_len, bool *out_eof_ok)
 {
     struct intfa_frame *intfa_frame;
-    global_g = s->bound_grammar->grammar;
 
     /* For the first parse, we need to descend from the starting frame
      * until we hit an IntFA frame. */
