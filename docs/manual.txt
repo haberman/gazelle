@@ -1,7 +1,7 @@
 Gazelle Manual
 ==============
 Joshua Haberman <joshua@reverberate.org>
-v0.2, Feb 2008
+v0.2, June 2008
 :toc:
 
 Gazelle is a system for parsing context-free grammars.  It takes inspiration
