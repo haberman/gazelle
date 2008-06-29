@@ -109,10 +109,11 @@ print_verbose(version)
 
 print_verbose(string.format("Opening input file '%s'...", input_filename))
 input_file = io.open(input_filename, "r")
-grm_str = input_file:read("*a")
 if not input_file then
-  stderr:write(string.format("gzlc: couldn't open input file '%s'", input_filename))
+  io.stderr:write(string.format("gzlc: couldn't open input file '%s'\n", input_filename))
+  os.exit(1)
 end
+grm_str = input_file:read("*a")
 
 print_verbose("Parsing grammar...")
 grammar = parse_grammar(CharStream:new(grm_str))

@@ -26,8 +26,230 @@ stabilizes, so will the relationship between the manual and reality.
 An Introductory Tour
 --------------------
 
-This section will walk readers through an example that involves writing
-a grammar and parsing text using that grammar.
+This section offers a quick tour of Gazelle and its capabilities.  It assumes
+you have already compiled Gazelle successfully.
+
+Hello, World
+~~~~~~~~~~~~
+
+For our "Hello, World" example, we'll write a grammar for a language that
+is simply an integer surrounded by an arbitrary number of balanced parentheses.
+To begin, use a text editor to write this grammar to +hello.gzl+.
+
+------------------------------------------------
+hello -> "(" hello ")" | .digits=/[0-9]+/;
+------------------------------------------------
+
+This text is a complete Gazelle grammar.  It defines a single rule called "hello",
+which expands to either another (recursive) hello surrounded by parentheses, or
+a string of one or more numeric digits (and this term is named "digits").
+
+This language will match any of the following inputs:
+
+------------------------------------------------
+(5)
+(((((((((((100)))))))))))
+0
+------------------------------------------------
+
+But none of these inputs will match:
+
+------------------------------------------------
+(()
+)(
+0)
+------------------------------------------------
+
+The first step is to compile the text version of the grammar to bytecode.
+The Gazelle compiler analyzes the input grammar and builds a series of
+finite automata (state machines) that can do the real parsing.  It writes
+this compiled version of the grammar to bytecode.
+
+------------------------------------------------
+$ . lua_path
+$ ./compiler/gzlc --help
+gzlc -- Gazelle grammar compiler.
+Gazelle v0.2  http://www.reverberate.org/gazelle/
+
+Usage: gzlc [options] input-file
+
+  -h, --help         you're looking at it.
+
+  -d,                dump detailed output about the grammar to
+                     html/index.html.
+
+  -o <file>          output filename.  Default is input filename
+                     with extension replaced with .gzc
+
+  -v, --verbose      dump information about compilation process and
+                     output statistics.
+
+  --version          dump Gazelle version
+$ ./compiler/gzlc hello.gzl
+$
+------------------------------------------------
+
+You won't see any output -- that means that the grammar was compiled
+successfully.  Just like +gcc+, +gzlc+ is silent when things succeed.  The
+default output filename is the input filename with 'gzl' replaced with 'gzc'.
+
+------------------------------------------------
+Tallis:gazelle joshua$ ls -l hello*
+-rw-r--r--  1 joshua  joshua  212 Jun 28 18:57 hello.gzc
+-rw-r--r--  1 joshua  joshua   43 Jun 28 18:43 hello.gzl
+------------------------------------------------
+
+If you want to see a bit more verbose output, run +gzlc+ with +-v+.
+
+------------------------------------------------
+$ ./compiler/gzlc -v hello.gzl
+Gazelle v0.2-prerelease
+Opening input file 'hello.gzl'...
+Parsing grammar...
+Convering RTN NFAs to DFAs...
+Minimizing RTN DFAs...
+Doing LL(k) lookahead calculations...
+Generating lexer DFAs...
+Writing to output file 'hello.gzc'...
+Writing 4 strings...
+Writing 1 IntFAs...
+  4 states, 4 transitions
+Writing 0 GLAs...
+Writing 1 RTNs...
+------------------------------------------------
+
+Now, the magic moment where we do our first actual parsing.  We'll write some
+valid input text for this language, then use +gzlparse+ to actually parse it.
+
+------------------------------------------------
+$ echo '((((500))))' > hello_text
+$ ./utilities/gzlparse --help
+gzlparse -- A command-line tool for parsing input text.
+Gazelle 0.2  http://www.reverberate.org/gazelle/.
+
+Usage: gzlparse [OPTIONS] GRAMMAR.gzc INFILE
+Input file can be '-' for stdin.
+
+  --dump-json     Dump a parse tree in JSON as text is parsed.
+  --dump-total   When parsing finishes, print the number of bytes parsed.
+
+$ ./utilities/gzlparse hello.gzc hello_text
+$
+------------------------------------------------
+
+Again, by default Gazelle doesn't print any output when things were successful.
+If there had been a parse error, Gazelle would have printed an error and exited.
+If you want to see more output, the flags +--dump-json+ and +--dump-total+ will
+print a parse tree in JSON format and a total byte count, respectively.
+
+------------------------------------------------
+$ ./utilities/gzlparse --dump-json --dump-total hello.gzc hello_text
+{"parse_tree":
+  {"rule":"hello", "start": 0, "children": [
+    {"terminal": "(", "slotname": "(", "slotnum": 0, "offset": 0, "len": 1},
+    {"rule":"hello", "start": 1, "slotname":"hello", "slotnum":1, "children": [
+      {"terminal": "(", "slotname": "(", "slotnum": 0, "offset": 1, "len": 1},
+      {"rule":"hello", "start": 2, "slotname":"hello", "slotnum":1, "children": [
+        {"terminal": "(", "slotname": "(", "slotnum": 0, "offset": 2, "len": 1},
+        {"rule":"hello", "start": 3, "slotname":"hello", "slotnum":1, "children": [
+          {"terminal": "(", "slotname": "(", "slotnum": 0, "offset": 3, "len": 1},
+          {"rule":"hello", "start": 4, "slotname":"hello", "slotnum":1, "children": [
+            {"terminal": "digits", "slotname": "digits", "slotnum": 3, "offset": 4, "len": 3}
+          ], "len": 3},
+          {"terminal": ")", "slotname": ")", "slotnum": 2, "offset": 4, "len": 4}
+        ], "len": 5},
+        {"terminal": ")", "slotname": ")", "slotnum": 2, "offset": 8, "len": 1}
+      ], "len": 7},
+      {"terminal": ")", "slotname": ")", "slotnum": 2, "offset": 9, "len": 1}
+    ], "len": 9},
+    {"terminal": ")", "slotname": ")", "slotnum": 2, "offset": 10, "len": 1}
+  ], "len": 11}
+}
+11 bytes parsed.
+$
+------------------------------------------------
+
+The next thing you will want to do is use +gzlc+ to produce an HTML dump of
+the grammar as the compiler sees it.  This is an invaluable way to check
+and be sure that the compiler is seeing things the way you meant it to.
+If not, you might have misspecified the grammar, or you may have found a
+bug in the compiler (and these certainly exist).
+
+Doing this HTML dump requires that Graphviz is installed.  If ImageMagick is
+installed, this will also be used to create thumbnails.
+
+------------------------------------------------
+$ ./compiler/gzlc -d hello.gzl
+------------------------------------------------
+
+Now open +html/index.html+ in a web browser to view the HTML dump.  You will
+see an illustration of the "hello" rule, and you should see that it corresponds
+to your intuitive understanding of this rule.  There are two paths through the
+rule -- either +"(", hello, ")"+ or +digits+.  You will also see the state
+machine that does the lexing: it recognizes either parentheses or a series of
+one or more digits.
+
+
+Caveats
+~~~~~~~
+
+Gazelle is still quite rough around the edges.  We'll look at a few examples of
+things Gazelle can't handle yet and how the failures manifest themselves, so
+you can know what to expect if you run into these problems yourself.
+
+
+------------------------------------------------
+$ echo 'bad -> bad "X" | "Y";' > bad1.gzl
+$ ./compiler/gzlc bad1.gzl
+<hangs forever>
+------------------------------------------------
+
+This grammar is left-recursive, and there is no way for Gazelle (a top-down
+parser) to successfully analyze it.  However, Gazelle doesn't detect this case
+yet, and will happy spend until eternity trying.  So if you see this behavior
+from +gzlc+, you've likely written a grammar that cannot be parsed with an
+LL(k) parser.  This isn't always as obvious as left-recursion -- here is
+another example of a grammar that will hang if you feed it to gzlc:
+
+------------------------------------------------
+bad -> a | b;
+a   -> "X"* "Y";
+b   -> "X"* "Z";
+------------------------------------------------
+
+There are also some grammars that will be compiled incorrectly.  For example:
+
+------------------------------------------------
+bad -> "X" "Y" | "X";
+------------------------------------------------
+
+Gazelle should (and in the future will) notice that "X" followed by EOF should
+trigger the second alternative, but at the moment EOF does not get this special
+handling.  So Gazelle will always wait to see a "Y" and not be satisfied with
+just an "X".  You can look at the +gzlc -d+ input to get a better picture of
+why this fails.
+
+------------------------------------------------
+$ echo 'bad -> "X" "Y" | "X";' > bad2.gzl
+$ echo -n 'X' > bad2_text
+$ ./compiler/gzlc bad2.gzl
+$ ./utilities/gzlparse bad2.gzc bad2_text
+Premature end-of-file.
+------------------------------------------------
+
+This is an incorrect error from Gazelle -- "X" alone should be valid input.
+
+Where to go from here
+~~~~~~~~~~~~~~~~~~~~~
+
+This concludes the tour.  Next you can read more about Gazelle's input language
+and experiment with your own grammars.
+
+Gazelle's major limitation at the moment is that it cannot support removing
+whitespace or comments from the input.  A feature to address this is coming,
+but for the moment please bear with me!
+
+I hope you enjoy Gazelle!
 
 
 Writing Grammars for Gazelle
