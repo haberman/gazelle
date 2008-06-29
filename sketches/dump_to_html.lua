@@ -139,7 +139,7 @@ function dump_to_html(src_file, grammar, dir)
   index:write("<h2><a name='lexing'>Lexing</a></h2>\n")
   index:write(string.format("<p>The grammar's lexer has %d IntFAs, which follow:</p>", grammar.master_intfas:count()))
   local intfa_num = 1
-  local have_graphviz = os.execute("mogrify > /dev/null") == 0
+  local have_imagemagick = os.execute("mogrify > /dev/null 2> /dev/null") == 0
   for intfa in each(grammar.master_intfas) do
     local dot_file = string.format("%s/intfa-%d.dot", dir, intfa_num)
     local png_file = string.format("%s/intfa-%d.png", dir, intfa_num)
@@ -154,7 +154,7 @@ function dump_to_html(src_file, grammar, dir)
     intfa_file:close()
     os.execute(string.format("dot -Tpng -o %s %s", png_file, dot_file))
     local w = 800
-    if have_graphviz then
+    if have_imagemagick then
       local img_info = io.popen(string.format("identify %s", png_file)):read("*a")
       w, h = string.match(img_info, "[^ ]+ [^ ]+ (%d+)x(%d+)")
       w = math.floor(w * 0.7)
