@@ -532,14 +532,14 @@ information about the grammar that isn't expressed in rules.
 ^^^^^^^^
 
 The +@start+ command tells Gazelle what the top-level nonterminal for a grammar
-is.  This frees you from having to follow a rule like ``the top level nonterminal
-must be listed first.''  The syntax of this command is simply:
+is.  If +@start+ is not specified, Gazelle assumes that the first nonterminal
+in the grammar is the start symbol.  The syntax of this command is simply:
 
 -------------------------------------------
 @start nonterm;
 -------------------------------------------
 
-+@start+ must appear once and exactly once in every grammar.
++@start+ is not required, and may not appear more than once per grammar.
 
 Regular Expressions vs. Repetition Within Rules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
