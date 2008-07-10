@@ -9,11 +9,11 @@ echo core_lines=$CORE_LINES
 echo tests_lines=`find tests | grep 'test_.*\.lua$' | xargs cat | wc -l`
 echo docs_lines=`cat docs/manual.txt | wc -l`
 
-if [ "$1" == "all" ] ; then
+if [ "$1" = "all" ] ; then
 
   make clean > /dev/null
   make CFLAGS="-O6 -fomit-frame-pointer -DNDEBUG -std=c99" > /dev/null
-  . lua_path
+  . ./lua_path
   ./compiler/gzlc sketches/json.gzl
   echo json_gzc_size=`cat sketches/json.gzc | wc -c`
   strip runtime/libparse.a
