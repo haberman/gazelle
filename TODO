@@ -3,7 +3,7 @@ This is a list of things I definitely want to do.  I don't go into too many
 specifics, because the specifics change often as I think about the problem
 harder.
 
-Core Parsing Algorithm (all changes should have test-cases):
+Compiler / Grammar Analysis (all changes should have test-cases):
 * properly support EOF in lookahead (like s -> "A" | "A" "B"; should predict 1).
 * properly support lookahead that predicts a return from a final RTN state
   like s -> a "X"; a -> "Y"*;
@@ -25,6 +25,7 @@ Tests!  Everything should have tests, as much as possible:
 * JSON output from gzlparse.  Both well-formedness and accuracy.
 
 Major design areas that exist only in my head:
+* Character sets other than ASCII.
 * Embedding Lua to do things only an imperative language can do.
 * Operator-precedence parsing using the shunting yard algorithm.
 * Parallel parsers (for both embedded languages and things like whitespace/comments)
