@@ -413,9 +413,8 @@ A literal string that we expect to see at this point in the input.
 regular expressions::
 A _pattern_ of characters we expect to see at this point in the input.
 
-named terminals::
-You can name a string or regex, and later refer to the string or regex
-by name.
+named regular expressions::
+You can name a regex, and later refer to that regex by name.
 
 Strings and regular expressions are referred to collectively as
 ``terminals,''  because they represent actual strings of the input text.
@@ -501,11 +500,11 @@ A plus sign specifies 1 or more repetition.
 TODO: figure out and describe character classes (\w, :alpha:, etc)
 /////////////////////////////////////
 
-Named Terminals
-^^^^^^^^^^^^^^^
+Named Regular Expressions
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A string or regular expression can be named and referred to later by
-using the _named terminal_ syntax.
+A regular expression can be named and referred to later by using the
+_named regular expression_ syntax.
 
 -------------------------------------------
 term: /<some regex>/;
@@ -518,8 +517,11 @@ regex on the right-hand-side, like so:
 nonterm -> /<some regex>/;
 -------------------------------------------
 
-The primary difference is that the named terminal syntax avoids creating a
-trivial and useless nonterminal graph.
+The primary difference is that the named regular expression syntax avoids creating a
+trivial and useless nonterminal graph.  While Gazelle could detect the case where
+a nonterminal graph is trivial, it is important that Gazelle preserves the structure
+of the grammar as specified, so that client programs can hook into this structure
+at parse time.
 
 Special Commands
 ~~~~~~~~~~~~~~~~
