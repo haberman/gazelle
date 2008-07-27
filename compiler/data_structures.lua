@@ -85,6 +85,10 @@ Stack = {name="Stack"}
     return false
   end
 
+  function Stack:each()
+    return each(self.stack)
+  end
+
   function Stack:to_array()
     local arr = {}
     for i, val in ipairs(self.stack) do

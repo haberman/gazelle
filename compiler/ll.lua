@@ -124,8 +124,9 @@ function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   local obj = newobject(self)
   obj.path = {}
   obj.current_state = rtn_state
-  obj.predicted_edge = predicted_edge
-  obj.predicted_dest_state = predicted_dest_state
+  obj.prediction = get_unique_table_for({predicted_edge, predicted_dest_state})
+  obj.seen_sigs = Set:new()
+  obj.is_cyclic = false
   obj.stack = Stack:new()
   return obj
 end
@@ -133,7 +134,7 @@ end
 function Path:enter_rule(rtn, return_to_state)
   local new_path = self:dup()
   new_path.current_state = rtn.start
-  table.insert(new_path.path, {"enter", rtn, return_to_state})
+  table.insert(new_path.path, {"enter", rtn.name})
 
   -- Key point: if return_to_state is final and has no outgoing transitions,
   -- then we need not push anything on the stack.  This is the equivalent of a
@@ -146,12 +147,17 @@ function Path:enter_rule(rtn, return_to_state)
     new_path.stack:push(return_to_state)
   end
 
+  new_path:check_for_cycles()
   return new_path
 end
 
 function Path:return_from_rule(return_to_state)
   local new_path = self:dup()
-  table.insert(new_path.path, {"return", return_to_state})
+  local return_to_name
+  if return_to_state then
+    return_to_name = return_to_state.rtn.name
+  end
+  table.insert(new_path.path, {"return", return_to_name})
 
   -- return_to_state must be specified iff the stack is empty.
   if new_path.stack:isempty() then
@@ -162,13 +168,15 @@ function Path:return_from_rule(return_to_state)
     new_path.current_state = new_path.stack:pop()
   end
 
+  new_path:check_for_cycles()
   return new_path
 end
 
 function Path:enter_state(term, state)
   local new_path = self:dup()
   new_path.current_state = state
-  table.insert(new_path.path, {"term", term, state})
+  table.insert(new_path.path, {"term", term})
+  new_path:check_for_cycles()
   return new_path
 end
 
@@ -176,18 +184,37 @@ function Path:signature(include_prediction)
   local sig = self.stack:to_array()
   table.insert(sig, self.current_state)
   if include_prediction then
-    table.insert(sig, get_unique_table_for({self.predicted_edge, self.predicted_dest_state}))
+    table.insert(sig, self.prediction)
   end
   sig = get_unique_table_for(sig)
   return sig
+end
+
+function Path:check_for_cycles()
+  if self.seen_sigs:contains(self:signature()) then
+    self.is_cyclic = true
+  end
+  self.seen_sigs:add(self:signature())
+end
+
+function Path:is_regular()
+  local seen_states = Set:new()
+  for return_to_state in each(self.stack) do
+    if seen_states:contains(return_to_state) then
+      return false
+    end
+    seen_states:add(return_to_state)
+  end
+  return true
 end
 
 function Path:dup()
   local new_path = newobject(Path)
   new_path.path = table_shallow_copy(self.path)
   new_path.current_state = self.current_state
-  new_path.predicted_edge = self.predicted_edge
-  new_path.predicted_dest_state = self.predicted_dest_state
+  new_path.prediction = self.prediction
+  new_path.seen_sigs = self.seen_sigs
+  new_path.is_cyclic = self.is_cyclic
   new_path.stack = self.stack:dup()
   return new_path
 end
@@ -208,9 +235,13 @@ function construct_gla(state, grammar, follow_states)
   local gla = fa.GLA:new()
   local initial_term_transitions = {}
   local noterm_paths = Set:new()  -- paths that did not consume their first terminal
+  local prediction_languages = {}
 
   for edge_val, dest_state in state:transitions() do
     local path = Path:new(state, edge_val, dest_state)
+    -- Initialize all prediction languages to "fixed" (which is what they are
+    -- until demonstrated otherwise).
+    prediction_languages[path.prediction] = "fixed"
     if fa.is_nonterm(edge_val) then
       noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state))
     else
@@ -240,6 +271,7 @@ function construct_gla(state, grammar, follow_states)
 
   local queue = Queue:new()
   local gla_states = {}
+
   for term, paths in pairs(initial_term_transitions) do
     local new_gla_state = fa.GLAState:new(paths)
     gla.start:add_transition(term, new_gla_state)
@@ -249,6 +281,9 @@ function construct_gla(state, grammar, follow_states)
 
   while not queue:isempty() do
     local gla_state = queue:dequeue()
+
+    check_for_non_llstar(gla_state, prediction_languages)
+
     local alt = get_unique_predicted_alternative(gla_state)
     if alt then
       -- this DFA path has uniquely predicted an alternative -- set the
@@ -305,10 +340,61 @@ function check_for_ambiguity(gla_state)
   for path in each(gla_state.rtn_paths) do
     local signature = path:signature()
     if rtn_states[signature] then
-      local err = "Ambiguous grammar for paths " .. serialize(path.path)
+      local err = "Ambiguous grammar for paths " .. serialize(path.path) ..
+                  " and " .. serialize(rtn_states[signature].path)
       error(err)
     end
     rtn_states[signature] = path
+  end
+end
+
+
+--[[--------------------------------------------------------------------
+
+  check_for_non_llstar(gla_state, nonregular_alt): Check to see if
+  more than one alternative's lookahead language has become nonregular.
+
+  We can generate correct lookahead in two cases:
+
+  - all alternatives have regular lookahead languages.  In this case
+    we build a GLA which is guaranteed to be regular because it is the
+    combination of a bunch of regular languages.
+  - at most one alternative has a nonregular lookahead language.  In
+    this case all of the other alternatives must have LL(k) (LL(*)
+    won't do) lookahead languages.  This works because once we have
+    determined k for the other alternatives, we can enumerate all
+    strings of terminals <= length k in the nonregular language,
+    and combine them with the other LL(k) lookahead.
+
+  So to detect if we are dealing with a language we can't parse, we
+  need to do the following check:
+
+  if any of the alternatives have nonregular lookahead
+    if any of the *other* alternatives are cyclic or nonregular
+      return failure
+
+--------------------------------------------------------------------]]--
+
+function check_for_non_llstar(gla_state, prediction_languages)
+  for path in each(gla_state.rtn_paths) do
+    if not path:is_regular() then
+      prediction_languages[path.prediction] = "nonregular"
+    end
+
+    if path.is_cyclic and prediction_languages[path.prediction] ~= "nonregular" then
+      prediction_languages[path.prediction] = "cyclic"
+    end
+  end
+
+  for prediction, language in pairs(prediction_languages) do
+    if language == "nonregular" then
+      for prediction2, language2 in pairs(prediction_languages) do
+        if prediction ~= prediction2 and language2 ~= "fixed" then
+          -- TODO: more info about which languages they were.
+          error("Language is not LL(*): one lookahead language was nonregular, others were not all fixed")
+        end
+      end
+    end
   end
 end
 
@@ -322,16 +408,15 @@ end
 --------------------------------------------------------------------]]--
 
 function get_unique_predicted_alternative(gla_state)
-  local first_path = gla_state.rtn_paths:to_array()[1]
-  local edge, state = first_path.predicted_edge, first_path.predicted_dest_state
+  local first_prediction = gla_state.rtn_paths:to_array()[1].prediction
 
   for path in each(gla_state.rtn_paths) do
-    if path.predicted_edge ~= edge or path.predicted_dest_state ~= state then
+    if path.prediction ~= first_prediction then
       return nil
     end
   end
 
-  return get_unique_table_for({edge, state})
+  return first_prediction
 end
 
 

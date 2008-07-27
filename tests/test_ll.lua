@@ -499,7 +499,11 @@ function assert_fails_with_error(grammar_str, error_string)
 end
 
 function assert_left_recursive(grammar_str)
-  assert_fails_with_error(grammar_str, "Grammar is not LL%(%*%): it is left%-recursive!")
+  assert_fails_with_error(grammar_str, "it is left%-recursive")
+end
+
+function assert_nonregular(grammar_str)
+  assert_fails_with_error(grammar_str, "one lookahead language was nonregular, others were not all fixed")
 end
 
 TestDetectNonLLStar = {}
@@ -516,6 +520,15 @@ function TestDetectNonLLStar:test_left_recursive2()
   [[
     s -> a | "X";
     a -> s | "Y";
+  ]]
+  )
+end
+
+function TestDetectNonLLStar:test_nonregular()
+  assert_nonregular(
+  [[
+    s -> e "%" | e "!";
+    e -> "(" e ")" | "ID";
   ]]
   )
 end
