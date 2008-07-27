@@ -1,4 +1,6 @@
 
+// Grammar for JSON, as defined at json.org.
+
 @start object;
 
 object   -> "{" (string ":" value) *(,) "}";

@@ -36,8 +36,27 @@ CharStream = {}
 
   function CharStream:skip_ignored()
     if self.ignored == "whitespace" then
-      local first, last = self.string:find("^[\r\n\t ]+", self.offset)
-      if last then self.offset = last+1 end
+      local found = true
+      while found do
+        found = false
+        -- skip whitespace
+        local first, last = self.string:find("^[\r\n\t ]+", self.offset)
+        if last then
+          found = true
+          self.offset = last+1
+        end
+        -- skip comments
+        first, last = self.string:find("^//[^\n]*\n", self.offset)
+        if last then
+          found = true
+          self.offset = last+1
+        end
+        first, last = self.string:find("^/%*.*%*/", self.offset)
+        if last then
+          found = true
+          self.offset = last+1
+        end
+      end
     end
   end
 
