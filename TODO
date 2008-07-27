@@ -4,10 +4,11 @@ specifics, because the specifics change often as I think about the problem
 harder.
 
 Compiler / Grammar Analysis (all changes should have test-cases):
-* properly support EOF in lookahead (like s -> "A" | "A" "B"; should predict 1).
-* properly support lookahead that predicts a return from a final RTN state
-  like s -> a "X"; a -> "Y"*;
 * try to detect when we are in an infinite loop (requires much thought).
+* (maybe) take regular subset of non-regular lookahead when it doesn't
+  cause alternatives' languages to intersect.
+* (maybe) support full-LL by having first states of GLA have edges that
+  are the states on the return stack at runtime.
 * detect cases where some RTN alternatives have no GLA final state.
   (shouldn't happen, modulo bugs).
 * deal with lexer-level ambiguity.  longest match will do for now, but
