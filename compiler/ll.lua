@@ -31,6 +31,7 @@ require "fa"
 function compute_lookahead(grammar)
   local gla_needing_rtn_states = grammar:get_rtn_states_needing_gla()
   local follow_states = get_follow_states(grammar)
+  check_for_left_recursion(grammar)
 
   for state in each(gla_needing_rtn_states) do
     state.gla = construct_gla(state, grammar, follow_states)
@@ -39,6 +40,34 @@ function compute_lookahead(grammar)
 end
 
 
+--[[--------------------------------------------------------------------
+
+  check_for_left_recursion(grammar): Checks all RTNs in the grammar to
+  see if they are left recursive.  Errors if so.
+
+--------------------------------------------------------------------]]--
+
+function check_for_left_recursion(grammar)
+  for name, rtn in each(grammar.rtns) do
+    local states = Set:new()
+
+    function children(state, stack)
+      local children = {}
+      for edge_val, dest_state in state:transitions() do
+        if fa.is_nonterm(edge_val) then
+          if edge_val.name == name then
+            error("Grammar is not LL(*): it is left-recursive!")
+          end
+          table.insert(children, grammar.rtns:get(edge_val.name).start)
+        end
+      end
+      return children
+    end
+
+    depth_first_traversal(rtn.start, children)
+
+  end
+end
 
 --[[--------------------------------------------------------------------
 

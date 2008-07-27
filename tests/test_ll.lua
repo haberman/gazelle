@@ -484,5 +484,41 @@ function TestFollow:test2()
   )
 end
 
+function assert_fails_with_error(grammar_str, error_string)
+  grammar = parse_grammar(CharStream:new(grammar_str))
+  grammar:determinize_rtns()
+  grammar:minimize_rtns()
+
+  local success, message = pcall(compute_lookahead, grammar)
+  if success then
+    error("Failed to fail!")
+  elseif not message:find(error_string) then
+    error("Failed with wrong message!  Message was supposed to start with "
+          .. error_string .. ", instead it was: " .. message)
+  end
+end
+
+function assert_left_recursive(grammar_str)
+  assert_fails_with_error(grammar_str, "Grammar is not LL%(%*%): it is left%-recursive!")
+end
+
+TestDetectNonLLStar = {}
+function TestDetectNonLLStar:test_left_recursive()
+  assert_left_recursive(
+  [[
+    s -> s? "X";
+  ]]
+  )
+end
+
+function TestDetectNonLLStar:test_left_recursive2()
+  assert_left_recursive(
+  [[
+    s -> a | "X";
+    a -> s | "Y";
+  ]]
+  )
+end
+
 LuaUnit:run(unpack(arg))
 
