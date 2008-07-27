@@ -9,6 +9,7 @@ Compiler / Grammar Analysis (all changes should have test-cases):
   like s -> a "X"; a -> "Y"*;
 * try to detect when we are in an infinite loop (requires much thought).
 * detect cases where some RTN alternatives have no GLA final state.
+  (shouldn't happen, modulo bugs).
 * deal with lexer-level ambiguity.  longest match will do for now, but
   we're not currently detecting s -> "A" | "AB";
 

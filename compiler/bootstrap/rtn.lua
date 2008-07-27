@@ -112,6 +112,12 @@ function parse_grammar(chars)
   end
 
   grammar.attributes = attributes
+
+  -- start symbol defaults to the first symbol
+  if not grammar.start then
+    grammar.start = grammar.rtns:get_key_at_offset(1)
+  end
+
   return grammar
 end
 

@@ -35,15 +35,23 @@ require "misc"
 
 module("fa", package.seeall)
 
--- This is a special edge value
-Epsilon = {name="Epsilon"}
-function Epsilon:new()
-  -- Epsilon is a singleton
-  self.singleton = self.singleton or newobject(self)
-  return self.singleton
+-- Class for representing special-case edge values that have only one
+-- instance for the whole program.
+SingletonEdgeValue = {name="SingletonEdgeValue"}
+function SingletonEdgeValue:new(name)
+  self.singletons = self.singletons or {}
+  -- we index each singleton by name, creating new ones lazily.
+  self.singletons[name] = self.singletons[name] or newobject(self)
+  return self.singletons[name]
 end
 
-e = Epsilon:new()
+-- This is a special edge value that represents a transition that can be
+-- taken without consuming any input.
+e = SingletonEdgeValue:new("Epsilon")
+
+-- This is a special edge value that represents a GLA transition that can
+-- be taken when EOF is seen.
+eof = SingletonEdgeValue:new("EOF")
 
 
 --[[--------------------------------------------------------------------
@@ -344,11 +352,24 @@ function GLA:to_dot(indent, suffix)
   for state in each(self:states()) do
     peripheries = 1
     extra_label = ""
-    if state.final then peripheries = 2 end
+    if state.final then
+      peripheries = 2
+      for edge_val, dest_state, properties in self.rtn_state:transitions() do
+        if edge_val == state.final[1] and dest_state == state.final[2] then
+          extra_label = tostring(properties.slotnum)
+        end
+      end
+      if extra_label == "" then
+        extra_label = serialize(state.final, nil, "  ")
+      end
+    end
     if self.start == state then extra_label = "Start" end
     str = str .. string.format('%s"%s" [label="%s" peripheries=%d]\n',
-                                indent, tostring(state) .. suffix, extra_label, peripheries)
+                                indent, tostring(state) .. suffix, escape(extra_label), peripheries)
     for edge_val, target_state in state:transitions() do
+      if edge_val == fa.eof then
+        edge_val = "EOF"
+      end
       str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
                     indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
                     escape(edge_val))
@@ -397,6 +418,7 @@ function RTN:get_outgoing_edge_values(states)
 end
 
 function escape(str)
+  print(serialize(str))
   return str:gsub("[\"\\]", "\\%1")
 end
 
@@ -444,6 +466,9 @@ function RTN:to_dot(indent, suffix, intfas, glas)
         --if attributes.regex_text[edge_val] then
         --  edge_val = "/" .. attributes.regex_text[edge_val] .. "/"
         --end
+        if edge_val == fa.eof then
+          edge_val = "EOF"
+        end
         str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
                       indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
                       escape(edge_val))

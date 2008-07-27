@@ -34,6 +34,7 @@ function parse_gla(str, rtn_state)
   local stream = CharStream:new(str)
   stream:ignore("whitespace")
   local gla = fa.GLA:new()
+  gla.rtn_state = rtn_state
   local states = {[1]=gla.start}
   while not stream:eof() do
     local statenum = tonumber(stream:consume_pattern("%d+"))
@@ -49,7 +50,11 @@ function parse_gla(str, rtn_state)
       local dest_state_num = tonumber(stream:consume_pattern("%d+"))
       states[dest_state_num] = states[dest_state_num] or fa.GLAState:new()
       local dest_state = states[dest_state_num]
-      state:add_transition(term, dest_state)
+      if term == "EOF" then
+        state:add_transition(fa.eof, dest_state)
+      else
+        state:add_transition(term, dest_state)
+      end
       if stream:lookahead(1) == "(" then
         stream:consume("(")
         local final_state_slotnum = tonumber(stream:consume_pattern("%d+"))
@@ -341,7 +346,7 @@ function TestLL3:test1()
   )
 end
 
-function TestLL3:test1()
+function TestLL3:test2()
   assert_lookahead(
   [[
     s -> a "X" | a "Y";
@@ -363,6 +368,88 @@ function TestLL3:test1()
   )
 end
 
+TestEOF = {}
+function TestEOF:test1()
+  assert_lookahead(
+  [[
+    s -> "A" | "A" "B";
+  ]],
+  "s", 0,
+  [[
+    1 -A-> 2;
+    2 -B-> 3(2);
+    2 -EOF-> 4(1);
+  ]]
+  )
+end
+
+function TestEOF:test2()
+  -- this is the example used by Terence Parr in his discussion of ANTLR 3.0's
+  -- lookahead analysis: http://www.antlr.org/blog/antlr3/lookahead.tml
+  assert_lookahead(
+  [[
+    s -> a "A" | a "B";
+    a -> "A"?;
+  ]],
+  "s", 0,
+  [[
+    1 -A-> 2;
+    1 -B-> 3(3);
+    2 -B-> 3(3);
+    2 -A-> 4(1);
+    2 -EOF-> 4(1);
+  ]]
+  )
+end
+
+-- -- Test lookahead that we can only compute correctly if we apply the
+-- -- tail-recursion optimization.
+-- TestTailRecursion = {}
+-- function TestTailRecursion:test1()
+--   assert_lookahead(
+--   [[
+--     s -> a "X" | a "Y";
+--     a -> ("Z" a)?;
+--   ]],
+--   "s", 0,
+--   [[
+--     1 -Z-> 1;
+--     1 -X-> 2(1);
+--     1 -Y-> 3(3);
+--   ]]
+--   )
+-- end
+
+TestFollow = {}
+function TestFollow:test1()
+  assert_lookahead(
+  [[
+    s -> a "X";
+    a -> "Y" "Y" | "Y";
+  ]],
+  "a", 0,
+  [[
+    1 -Y-> 2;
+    2 -Y-> 3(1);
+    2 -X-> 4(3);
+  ]]
+  )
+end
+
+-- Won't work until lookahead can instruct an RTN to return.
+-- function TestFollow:test1()
+--   assert_lookahead(
+--   [[
+--     s -> a "X";
+--     a -> "Y"?;
+--   ]],
+--   "a", 0,
+--   [[
+--     1 -Y-> 2(1);
+--     1 -X-> 3(0);
+--   ]]
+--   )
+-- end
 
 LuaUnit:run()
 

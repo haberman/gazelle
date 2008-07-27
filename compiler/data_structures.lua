@@ -157,12 +157,17 @@ Set = {name="Set"}
   function Set:hash_key()
     local arr = self:to_array()
     for i=1,#arr do
-      arr[i] = tostring(arr[i])
+      if arr[i].signature then
+        arr[i] = arr[i]:signature()
+      else
+        arr[i] = tostring(arr[i])
+      end
     end
 
     table.sort(arr)
 
-    str = "" for elem in each(arr) do str = str .. elem end
+    str = ""
+    for elem in each(arr) do str = str .. elem end
     return str
   end
 -- class Set
@@ -251,6 +256,10 @@ OrderedMap = {name="OrderedMap"}
 
   function OrderedMap:get(key)
     return self.elements[self.key_offsets[key]][2]
+  end
+
+  function OrderedMap:get_key_at_offset(offset)
+    return self.elements[offset][1]
   end
 
   -- though this is against Lua convention, this method returns 0-based offsets,

@@ -59,18 +59,28 @@ function get_follow_states(grammar)
 
   -- initialize each set to empty.
   for name, rtn in each(grammar.rtns) do
-    follow_states[name] = Set:new()
+    follow_states[rtn] = Set:new()
   end
 
   for name, rtn in each(grammar.rtns) do
     for state in each(rtn:states()) do
       for edge_val, dest_state in state:transitions() do
         if fa.is_nonterm(edge_val) then
-          follow_states[edge_val.name]:add(dest_state)
+          local rtn = grammar.rtns:get(edge_val.name)
+          follow_states[rtn]:add(dest_state)
         end
       end
     end
   end
+
+  -- We create a fake state for EOF.  It can follow the grammar's start symbol
+  -- and it has only one transition: on EOF, it transitions to a state that
+  -- itself has no transitions out of it.
+  local eof_state = fa.RTNState:new()
+  eof_state:add_transition(fa.eof, fa.RTNState:new())
+  eof_state.rtn = {}  -- Just need a unique value.
+  follow_states[eof_state.rtn] = Set:new()  -- empty, nothing ever follows it.
+  follow_states[grammar.rtns:get(grammar.start)]:add(eof_state)
 
   return follow_states
 end
@@ -86,109 +96,74 @@ end
 --------------------------------------------------------------------]]--
 
 Path = {name="Path"}
-  function Path:new(start_state, predict_edge_val, predict_dest_state)
-    local obj = newobject(self)
-    obj.stack = Stack:new()
+function Path:new(rtn_state, predicted_edge, predicted_dest_state)
+  local obj = newobject(self)
+  obj.path = {}
+  obj.current_state = rtn_state
+  obj.predicted_edge = predicted_edge
+  obj.predicted_dest_state = predicted_dest_state
+  obj.stack = Stack:new()
+  return obj
+end
 
-    obj.current_seq_num = 0
-    obj.next_seq_num = 1
-    obj.states = {{start_state, obj.current_seq_num}}
-    obj.all_stack = {{{start_state.rtn, obj.current_seq_num}}}
+function Path:enter_rule(rtn, return_to_state)
+  local new_path = self:dup()
+  new_path.current_state = rtn.start
+  table.insert(new_path.path, {"enter", rtn, return_to_state})
 
-    obj.current_state = start_state
-    obj.seen_states = Set:new()
-    obj.seen_states:add(obj.current_state)
-
-    obj.predict_edge_val = predict_edge_val
-    obj.predict_dest_state = predict_dest_state
-    obj.terms = {}
-    return obj
+  -- Key point: if return_to_state is final and has no outgoing transitions,
+  -- then we need not push anything on the stack.  This is the equivalent of a
+  -- tail-recursive optimization, but is significant in that it allows us to
+  -- calculate lookahead for languages we could not otherwise calculate
+  -- lookahead for.
+  if return_to_state.final and return_to_state:num_transitions() == 0 then
+    -- do nothing.
+  else
+    new_path.stack:push(return_to_state)
   end
 
-  function Path:enter_rule(start, return_to)
-    local new_path = self:dup()
+  return new_path
+end
 
-    new_path.stack:push({return_to, new_path.seen_states:dup(),
-                         new_path.current_seq_num})
-    new_path.current_seq_num = new_path.next_seq_num
-    new_path.next_seq_num = new_path.next_seq_num + 1
-    local st_off = 1 + new_path.stack:count()
-    new_path.all_stack[st_off] = new_path.all_stack[st_off] or {}
-    table.insert(new_path.all_stack[st_off], {start.rtn, new_path.current_seq_num})
+function Path:return_from_rule(return_to_state)
+  local new_path = self:dup()
+  table.insert(new_path.path, {"return", return_to_state})
 
-    table.insert(new_path.states, {start, new_path.current_seq_num})
-    new_path.seen_states:add(start)
-    new_path.current_state = start
-
-    return new_path
+  -- return_to_state must be specified iff the stack is empty.
+  if new_path.stack:isempty() then
+    if not return_to_state then error("Must specify return_to_state!") end
+    new_path.current_state = return_to_state
+  else
+    if return_to_state then error("Must not specify return_to_state!") end
+    new_path.current_state = new_path.stack:pop()
   end
 
-  function Path:return_from_rule()
-    if self.stack:isempty() then
-      self.seen_states = Set:new()
-      return nil
-    else
-      local new_path = self:dup()
-      local state
-      state, new_path.seen_states, new_path.current_seq_num = unpack(new_path.stack:pop())
-      new_path.current_state = state
-      table.insert(new_path.states, {state, new_path.current_seq_num})
-      return state, new_path
-    end
-  end
+  return new_path
+end
 
-  function Path:enter_state(term, state)
-    local new_path = self:dup()
-    new_path.seen_states:add(state)
-    new_path.current_state = state
-    table.insert(new_path.states, {state, new_path.current_seq_num})
-    table.insert(new_path.terms, term)
-    return new_path
-  end
+function Path:enter_state(term, state)
+  local new_path = self:dup()
+  new_path.current_state = state
+  table.insert(new_path.path, {"term", term, state})
+  return new_path
+end
 
-  function Path:have_seen_state(state)
-    return self.seen_states:contains(state)
-  end
+function Path:signature()
+  local sig = self.stack:to_array()
+  table.insert(sig, self.current_state)
+  sig = get_unique_table_for(sig)
+  return sig
+end
 
-  function Path:dup()
-    local new_path = newobject(Path)
-    new_path.stack = self.stack:dup()
-    new_path.current_seq_num = self.current_seq_num
-    new_path.next_seq_num = self.next_seq_num
-    new_path.states = table_shallow_copy(self.states)
-    new_path.all_stack = table_copy(self.all_stack, 2)
-    new_path.seen_states = self.seen_states:dup()
-    new_path.terms = table_shallow_copy(self.terms)
-    new_path.current_state = self.current_state
-    new_path.predict_edge_val = self.predict_edge_val
-    new_path.predict_dest_state = self.predict_dest_state
-    return new_path
-  end
-
-  function Path:to_dot()
-    local str = "digraph untitled{\n"
-    for i, st_entry in ipairs(self.all_stack) do
-      str = str .. string.format("  subgraph cluster%d {\n", i)
-      str = str .. "    rankdir=LR;\n"
-      for rtn_seq_pair in each(st_entry) do
-        local rtn, seq_num = unpack(rtn_seq_pair)
-        str = str .. string.format("    subgraph clusterrtn%d {\n", seq_num)
-        str = str .. rtn:to_dot("      ", tostring(seq_num))
-        str = str .. "    }\n"
-      end
-      str = str .. "  }\n"
-    end
-
-    for i=1,(#self.states-1) do
-      local st1, seq1 = unpack(self.states[i])
-      local st2, seq2 = unpack(self.states[i+1])
-      str = str .. string.format('  "%s%d" -> "%s%d" [style=bold]\n',
-                                 tostring(st1), seq1, tostring(st2), seq2)
-    end
-    str = str .. "}"
-
-    return str
-  end
+function Path:dup()
+  local new_path = newobject(Path)
+  new_path.path = table_shallow_copy(self.path)
+  new_path.current_state = self.current_state
+  new_path.predicted_edge = self.predicted_edge
+  new_path.predicted_dest_state = self.predicted_dest_state
+  new_path.stack = self.stack:dup()
+  return new_path
+end
 
 
 --[[--------------------------------------------------------------------
@@ -203,28 +178,29 @@ function construct_gla(state, grammar, follow_states)
   -- Each GLA state tracks the set of cumulative RTN paths that are
   -- represented by this state.  To bootstrap the process, we take
   -- each path to and past its first terminal.
-  local gla = fa.GLA:new{start=start_gla_state}
+  local gla = fa.GLA:new()
   local initial_term_transitions = {}
 
   for edge_val, dest_state in state:transitions() do
     local path = Path:new(state, edge_val, dest_state)
     if fa.is_nonterm(edge_val) then
       -- we need to expand all paths until they reach a terminal transition.
-      path = path:enter_rule(grammar.rtns:get(edge_val.name).start, dest_state)
+      path = path:enter_rule(grammar.rtns:get(edge_val.name), dest_state)
       local paths = get_rtn_state_closure({path}, grammar, follow_states)
       for term in each(get_outgoing_term_edges(paths)) do
         for one_term_path in each(get_dest_states(paths, term)) do
-          initial_term_transitions[term] = initial_term_transitions[term] or {}
-          table.insert(initial_term_transitions[term], one_term_path)
+          initial_term_transitions[term] = initial_term_transitions[term] or Set:new()
+          initial_term_transitions[term]:add(one_term_path)
         end
       end
     else
-      initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or {}
-      table.insert(initial_term_transitions[edge_val], path:enter_state(edge_val, dest_state))
+      initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or Set:new()
+      initial_term_transitions[edge_val]:add(path:enter_state(edge_val, dest_state))
     end
   end
 
   local queue = Queue:new()
+  local gla_states = {}
   for term, paths in pairs(initial_term_transitions) do
     local new_gla_state = fa.GLAState:new(paths)
     gla.start:add_transition(term, new_gla_state)
@@ -265,29 +241,29 @@ end
 
   check_for_ambiguity(gla_state): If for any series of terminals
   (which is what this GLA state represents) we have more than one
-  RTN path which has arrived at the final state for the rule we
-  started from, we have found an ambiguity.
+  RTN path that is in the same state, *and* both have the same
+  stack, we have found an ambiguity.
 
-  For example, in the grammar s -> "X" | "X", we will arrive at
-  a GLA state after following the terminal "X" that has two distinct
-  paths that both complete s.  This is ambiguous and should error.
+  Example grammars that can trigger this check:
+
+    s -> "X" | "X";
+
+    s -> a | b;
+    a -> b;
+    b -> "X";
 
 --------------------------------------------------------------------]]--
 
 function check_for_ambiguity(gla_state)
-  completed_paths = {}
-  for path in each(gla_state.rtn_paths) do
-    if path.current_state.final and path.stack:isempty() then
-      table.insert(completed_paths, path)
-    end
-  end
+  local rtn_states = {}
 
-  if #completed_paths > 1 then
-    local err = "Ambiguous grammar for terms " .. serialize(completed_paths[1].terms) ..
-                ", paths follow:\n"
-    for path in each(completed_paths) do
-      err  = err .. path:to_dot()
+  for path in each(gla_state.rtn_paths) do
+    local signature = path:signature()
+    if rtn_states[signature] then
+      local err = "Ambiguous grammar for paths " .. serialize(path.path)
+      error(err)
     end
+    rtn_states[signature] = path
   end
 end
 
@@ -301,12 +277,11 @@ end
 --------------------------------------------------------------------]]--
 
 function get_unique_predicted_alternative(gla_state)
-  local first_path = gla_state.rtn_paths[1]
-  local edge, state = first_path.predict_edge_val, first_path.predict_dest_state
+  local first_path = gla_state.rtn_paths:to_array()[1]
+  local edge, state = first_path.predicted_edge, first_path.predicted_dest_state
 
   for path in each(gla_state.rtn_paths) do
-    if path.predict_edge_val ~= edge or path.predict_dest_state ~= state then
-      --print(string.format("Not unique: %s/%s vs %s/%s", serialize(path.predict_edge_val), tostring(path.predict_dest_state), serialize(edge), tostring(state)))
+    if path.predicted_edge ~= edge or path.predicted_dest_state ~= state then
       return nil
     end
   end
@@ -333,13 +308,6 @@ function get_outgoing_term_edges(rtn_paths)
         edges:add(edge_val)
       end
     end
-
-    -- add once we decide how to represent EOF
-    --
-    -- local state = path.current_state
-    -- if path.stack:isempty() and state.final and state.rtn == grammar.start then
-    --   edges:add(EOF)
-    -- end
   end
 
   return edges
@@ -355,11 +323,11 @@ end
 --------------------------------------------------------------------]]--
 
 function get_dest_states(rtn_paths, edge_val)
-  local dest_states = {}
+  local dest_states = Set:new()
 
   for path in each(rtn_paths) do
     for dest_state in each(path.current_state:transitions_for(edge_val, "ANY")) do
-      table.insert(dest_states, path:enter_state(edge_val, dest_state))
+      dest_states:add(path:enter_state(edge_val, dest_state))
     end
   end
 
@@ -378,8 +346,9 @@ end
 --------------------------------------------------------------------]]--
 
 function get_rtn_state_closure(rtn_paths, grammar, follow_states)
-  local closure_paths = {}
+  local closure_paths = Set:new()
   local queue = Queue:new()
+  local seen_follow_states = Set:new()
 
   for path in each(rtn_paths) do
     queue:enqueue(path)
@@ -387,25 +356,35 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
 
   while not queue:isempty() do
     local path = queue:dequeue()
-    table.insert(closure_paths, path)
+
+    -- Only paths with at least one terminal transition out of them become
+    -- part of the closure.
+    for edge_val, dest_state in path.current_state:transitions() do
+      if not fa.is_nonterm(edge_val) then
+        closure_paths:add(path)
+        break
+      end
+    end
 
     for edge_val, dest_state in path.current_state:transitions() do
       if fa.is_nonterm(edge_val) then
-        local subrule_start = grammar.rtns:get(edge_val.name).start
-        local new_path = path:enter_rule(subrule_start, dest_state)
+        local new_path = path:enter_rule(grammar.rtns:get(edge_val.name), dest_state)
         queue:enqueue(new_path)
       end
     end
 
     if path.current_state.final then
-      local state, new_path = path:return_from_rule()
-      if state then
-        -- There was a stack entry indicating a state to return to.
-        queue:enqueue(new_path)
+      if not path.stack:isempty() then
+        -- The stack has context that determines what state we should return to.
+        queue:enqueue(path:return_from_rule())
       else
-        for state in each(follow_states[path.current_state.rtn.name]) do
-          -- TODO
-          -- queue:enqueue(path:return_from_rule_into_state(state))
+        -- There is no context -- we could be in any state that follows this state
+        -- anywhere in the grammar.
+        for state in each(follow_states[path.current_state.rtn]) do
+          if not seen_follow_states:contains(state) then
+            queue:enqueue(path:return_from_rule(state))
+            seen_follow_states:add(state)
+          end
         end
       end
     end
