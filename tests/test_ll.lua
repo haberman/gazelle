@@ -372,6 +372,21 @@ function TestLL3:test2()
   )
 end
 
+-- This is equivalent to the grammar on page 271 of The Definitive ANTLR Reference.
+function TestLL3:test3()
+  assert_lookahead(
+  [[
+    s -> "X" s "Y" | "X" "X" "Z";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2 -X-> 3;
+    3 -X-> 4(1);
+    3 -Z-> 5(4);
+  ]]
+  )
+end
+
 TestEOF = {}
 function TestEOF:test1()
   assert_lookahead(
@@ -406,23 +421,38 @@ function TestEOF:test2()
   )
 end
 
--- -- Test lookahead that we can only compute correctly if we apply the
--- -- tail-recursion optimization.
--- TestTailRecursion = {}
--- function TestTailRecursion:test1()
---   assert_lookahead(
---   [[
---     s -> a "X" | a "Y";
---     a -> ("Z" a)?;
---   ]],
---   "s", 0,
---   [[
---     1 -Z-> 1;
---     1 -X-> 2(1);
---     1 -Y-> 3(3);
---   ]]
---   )
--- end
+TestLLStar = {}
+function TestLLStar:test1()
+  assert_lookahead(
+  [[
+    s -> a "X" | a "Y";
+    a -> "Z"*;
+  ]],
+  "s", 0,
+  [[
+    1 -Z-> 1;
+    1 -X-> 2(1);
+    1 -Y-> 3(3);
+  ]]
+  )
+end
+
+-- Test lookahead that we can only compute correctly if we apply the
+-- tail-recursion optimization.
+function TestLLStar:test2()
+  assert_lookahead(
+  [[
+    s -> a "X" | a "Y";
+    a -> ("Z" a)?;
+  ]],
+  "s", 0,
+  [[
+    1 -Z-> 1;
+    1 -X-> 2(1);
+    1 -Y-> 3(3);
+  ]]
+  )
+end
 
 TestFollow = {}
 function TestFollow:test1()
@@ -454,5 +484,5 @@ function TestFollow:test2()
   )
 end
 
-LuaUnit:run()
+LuaUnit:run(unpack(arg))
 

@@ -9,15 +9,10 @@
   automata are referred to as GLA (Grammar Lookahead Automata), a term
   coined by Terence Parr in his PhD thesis.
 
-  Though these GLAs are DFAs, it is not currently supported for them
-  to by cyclic.  This allows us to support LL(k) for fixed k, but not
-  LL(*).  Though our algorithm for building the lookahead is very
-  similar to ANTLR's (which supports LL(*)), I'm not comfortable
-  enough yet with my understanding of the edge cases to extend it to
-  LL(*).  I want to be very sure that Gazelle can detect cases where
-  it cannot succeed in building lookahead.  The bad cases I want to
-  avoid are having Gazelle hanging forever, or worse, producing
-  incorrect lookahead.
+  We support calculating LL(*) with the tail recursion capability.  This
+  puts us at the same capability as ANTLR, and actually is more powerful
+  since ANTLR does not implement the tail recursion capability as of
+  this writing.
 
   Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
 
@@ -148,9 +143,12 @@ function Path:enter_state(term, state)
   return new_path
 end
 
-function Path:signature()
+function Path:signature(include_prediction)
   local sig = self.stack:to_array()
   table.insert(sig, self.current_state)
+  if include_prediction then
+    table.insert(sig, get_unique_table_for({self.predicted_edge, self.predicted_dest_state}))
+  end
   sig = get_unique_table_for(sig)
   return sig
 end
@@ -216,6 +214,7 @@ function construct_gla(state, grammar, follow_states)
   for term, paths in pairs(initial_term_transitions) do
     local new_gla_state = fa.GLAState:new(paths)
     gla.start:add_transition(term, new_gla_state)
+    gla_states[paths:hash_key()] = new_gla_state
     queue:enqueue(new_gla_state)
   end
 
@@ -235,9 +234,14 @@ function construct_gla(state, grammar, follow_states)
       for edge_val in each(get_outgoing_term_edges(paths)) do
         local paths = get_dest_states(paths, edge_val)
 
-        local new_gla_state = fa.GLAState:new(paths)
-        gla_state:add_transition(edge_val, new_gla_state)
-        queue:enqueue(new_gla_state)
+        local maybe_new_gla_state
+        if gla_states[paths:hash_key()] then
+          maybe_new_gla_state = gla_states[paths:hash_key()]
+        else
+          maybe_new_gla_state = fa.GLAState:new(paths)
+          queue:enqueue(maybe_new_gla_state)
+        end
+        gla_state:add_transition(edge_val, maybe_new_gla_state)
       end
     end
   end

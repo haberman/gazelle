@@ -157,8 +157,8 @@ Set = {name="Set"}
   function Set:hash_key()
     local arr = self:to_array()
     for i=1,#arr do
-      if arr[i].signature then
-        arr[i] = arr[i]:signature()
+      if type(arr[i]) == "table" and arr[i].signature then
+        arr[i] = tostring(arr[i]:signature(true))
       else
         arr[i] = tostring(arr[i])
       end

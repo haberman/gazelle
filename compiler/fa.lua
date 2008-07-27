@@ -418,7 +418,6 @@ function RTN:get_outgoing_edge_values(states)
 end
 
 function escape(str)
-  print(serialize(str))
   return str:gsub("[\"\\]", "\\%1")
 end
 
