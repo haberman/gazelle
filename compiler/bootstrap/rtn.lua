@@ -218,11 +218,6 @@ function parse_term(chars, attributes)
     chars:consume("(")
     ret = parse_derivations(chars, attributes)
     chars:consume(")")
-  elseif chars:match("e[^%w]") then
-    chars:consume("e")
-    ret = fa.RTN:new{symbol=fa.e, properties={name="e", slotnum=attributes.slotnum}}
-    attributes.slotnum = attributes.slotnum + 1
-    return ret
   else
     local nonterm = parse_nonterm(chars)
     name = name or nonterm.name
