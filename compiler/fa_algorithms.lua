@@ -177,7 +177,9 @@ function hopcroft_minimize(dfa)
     end
   end
 
+  local num_iterations = 0
   while (not work_queue:isempty()) do
+    num_iterations = num_iterations + 1
     local block, symbol, properties = unpack(work_queue:dequeue())
     work_queue_set:remove(tostring(block) .. tostring(symbol) .. tostring(properties))
 
@@ -253,6 +255,9 @@ function hopcroft_minimize(dfa)
     end
   end
 
+  -- print("Num states: " .. tostring(dfa:states():count()) ..
+  --       ", alphabet size: " .. tostring(#alphabet) ..
+  --       ", num iterations: " .. tostring(num_iterations))
   return minimal_dfa
 end
 

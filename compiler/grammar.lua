@@ -134,7 +134,9 @@ function Grammar:generate_intfas()
       if fa.is_nonterm(edge_val) or terms:contains(edge_val) then
         error(string.format("Internal error with state %s, edge %s", serialize(state, 6, "  "), serialize(edge_val)))
       end
-      terms:add(edge_val)
+      if edge_val ~= fa.eof then  -- EOF doesn't need to be lexed in the IntFAs
+        terms:add(edge_val)
+      end
     end
     table.insert(state_term_pairs, {state, terms})
   end

@@ -36,7 +36,7 @@ GLAS
     [GLA_FINAL_STATE, 1-based rtn alt offset (0 is return from final)]
     ...
 
-    [GLA_TRANSITION, terminal_name_int, dest GLA state offset]
+    [GLA_TRANSITION, terminal_name_int+1 (0 is EOF), dest GLA state offset]
     ...
 
 RTNS -- a list of all the RTNs

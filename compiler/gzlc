@@ -46,6 +46,7 @@ input_filename = nil
 output_filename = nil
 verbose = false
 dump = false
+minimize_rtns = true
 argnum = 1
 while argnum <= #arg do
   local a = arg[argnum]
@@ -66,6 +67,8 @@ while argnum <= #arg do
   elseif a == "--version" then
     print(version)
     os.exit(0)
+  elseif a == "--no-minimize-rtns" then
+    minimize_rtns = false
   else
     if input_filename then
       stderr:write("gzlc: only one input file may be specified\n")
@@ -121,8 +124,10 @@ grammar = parse_grammar(CharStream:new(grm_str))
 -- make the RTNs in the grammar determistic and minimal
 print_verbose("Convering RTN NFAs to DFAs...")
 grammar:determinize_rtns()
-print_verbose("Minimizing RTN DFAs...")
-grammar:minimize_rtns()
+if minimize_rtns then
+  print_verbose("Minimizing RTN DFAs...")
+  grammar:minimize_rtns()
+end
 
 -- Generate GLAs by doing lookahead calculations.
 -- This annotates every nontrivial state in the grammar with a GLA.

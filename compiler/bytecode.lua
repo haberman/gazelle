@@ -174,10 +174,14 @@ function emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
       local ordered_rtn = rtns:get(gla.rtn_state.rtn.name)
       local transitions = ordered_rtn.transitions[gla.rtn_state]
       local transition_offset = nil
-      for i=1,#transitions do
-        if transitions[i][1] == state.final[1] and transitions[i][2] == state.final[2] then
-          transition_offset = i
-          break
+      if state.final[1] == 0 and state.final[2] == 0 then
+        transition_offset = 0
+      else
+        for i=1,#transitions do
+          if transitions[i][1] == state.final[1] and transitions[i][2] == state.final[2] then
+            transition_offset = i
+            break
+          end
         end
       end
 
@@ -195,8 +199,12 @@ function emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
   -- emit transitions
   for state in each(states) do
     for edge_val, dest_state in state:transitions() do
+      local edge_num = 0
+      if edge_val ~= fa.eof then
+        edge_num = strings:offset_of(edge_val)
+      end
       bc_file:write_abbreviated_record(abbrevs.bc_gla_transition,
-                                       strings:offset_of(edge_val),
+                                       edge_num,
                                        states:offset_of(dest_state))
     end
   end
