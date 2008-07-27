@@ -180,22 +180,34 @@ function construct_gla(state, grammar, follow_states)
   -- each path to and past its first terminal.
   local gla = fa.GLA:new()
   local initial_term_transitions = {}
+  local noterm_paths = Set:new()  -- paths that did not consume their first terminal
 
   for edge_val, dest_state in state:transitions() do
     local path = Path:new(state, edge_val, dest_state)
     if fa.is_nonterm(edge_val) then
-      -- we need to expand all paths until they reach a terminal transition.
-      path = path:enter_rule(grammar.rtns:get(edge_val.name), dest_state)
-      local paths = get_rtn_state_closure({path}, grammar, follow_states)
-      for term in each(get_outgoing_term_edges(paths)) do
-        for one_term_path in each(get_dest_states(paths, term)) do
-          initial_term_transitions[term] = initial_term_transitions[term] or Set:new()
-          initial_term_transitions[term]:add(one_term_path)
-        end
-      end
+      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state))
     else
       initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or Set:new()
       initial_term_transitions[edge_val]:add(path:enter_state(edge_val, dest_state))
+    end
+  end
+
+  -- For final states we also have to be able to predict when they should return.
+  if state.final then
+    local path = Path:new(state, 0, 0)
+    for follow_state in each(follow_states[state.rtn]) do
+      noterm_paths:add(path:return_from_rule(follow_state))
+    end
+  end
+
+  -- Take each path to and through its first terminal transition
+  for path in each(noterm_paths) do
+    local paths = get_rtn_state_closure({path}, grammar, follow_states)
+    for term in each(get_outgoing_term_edges(paths)) do
+      for one_term_path in each(get_dest_states(paths, term)) do
+        initial_term_transitions[term] = initial_term_transitions[term] or Set:new()
+        initial_term_transitions[term]:add(one_term_path)
+      end
     end
   end
 

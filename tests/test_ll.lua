@@ -22,9 +22,13 @@ function find_state(rule, slotnum)
 end
 
 function get_target_for_slotnum(state, slotnum)
-  for edge_val, dest_state, properties in state:transitions() do
-    if properties.slotnum == slotnum then
-      return {edge_val, dest_state}
+  if slotnum == 0 then
+    return {0, 0}
+  else
+    for edge_val, dest_state, properties in state:transitions() do
+      if properties.slotnum == slotnum then
+        return {edge_val, dest_state}
+      end
     end
   end
   error(string.format("Slotnum %d not found for state %s", slotnum, serialize(state, 4, "  ")))
@@ -436,20 +440,19 @@ function TestFollow:test1()
   )
 end
 
--- Won't work until lookahead can instruct an RTN to return.
--- function TestFollow:test1()
---   assert_lookahead(
---   [[
---     s -> a "X";
---     a -> "Y"?;
---   ]],
---   "a", 0,
---   [[
---     1 -Y-> 2(1);
---     1 -X-> 3(0);
---   ]]
---   )
--- end
+function TestFollow:test2()
+  assert_lookahead(
+  [[
+    s -> a "X";
+    a -> "Y"?;
+  ]],
+  "a", 0,
+  [[
+    1 -Y-> 2(1);
+    1 -X-> 3(0);
+  ]]
+  )
+end
 
 LuaUnit:run()
 
