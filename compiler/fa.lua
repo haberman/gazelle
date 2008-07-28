@@ -354,13 +354,14 @@ function GLA:to_dot(indent, suffix)
     extra_label = ""
     if state.final then
       peripheries = 2
-      for edge_val, dest_state, properties in self.rtn_state:transitions() do
-        if edge_val == state.final[1] and dest_state == state.final[2] then
-          extra_label = tostring(properties.slotnum)
+      if state.final[1] == 0 then   -- the special value that means "return"
+        extra_label = "Return"
+      else
+        for edge_val, dest_state, properties in self.rtn_state:transitions() do
+          if edge_val == state.final[1] and dest_state == state.final[2] then
+            extra_label = tostring(properties.slotnum)
+          end
         end
-      end
-      if extra_label == "" then
-        extra_label = serialize(state.final, nil, "  ")
       end
     end
     if self.start == state then extra_label = "Start" end
