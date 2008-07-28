@@ -92,9 +92,15 @@ function dump_to_html(src_file, grammar, dir)
       else
         color = "#b22222"
       end
-      index:write(string.format("<li>%0.1f%% LL(%d) with GLA (%d/%d states): \n" ..
+      local lookahead_str
+      if lookahead == math.huge then
+        lookahead_str = "*"
+      else
+        lookahead_str = tostring(lookahead)
+      end
+      index:write(string.format("<li>%0.1f%% LL(%s) with GLA (%d/%d states): \n" ..
                                 "indicated with <span style='background-color: %s'>color</span> below</li>\n",
-                  with_gla_breakdown[lookahead] / total * 100, lookahead,
+                  with_gla_breakdown[lookahead] / total * 100, lookahead_str,
                   with_gla_breakdown[lookahead], total, color))
     end
   end
