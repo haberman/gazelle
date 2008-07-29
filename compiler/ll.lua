@@ -123,6 +123,7 @@ Path = {name="Path"}
 function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   local obj = newobject(self)
   obj.path = {}
+  obj.rtn_state = rtn_state
   obj.current_state = rtn_state
   obj.prediction = get_unique_table_for({predicted_edge, predicted_dest_state})
   obj.seen_sigs = Set:new()
@@ -153,11 +154,11 @@ end
 
 function Path:return_from_rule(return_to_state)
   local new_path = self:dup()
-  local return_to_name
   if return_to_state then
-    return_to_name = return_to_state.rtn.name
+    table.insert(new_path.path, {"return", return_to_state.rtn.name})
+  else
+    table.insert(new_path.path, {"return"})
   end
-  table.insert(new_path.path, {"return", return_to_name})
 
   -- return_to_state must be specified iff the stack is empty.
   if new_path.stack:isempty() then
@@ -212,6 +213,7 @@ function Path:dup()
   local new_path = newobject(Path)
   new_path.path = table_shallow_copy(self.path)
   new_path.current_state = self.current_state
+  new_path.rtn_state = self.rtn_state
   new_path.prediction = self.prediction
   new_path.seen_sigs = self.seen_sigs
   new_path.is_cyclic = self.is_cyclic
@@ -510,7 +512,7 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
       else
         -- There is no context -- we could be in any state that follows this state
         -- anywhere in the grammar.
-        for state in each(follow_states[path.current_state.rtn]) do
+        for state in each(follow_states[path.rtn_state.rtn]) do
           if not seen_follow_states:contains(state) then
             queue:enqueue(path:return_from_rule(state))
             seen_follow_states:add(state)
