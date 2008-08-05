@@ -102,7 +102,7 @@ function get_follow_states(grammar)
   -- itself has no transitions out of it.
   local eof_state = fa.RTNState:new()
   eof_state:add_transition(fa.eof, fa.RTNState:new())
-  eof_state.rtn = {}  -- Just need a unique value.
+  eof_state.rtn = {name="eof"}  -- Just need a unique value.
   follow_states[eof_state.rtn] = Set:new()  -- empty, nothing ever follows it.
   follow_states[grammar.rtns:get(grammar.start)]:add(eof_state)
 
@@ -123,7 +123,8 @@ Path = {name="Path"}
 function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   local obj = newobject(self)
   obj.path = {}
-  obj.rtn_state = rtn_state
+  -- state used to calculate what states can follow this path when there is no stack context
+  obj.follow_base = rtn_state
   obj.current_state = rtn_state
   obj.prediction = get_unique_table_for({predicted_edge, predicted_dest_state})
   obj.seen_sigs = Set:new()
@@ -164,6 +165,7 @@ function Path:return_from_rule(return_to_state)
   if new_path.stack:isempty() then
     if not return_to_state then error("Must specify return_to_state!") end
     new_path.current_state = return_to_state
+    new_path.follow_base = new_path.current_state
   else
     if return_to_state then error("Must not specify return_to_state!") end
     new_path.current_state = new_path.stack:pop()
@@ -213,7 +215,7 @@ function Path:dup()
   local new_path = newobject(Path)
   new_path.path = table_shallow_copy(self.path)
   new_path.current_state = self.current_state
-  new_path.rtn_state = self.rtn_state
+  new_path.follow_base = self.follow_base
   new_path.prediction = self.prediction
   new_path.seen_sigs = self.seen_sigs
   new_path.is_cyclic = self.is_cyclic
@@ -512,7 +514,7 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
       else
         -- There is no context -- we could be in any state that follows this state
         -- anywhere in the grammar.
-        for state in each(follow_states[path.rtn_state.rtn]) do
+        for state in each(follow_states[path.follow_base.rtn]) do
           if not seen_follow_states:contains(state) then
             queue:enqueue(path:return_from_rule(state))
             seen_follow_states:add(state)

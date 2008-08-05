@@ -421,6 +421,37 @@ function TestEOF:test2()
   )
 end
 
+function TestEOF:test3()
+  assert_lookahead(
+  [[
+    s -> "A" a;
+    a -> "A"?;
+  ]],
+  "a", 0,
+  [[
+    1 -A-> 2(1);
+    1 -EOF-> 3(0);
+  ]]
+  )
+end
+
+-- This is really a "follow" test
+function TestEOF:test4()
+  assert_lookahead(
+  [[
+    s -> "X" a "Y";
+    a -> b;
+    b -> "X"?;
+  ]],
+  "b", 0,
+  [[
+    1 -X-> 2(1);
+    1 -Y-> 3(0);
+  ]]
+  )
+end
+
+
 TestLLStar = {}
 function TestLLStar:test1()
   assert_lookahead(
