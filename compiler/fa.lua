@@ -385,6 +385,17 @@ GLAState.name = "GLAState"
 function GLAState:new(paths)
   local obj = FAState:new()
   obj.rtn_paths = paths
+
+  if paths then
+    for path in each(paths) do
+      if obj.lookahead_k and obj.lookahead_k ~= path.lookahead_k then
+        error("Internal error: expected all paths for the GLA state to have the same length")
+      end
+      obj.lookahead_k = path.lookahead_k
+    end
+  else
+    obj.lookahead_k = 0
+  end
   return obj
 end
 

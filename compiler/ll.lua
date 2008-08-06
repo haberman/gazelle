@@ -23,18 +23,18 @@ require "fa"
 
 --[[--------------------------------------------------------------------
 
-  compute_lookahead(grammar): Calculates LL(k) lookahead and returns it
+  compute_lookahead(grammar): Calculates LL(*) lookahead and returns it
   by attaching a .gla member to every nontrivial RTN state in the grammar.
 
 --------------------------------------------------------------------]]--
 
-function compute_lookahead(grammar)
+function compute_lookahead(grammar, k)
   local gla_needing_rtn_states = grammar:get_rtn_states_needing_gla()
   local follow_states = get_follow_states(grammar)
   check_for_left_recursion(grammar)
 
   for state in each(gla_needing_rtn_states) do
-    state.gla = construct_gla(state, grammar, follow_states)
+    state.gla = construct_gla(state, grammar, follow_states, k)
     state.gla.rtn_state = state
   end
 end
@@ -123,6 +123,8 @@ Path = {name="Path"}
 function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   local obj = newobject(self)
   obj.path = {}
+  obj.lookahead_k = 0
+
   -- state used to calculate what states can follow this path when there is no stack context
   obj.follow_base = rtn_state
   obj.current_state = rtn_state
@@ -178,6 +180,7 @@ end
 function Path:enter_state(term, state)
   local new_path = self:dup()
   new_path.current_state = state
+  new_path.lookahead_k = new_path.lookahead_k + 1
   table.insert(new_path.path, {"term", term})
   new_path:check_for_cycles()
   return new_path
@@ -215,6 +218,7 @@ function Path:dup()
   local new_path = newobject(Path)
   new_path.path = table_shallow_copy(self.path)
   new_path.current_state = self.current_state
+  new_path.lookahead_k = self.lookahead_k
   new_path.follow_base = self.follow_base
   new_path.prediction = self.prediction
   new_path.seen_sigs = self.seen_sigs
@@ -232,7 +236,7 @@ end
 
 --------------------------------------------------------------------]]--
 
-function construct_gla(state, grammar, follow_states)
+function construct_gla(state, grammar, follow_states, k)
   -- Each GLA state tracks the set of cumulative RTN paths that are
   -- represented by this state.  To bootstrap the process, we take
   -- each path to and past its first terminal.
@@ -286,7 +290,13 @@ function construct_gla(state, grammar, follow_states)
   while not queue:isempty() do
     local gla_state = queue:dequeue()
 
-    check_for_non_llstar(gla_state, prediction_languages)
+    if k then
+      if gla_state.lookahead_k > k then
+        error("Grammar is not LL(k) for user-specified k=" .. k)
+      end
+    else
+      check_for_termination_heuristic(gla_state, prediction_languages)
+    end
 
     local alt = get_unique_predicted_alternative(gla_state)
     if alt then
@@ -355,10 +365,17 @@ end
 
 --[[--------------------------------------------------------------------
 
-  check_for_non_llstar(gla_state, nonregular_alt): Check to see if
-  more than one alternative's lookahead language has become nonregular.
+  check_for_termination_heuristic(gla_state, prediction_languages): Check
+  to see if the grammar fails a heuristic that detects most non-LL(*)
+  grammars.  It will have some false positives (deciding that a grammar
+  is not LL(*) when in fact it is), but I am convinced that most real-world
+  grammars will not fall into this case.  For false positives, the user
+  can always opt to specify an explicit 'k' value for LL(k), which will
+  prevent Gazelle from using this heuristic and always extend the search
+  at least 'k' terminals.
 
-  We can generate correct lookahead in two cases:
+  The heursitic is based on the fact that we *know* we can generate
+  correct lookahead if the grammar falls into one of two cases:
 
   - all alternatives have regular lookahead languages.  In this case
     we build a GLA which is guaranteed to be regular because it is the
@@ -379,7 +396,7 @@ end
 
 --------------------------------------------------------------------]]--
 
-function check_for_non_llstar(gla_state, prediction_languages)
+function check_for_termination_heuristic(gla_state, prediction_languages)
   for path in each(gla_state.rtn_paths) do
     if not path:is_regular() then
       prediction_languages[path.prediction] = "nonregular"
@@ -395,7 +412,7 @@ function check_for_non_llstar(gla_state, prediction_languages)
       for prediction2, language2 in pairs(prediction_languages) do
         if prediction ~= prediction2 and language2 ~= "fixed" then
           -- TODO: more info about which languages they were.
-          error("Language is not LL(*): one lookahead language was nonregular, others were not all fixed")
+          error("Language is probably not LL(k) or LL(*): one lookahead language was nonregular, others were not all fixed")
         end
       end
     end

@@ -30,6 +30,10 @@ Usage: gzlc [options] input-file
   -d,                dump detailed output about the grammar to
                      html/index.html.
 
+  -k <depth>         Maximum LL(k) to consider (by default, uses a
+                     heuristic that attempts to determine if the
+                     grammar is LL(k) for *any* k).
+
   -o <file>          output filename.  Default is input filename
                      with extension replaced with .gzc
 
@@ -46,6 +50,7 @@ input_filename = nil
 output_filename = nil
 verbose = false
 dump = false
+k = nil
 minimize_rtns = true
 argnum = 1
 while argnum <= #arg do
@@ -55,6 +60,13 @@ while argnum <= #arg do
     os.exit(1)
   elseif a == "-d" then
     dump = true
+  elseif a == "-k" then
+    argnum = argnum + 1
+    k = tonumber(arg[argnum])
+    if not k then
+      stderr:write("gzlc: non-numeric argument to the -k option\n")
+      os.exit(1)
+    end
   elseif a == "-o" then
     argnum = argnum + 1
     output_filename = arg[argnum]
@@ -132,7 +144,7 @@ end
 -- Generate GLAs by doing lookahead calculations.
 -- This annotates every nontrivial state in the grammar with a GLA.
 print_verbose("Doing LL(k) lookahead calculations...")
-compute_lookahead(grammar)
+compute_lookahead(grammar, k)
 
 -- we now have everything figured out at the RTN and GLA levels.  Now we just
 -- need to figure out how many IntFAs to generate, which terminals each one

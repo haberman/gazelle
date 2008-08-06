@@ -73,7 +73,7 @@ function parse_gla(str, rtn_state)
   return gla
 end
 
-function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str)
+function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str, k)
   grammar = parse_grammar(CharStream:new(grammar_str))
   grammar:determinize_rtns()
   grammar:minimize_rtns()
@@ -82,7 +82,7 @@ function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str)
   state = find_state(rule, slotnum)
   expected_gla = parse_gla(expected_gla_str, state)
 
-  compute_lookahead(grammar)
+  compute_lookahead(grammar, k)
 
   if not fa_isequal(expected_gla, state.gla) then
     local bad = io.open("bad.dot", "w")
@@ -561,6 +561,32 @@ function TestDetectNonLLStar:test_nonregular()
     s -> e "%" | e "!";
     e -> "(" e ")" | "ID";
   ]]
+  )
+end
+
+function TestDetectNonLLStar:test_fails_heuristic_but_is_ll()
+  assert_nonregular(
+  [[
+    s -> "X"* "Y" "Y" "Z"| "X" c;
+    c -> "Y" c "Y" | "Q";
+  ]]
+  )
+  assert_lookahead(
+  [[
+    s -> "X"* "Y" "Y" "Z"| "X" c;
+    c -> "Y" c "Y" | "Q";
+  ]],
+  "s", 0,
+  [[
+    1 -Y-> 2(2);
+    1 -X-> 3 -Y-> 4 -Y-> 5 -Y-> 6(5);
+    3 -Q-> 6;
+    4 -Q-> 6;
+    5 -Q-> 6;
+    5 -Z-> 7(1);
+    3 -X-> 7;
+  ]],
+  4
   )
 end
 
