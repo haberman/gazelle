@@ -69,29 +69,12 @@ function get_unique_table_for(val)
   return cache[str]
 end
 
--- traverses a graph of some sort -- caller provides a function that gives
--- children of the current node.
-function breadth_first_traversal(obj, children_func)
-  local seen = Set:new{obj}
-  local queue = Queue:new(obj)
-  while not queue:isempty() do
-    local node = queue:dequeue()
-    children = children_func(node) or {}
-    for child_node in each(children) do
-      if seen:contains(child_node) == false then
-        seen:add(child_node)
-        queue:enqueue(child_node)
-      end
-    end
-  end
-  return seen
-end
-
 function depth_first_traversal(obj, children_func)
   local seen = Set:new{obj}
   local stack = Stack:new()
   stack:push(obj)
   depth_first_traversal_helper(obj, children_func, stack, seen)
+  return seen
 end
 
 function depth_first_traversal_helper(obj, children_func, stack, seen)

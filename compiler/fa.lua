@@ -168,7 +168,7 @@ function FA:new(init)
 end
 
 function FA:states()
-  return breadth_first_traversal(self.start, function (s) return s:child_states() end)
+  return depth_first_traversal(self.start, function (s) return s:child_states() end)
 end
 
 function FA:dup()

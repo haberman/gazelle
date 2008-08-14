@@ -21,7 +21,7 @@
 --------------------------------------------------------------------]]--
 
 function epsilon_closure(state)
-  return breadth_first_traversal(state, function(s) return s:transitions_for(fa.e, "ANY") end)
+  return depth_first_traversal(state, function(s) return s:transitions_for(fa.e, "ANY") end)
 end
 
 -- we as input an array of NFAs, one for each token we want to match simultaneously,
