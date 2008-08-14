@@ -34,6 +34,12 @@ Usage: gzlc [options] input-file
                      heuristic that attempts to determine if the
                      grammar is LL(k) for *any* k).
 
+  --no-minimize-rtns
+                     skip the minimization step for RTNs.  This results
+                     in larger RTNs, but may be necessary if minimization
+                     is taking too long (this should only occur in
+                     artificially-complicated grammars).
+
   -o <file>          output filename.  Default is input filename
                      with extension replaced with .gzc
 
@@ -81,9 +87,12 @@ while argnum <= #arg do
     os.exit(0)
   elseif a == "--no-minimize-rtns" then
     minimize_rtns = false
+  elseif a:match("^-") then
+    io.stderr:write(string.format("gzlc: unrecognized option '%s'\n", a))
+    os.exit(1)
   else
     if input_filename then
-      stderr:write("gzlc: only one input file may be specified\n")
+      io.stderr:write("gzlc: only one input file may be specified\n")
       os.exit(1)
     end
     input_filename = arg[argnum]
