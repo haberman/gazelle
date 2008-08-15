@@ -199,40 +199,6 @@ function TestEpsilon:test4()
   )
 end
 
-function TestEpsilon:test5()
-  assert_lookahead(
-  [[
-    s -> a "Q" | "X";
-    a -> b? "Y"?;
-    b -> "Z";
-  ]],
-  "s", 0,
-  [[
-    1 -Y-> 2(1);
-    1 -Z-> 2;
-    1 -Q-> 2;
-    1 -X-> 3(3);
-  ]]
-  )
-end
-
---[=[
-  TODO: add this test when GLAs that tell RTNs to return are supported.
-function TestEpsilon:test5()
-  assert_lookahead(
-  [[
-    s -> a "X";
-    a -> "Y"* "Z";
-  ]],
-  "a", 1,
-  [[
-    1 -Y-> 2(1);
-    1 -X-> 3(0);
-  ]]
-  )
-end
-]=]
-
 TestMultipleNonterms = {}
 function TestMultipleNonterms:test1()
   assert_lookahead(
@@ -266,6 +232,20 @@ function TestMultipleNonterms:test22()
     1 -Y-> 3(2);
     1 -Z-> 4(3);
     1 -Q-> 5(4);
+  ]]
+  )
+end
+
+TestLL1 = {}
+function TestLL1:test1()
+  assert_lookahead(
+  [[
+    s -> "X" s?;
+  ]],
+  "s", 2,
+  [[
+    1 -X-> 2(2);
+    1 -EOF-> 3(0);
   ]]
   )
 end
@@ -331,6 +311,50 @@ function TestLL2:test3()
   )
 end
 
+function TestLL2:test3()
+  assert_lookahead(
+  [[
+    s -> "X" s | "X" "Y";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2 -X-> 3(1);
+    2 -Y-> 4(3);
+  ]]
+  )
+end
+
+function TestLL2:test4()
+  assert_lookahead(
+  [[
+    a -> b "X";
+    b -> c*;
+    c -> "X";
+  ]],
+  "b", 0,
+  [[
+    1 -X-> 2 -X-> 3(1);
+    2 -EOF-> 4(0);
+  ]]
+  )
+end
+
+-- Bizarre!  This test is failing, which indicates a real bug.  It's not
+-- a bug in lookahead calculation, the RTN is actually being miscompiled
+-- and saying that the initial state of s is a final state.
+function TestLL2:test5()
+  assert_lookahead(
+  [[
+    s -> "X"* | "X" "Y";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2 -X-> 3(1);
+    2 -Y-> 4(2);
+  ]]
+  )
+end
+
 TestLL3 = {}
 function TestLL3:test1()
   assert_lookahead(
@@ -350,28 +374,6 @@ function TestLL3:test1()
   )
 end
 
-function TestLL3:test2()
-  assert_lookahead(
-  [[
-    s -> a "X" | a "Y";
-    a -> ("P" | "Q")? ("P" | "Q")?;
-  ]],
-  "s", 0,
-  [[
-    1 -X-> 2(1);
-    1 -Y-> 3(3);
-    1 -P-> 4 -P-> 5;
-    4 -Q-> 5;
-    1 -Q-> 4 -Q-> 5;
-    4 -P-> 5;
-    4 -X-> 2;
-    4 -Y-> 3;
-    5 -X-> 2;
-    5 -Y-> 3;
-  ]]
-  )
-end
-
 -- This is equivalent to the grammar on page 271 of The Definitive ANTLR Reference.
 function TestLL3:test3()
   assert_lookahead(
@@ -382,6 +384,20 @@ function TestLL3:test3()
   [[
     1 -X-> 2 -X-> 3;
     3 -X-> 4(1);
+    3 -Z-> 5(4);
+  ]]
+  )
+end
+
+function TestLL3:test3()
+  assert_lookahead(
+  [[
+    s -> a a "Y" | a a "Z";
+    a -> "X";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2 -X-> 3 -Y-> 4(1);
     3 -Z-> 5(4);
   ]]
   )
@@ -537,6 +553,10 @@ function assert_nonregular(grammar_str)
   assert_fails_with_error(grammar_str, "one lookahead language was nonregular, others were not all fixed")
 end
 
+function assert_ambiguous(grammar_str)
+  assert_fails_with_error(grammar_str, "Ambiguous grammar")
+end
+
 TestDetectNonLLStar = {}
 function TestDetectNonLLStar:test_left_recursive()
   assert_left_recursive(
@@ -551,6 +571,14 @@ function TestDetectNonLLStar:test_left_recursive2()
   [[
     s -> a | "X";
     a -> s | "Y";
+  ]]
+  )
+end
+
+function TestDetectNonLLStar:test_left_recursive3()
+  assert_left_recursive(
+  [[
+    s -> (s "X")?;
   ]]
   )
 end
@@ -587,6 +615,109 @@ function TestDetectNonLLStar:test_fails_heuristic_but_is_ll()
     3 -X-> 7;
   ]],
   4
+  )
+end
+
+TestAmbiguity = {}
+function TestAmbiguity:test1()
+  assert_ambiguous(
+  [[
+    a -> b | c;
+    b -> c;
+    c -> "X";
+  ]]
+  )
+end
+
+function TestAmbiguity:test2()
+  assert_ambiguous(
+  [[
+    a -> b c "Y";
+    b -> "X" ?;
+    c -> "X" ?;
+  ]]
+  )
+end
+
+function TestAmbiguity:test3()
+  assert_ambiguous(
+  [[
+    a -> (b | c) "Y";
+    b -> "X";
+    c -> "X";
+  ]]
+  )
+end
+
+function TestAmbiguity:test4()
+  assert_ambiguous(
+  [[
+    s -> a "X"?;
+    a -> "X"?;
+  ]]
+  )
+end
+
+function TestAmbiguity:test5()
+  assert_ambiguous(
+  [[
+    s -> a "X"*;
+    a -> "X"*;
+  ]]
+  )
+end
+
+-- BUG!  this test currently hangs Gazelle.  Not sure what the best (most general)
+-- method is for detecting it.
+-- function TestAmbiguity:test5()
+--   assert_ambiguous(
+--   [[
+--     s -> a*;
+--     a -> "X"?;
+--   ]]
+--   )
+-- end
+
+function TestAmbiguity:test6()
+  assert_ambiguous(
+  [[
+    s -> a? a?;
+    a -> "X";
+  ]]
+  )
+end
+
+function TestAmbiguity:test7()
+  assert_ambiguous(
+  [[
+    s -> "X" | "X";
+  ]]
+  )
+end
+
+function TestAmbiguity:test8()
+  assert_ambiguous(
+  [[
+    s -> "X"? | "X";
+  ]]
+  )
+end
+
+function TestAmbiguity:test9()
+  assert_ambiguous(
+  [[
+    s -> "X"? | "X"?;
+  ]]
+  )
+end
+
+function TestAmbiguity:test10()
+  assert_ambiguous(
+  [[
+    s -> a b;
+    a -> "X"*;
+    b -> "X"*;
+  ]]
   )
 end
 

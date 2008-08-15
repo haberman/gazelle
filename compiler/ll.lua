@@ -128,7 +128,7 @@ function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   -- state used to calculate what states can follow this path when there is no stack context
   obj.follow_base = rtn_state
   obj.current_state = rtn_state
-  obj.prediction = get_unique_table_for({predicted_edge, predicted_dest_state})
+  obj.prediction = {predicted_edge, predicted_dest_state}
   obj.seen_sigs = Set:new()
   obj.is_cyclic = false
   obj.stack = Stack:new()
@@ -298,7 +298,9 @@ function construct_gla(state, grammar, follow_states, k)
       check_for_termination_heuristic(gla_state, prediction_languages)
     end
 
-    local alt = get_unique_predicted_alternative(gla_state)
+    check_for_ambiguity(gla_state)
+
+    local alt = get_unique_predicted_alternative(gla_state.rtn_paths)
     if alt then
       -- this DFA path has uniquely predicted an alternative -- set the
       -- state final and stop exploring this path
@@ -307,7 +309,6 @@ function construct_gla(state, grammar, follow_states, k)
       -- this path is still ambiguous about what rtn transition to take --
       -- explore it further
       local paths = get_rtn_state_closure(gla_state.rtn_paths, grammar, follow_states)
-      check_for_ambiguity(gla_state)
 
       for edge_val in each(get_outgoing_term_edges(paths)) do
         local paths = get_dest_states(paths, edge_val)
@@ -353,12 +354,15 @@ function check_for_ambiguity(gla_state)
 
   for path in each(gla_state.rtn_paths) do
     local signature = path:signature()
-    if rtn_states[signature] then
-      local err = "Ambiguous grammar for paths " .. serialize(path.path) ..
-                  " and " .. serialize(rtn_states[signature].path)
+    rtn_states[signature] = rtn_states[signature] or Set:new()
+    rtn_states[signature]:add(path)
+    if not get_unique_predicted_alternative(rtn_states[signature]) then
+      err = "Ambiguous grammar for paths: "
+      for path in each(rtn_states[signature]) do
+        err = err .. serialize(path.path) .. " AND "
+      end
       error(err)
     end
-    rtn_states[signature] = path
   end
 end
 
@@ -412,7 +416,7 @@ function check_for_termination_heuristic(gla_state, prediction_languages)
       for prediction2, language2 in pairs(prediction_languages) do
         if prediction ~= prediction2 and language2 ~= "fixed" then
           -- TODO: more info about which languages they were.
-          error("Language is probably not LL(k) or LL(*): one lookahead language was nonregular, others were not all fixed")
+          error("Language is probably not LL(k) or LL(*): when calculating lookahead for a state in " .. gla_state.rtn_paths:to_array()[1].prediction[2].rtn.name .. ", one lookahead language was nonregular, others were not all fixed")
         end
       end
     end
@@ -428,10 +432,10 @@ end
 
 --------------------------------------------------------------------]]--
 
-function get_unique_predicted_alternative(gla_state)
-  local first_prediction = gla_state.rtn_paths:to_array()[1].prediction
+function get_unique_predicted_alternative(rtn_paths)
+  local first_prediction = rtn_paths:to_array()[1].prediction
 
-  for path in each(gla_state.rtn_paths) do
+  for path in each(rtn_paths) do
     if path.prediction ~= first_prediction then
       return nil
     end
@@ -499,10 +503,11 @@ end
 function get_rtn_state_closure(rtn_paths, grammar, follow_states)
   local closure_paths = Set:new()
   local queue = Queue:new()
-  local seen_follow_states = Set:new()
+  local seen_follow_states = {}
 
   for path in each(rtn_paths) do
     queue:enqueue(path)
+    seen_follow_states[path.prediction] = Set:new()
   end
 
   while not queue:isempty() do
@@ -532,9 +537,10 @@ function get_rtn_state_closure(rtn_paths, grammar, follow_states)
         -- There is no context -- we could be in any state that follows this state
         -- anywhere in the grammar.
         for state in each(follow_states[path.follow_base.rtn]) do
-          if not seen_follow_states:contains(state) then
+          if not seen_follow_states[path.prediction]:contains(state) then
             queue:enqueue(path:return_from_rule(state))
-            seen_follow_states:add(state)
+            seen_follow_states[path.prediction]:add(state)
+          else
           end
         end
       end
