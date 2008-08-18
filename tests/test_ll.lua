@@ -339,17 +339,15 @@ function TestLL2:test4()
   )
 end
 
--- Bizarre!  This test is failing, which indicates a real bug.  It's not
--- a bug in lookahead calculation, the RTN is actually being miscompiled
--- and saying that the initial state of s is a final state.
 function TestLL2:test5()
   assert_lookahead(
   [[
-    s -> "X"* | "X" "Y";
+    s -> "X"+ | "X" "Y";
   ]],
   "s", 0,
   [[
     1 -X-> 2 -X-> 3(1);
+    2 -EOF-> 3;
     2 -Y-> 4(2);
   ]]
   )
@@ -540,8 +538,8 @@ function assert_fails_with_error(grammar_str, error_string)
   if success then
     error("Failed to fail!")
   elseif not message:find(error_string) then
-    error("Failed with wrong message!  Message was supposed to start with "
-          .. error_string .. ", instead it was: " .. message)
+    error("Failed with wrong message!  Message was supposed to contain  "
+          .. error_string .. ", but it was: " .. message)
   end
 end
 
@@ -555,6 +553,14 @@ end
 
 function assert_ambiguous(grammar_str)
   assert_fails_with_error(grammar_str, "Ambiguous grammar")
+end
+
+function assert_no_nonrecursive_alt(grammar_str)
+  assert_fails_with_error(grammar_str, "no non-recursive alternative")
+end
+
+function assert_not_ll(grammar_str)
+  assert_fails_with_error(grammar_str, "It is not Strong%-LL or full%-LL")
 end
 
 TestDetectNonLLStar = {}
@@ -579,6 +585,16 @@ function TestDetectNonLLStar:test_left_recursive3()
   assert_left_recursive(
   [[
     s -> (s "X")?;
+  ]]
+  )
+end
+
+function TestDetectNonLLStar:test_left_recursive4()
+  assert_left_recursive(
+  [[
+    s -> a b;
+    a -> "X"?;
+    b -> s;
   ]]
   )
 end
@@ -615,6 +631,24 @@ function TestDetectNonLLStar:test_fails_heuristic_but_is_ll()
     3 -X-> 7;
   ]],
   4
+  )
+end
+
+function TestDetectNonLLStar:test_not_full_ll_1()
+  assert_not_ll(
+  [[
+    s -> a a;
+    a -> b;
+    b -> "X"*;
+  ]]
+  )
+end
+
+function TestDetectNonLLStar:test_not_full_ll_1()
+  assert_not_ll(
+  [[
+    s -> ("X" s "X")?;
+  ]]
   )
 end
 
@@ -667,17 +701,6 @@ function TestAmbiguity:test5()
   )
 end
 
--- BUG!  this test currently hangs Gazelle.  Not sure what the best (most general)
--- method is for detecting it.
--- function TestAmbiguity:test5()
---   assert_ambiguous(
---   [[
---     s -> a*;
---     a -> "X"?;
---   ]]
---   )
--- end
-
 function TestAmbiguity:test6()
   assert_ambiguous(
   [[
@@ -717,6 +740,59 @@ function TestAmbiguity:test10()
     s -> a b;
     a -> "X"*;
     b -> "X"*;
+  ]]
+  )
+end
+
+-- These two tests are currently failing -- Gazelle is calling them
+-- left-recursive instead of ambiguous.  I have to figure out how to
+-- make the left-recursion detection correctly flag cases like:
+--
+--  s -> ("X"? s)?;
+--
+-- ...but not these.
+function TestAmbiguity:test11()
+  assert_ambiguous(
+  [[
+    s -> a*;
+    a -> "X"?;
+  ]]
+  )
+end
+
+function TestAmbiguity:test12()
+  assert_ambiguous(
+  [[
+    s -> a*;
+    a -> "X"*;
+  ]]
+  )
+end
+
+-- These tests are currently failing because I have not implemented this
+-- check yet!
+TestNoNonRecursiveAlt = {}
+function TestNoNonRecursiveAlt:test1()
+  assert_no_nonrecursive_alt(
+  [[
+    a -> a;
+  ]]
+  )
+end
+
+function TestNoNonRecursiveAlt:test2()
+  assert_no_nonrecursive_alt(
+  [[
+    a -> "X" a;
+  ]]
+  )
+end
+
+function TestNoNonRecursiveAlt:test3()
+  assert_no_nonrecursive_alt(
+  [[
+    a -> "X" b;
+    b -> a;
   ]]
   )
 end

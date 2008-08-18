@@ -31,7 +31,6 @@ require "fa"
 function compute_lookahead(grammar, k)
   local gla_needing_rtn_states = grammar:get_rtn_states_needing_gla()
   local follow_states = get_follow_states(grammar)
-  check_for_left_recursion(grammar)
 
   for state in each(gla_needing_rtn_states) do
     state.gla = construct_gla(state, grammar, follow_states, k)
@@ -39,35 +38,6 @@ function compute_lookahead(grammar, k)
   end
 end
 
-
---[[--------------------------------------------------------------------
-
-  check_for_left_recursion(grammar): Checks all RTNs in the grammar to
-  see if they are left recursive.  Errors if so.
-
---------------------------------------------------------------------]]--
-
-function check_for_left_recursion(grammar)
-  for name, rtn in each(grammar.rtns) do
-    local states = Set:new()
-
-    function children(state, stack)
-      local children = {}
-      for edge_val, dest_state in state:transitions() do
-        if fa.is_nonterm(edge_val) then
-          if edge_val.name == name then
-            error("Grammar is not LL(*): it is left-recursive!")
-          end
-          table.insert(children, grammar.rtns:get(edge_val.name).start)
-        end
-      end
-      return children
-    end
-
-    depth_first_traversal(rtn.start, children)
-
-  end
-end
 
 --[[--------------------------------------------------------------------
 
@@ -122,23 +92,31 @@ end
 Path = {name="Path"}
 function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   local obj = newobject(self)
-  obj.path = {}
+  obj.history = {}
   obj.lookahead_k = 0
-
-  -- state used to calculate what states can follow this path when there is no stack context
-  obj.follow_base = rtn_state
-  obj.current_state = rtn_state
   obj.prediction = {predicted_edge, predicted_dest_state}
+  obj.stack = Stack:new()
+
+  obj.original_state = rtn_state
+  obj.current_state = rtn_state
+  obj.presumed_stack = {}
   obj.seen_sigs = Set:new()
   obj.is_cyclic = false
-  obj.stack = Stack:new()
+  obj.is_epsilon_cyclic = false
+  obj.epsilon_seen_sigs = Set:new()
+  obj.epsilon_seen_follow_states = Set:new()
+  obj.left_recursive_seen_states = Set:new()
   return obj
 end
 
 function Path:enter_rule(rtn, return_to_state)
   local new_path = self:dup()
   new_path.current_state = rtn.start
-  table.insert(new_path.path, {"enter", rtn.name})
+  table.insert(new_path.history, {"enter", rtn.name})
+  if new_path.left_recursive_seen_states:contains(rtn.name) then
+    new_path.is_left_recursive = true
+  end
+  new_path.left_recursive_seen_states:add(rtn.name)
 
   -- Key point: if return_to_state is final and has no outgoing transitions,
   -- then we need not push anything on the stack.  This is the equivalent of a
@@ -158,16 +136,17 @@ end
 function Path:return_from_rule(return_to_state)
   local new_path = self:dup()
   if return_to_state then
-    table.insert(new_path.path, {"return", return_to_state.rtn.name})
+    new_path.epsilon_seen_follow_states:add(return_to_state)
+    table.insert(new_path.presumed_stack, return_to_state)
+    table.insert(new_path.history, {"return", return_to_state.rtn.name})
   else
-    table.insert(new_path.path, {"return"})
+    table.insert(new_path.history, {"return"})
   end
 
   -- return_to_state must be specified iff the stack is empty.
   if new_path.stack:isempty() then
     if not return_to_state then error("Must specify return_to_state!") end
     new_path.current_state = return_to_state
-    new_path.follow_base = new_path.current_state
   else
     if return_to_state then error("Must not specify return_to_state!") end
     new_path.current_state = new_path.stack:pop()
@@ -181,7 +160,13 @@ function Path:enter_state(term, state)
   local new_path = self:dup()
   new_path.current_state = state
   new_path.lookahead_k = new_path.lookahead_k + 1
-  table.insert(new_path.path, {"term", term})
+  table.insert(new_path.history, {"term", term})
+
+  -- Clear everything concerned with epsilon transitions.
+  new_path.epsilon_seen_sigs = Set:new()
+  new_path.epsilon_seen_follow_states = Set:new()
+  new_path.left_recursive_seen_states = Set:new()
+
   new_path:check_for_cycles()
   return new_path
 end
@@ -197,6 +182,17 @@ function Path:signature(include_prediction)
 end
 
 function Path:check_for_cycles()
+  if self.seen_sigs:contains(self:signature()) then
+    self.is_cyclic = true
+  end
+  if self.epsilon_seen_sigs:contains(self:signature()) then
+    self.is_epsilon_cyclic = true
+  end
+  self.seen_sigs:add(self:signature())
+  self.epsilon_seen_sigs:add(self:signature())
+end
+
+function Path:check_for_epsilon_cycles()
   if self.seen_sigs:contains(self:signature()) then
     self.is_cyclic = true
   end
@@ -216,14 +212,21 @@ end
 
 function Path:dup()
   local new_path = newobject(Path)
-  new_path.path = table_shallow_copy(self.path)
-  new_path.current_state = self.current_state
+  new_path.history = table_shallow_copy(self.history)
   new_path.lookahead_k = self.lookahead_k
-  new_path.follow_base = self.follow_base
   new_path.prediction = self.prediction
-  new_path.seen_sigs = self.seen_sigs
-  new_path.is_cyclic = self.is_cyclic
   new_path.stack = self.stack:dup()
+
+  new_path.original_state = self.original_state
+  new_path.current_state = self.current_state
+  new_path.presumed_stack = table_shallow_copy(self.presumed_stack)
+  new_path.seen_sigs = self.seen_sigs:dup()
+  new_path.is_cyclic = self.is_cyclic
+  new_path.is_epsilon_cyclic = self.is_epsilon_cyclic
+  new_path.epsilon_seen_sigs = self.epsilon_seen_sigs:dup()
+  new_path.epsilon_seen_follow_states = self.epsilon_seen_follow_states:dup()
+  new_path.left_recursive_seen_states = self.left_recursive_seen_states:dup()
+
   return new_path
 end
 
@@ -350,18 +353,51 @@ end
 --------------------------------------------------------------------]]--
 
 function check_for_ambiguity(gla_state)
-  local rtn_states = {}
+  local signatures = {}
 
   for path in each(gla_state.rtn_paths) do
     local signature = path:signature()
-    rtn_states[signature] = rtn_states[signature] or Set:new()
-    rtn_states[signature]:add(path)
-    if not get_unique_predicted_alternative(rtn_states[signature]) then
-      err = "Ambiguous grammar for paths: "
-      for path in each(rtn_states[signature]) do
-        err = err .. serialize(path.path) .. " AND "
+    signatures[signature] = signatures[signature] or Set:new()
+    signatures[signature]:add(path)
+  end
+
+  for signature, paths in pairs(signatures) do
+    if not get_unique_predicted_alternative(paths) then
+      -- We know at this point that we cannot support this grammar.
+      -- However we do a little bit more detective work to understand
+      -- why this is, as best as we can, to give a good message to the user.
+
+      local common_k = math.huge
+      local presumed_stacks = {}
+      for path in each(paths) do
+        local stack = get_unique_table_for(path.presumed_stack)
+        presumed_stacks[stack] = presumed_stacks[stack] or Set:new()
+        presumed_stacks[stack]:add(path)
+
+        common_k = math.min(common_k, #path.presumed_stack)
       end
-      error(err)
+
+      for _, same_stack_paths in pairs(presumed_stacks) do
+        if same_stack_paths:count() > 1 then
+          err = "Ambiguous grammar for paths: "
+          for path in each(same_stack_paths) do
+            err = err .. serialize(path.history) .. " AND "
+          end
+          error(err)
+        end
+      end
+
+      local common_stacks = {}
+      for path in each(paths) do
+        local stack = get_unique_table_for(clamp_table(path.presumed_stack, common_k))
+        if common_stacks[stack] then
+          error("Gazelle cannot handle this grammar.  It is not Strong-LL or full-LL")
+        end
+        common_stacks[stack] = true
+      end
+
+      -- TODO: find a grammar that exercises this case.
+      error("This grammar is full-LL but not strong-LL")
     end
   end
 end
@@ -500,54 +536,57 @@ end
 
 --------------------------------------------------------------------]]--
 
-function get_rtn_state_closure(rtn_paths, grammar, follow_states)
-  local closure_paths = Set:new()
-  local queue = Queue:new()
-  local seen_follow_states = {}
-
-  for path in each(rtn_paths) do
-    queue:enqueue(path)
-    seen_follow_states[path.prediction] = Set:new()
-  end
-
-  while not queue:isempty() do
-    local path = queue:dequeue()
-
-    -- Only paths with at least one terminal transition out of them become
-    -- part of the closure.
-    for edge_val, dest_state in path.current_state:transitions() do
-      if not fa.is_nonterm(edge_val) then
-        closure_paths:add(path)
-        break
-      end
-    end
-
+-- This method is a helper method for the depth-first search of
+-- get_rtn_state_closure.
+function get_rtn_state_closure_for_path(path, grammar, follow_states)
+  function child_epsilon_paths(path)
+    local child_paths = {}
     for edge_val, dest_state in path.current_state:transitions() do
       if fa.is_nonterm(edge_val) then
-        local new_path = path:enter_rule(grammar.rtns:get(edge_val.name), dest_state)
-        queue:enqueue(new_path)
+        local dest_rtn = grammar.rtns:get(edge_val.name)
+        local new_path = path:enter_rule(dest_rtn, dest_state)
+        if new_path.is_left_recursive then
+          -- TODO: mention what rules were left-recursive
+          error("Grammar is not LL(*): it is left-recursive!")
+        elseif new_path.is_epsilon_cyclic then
+          error("Ambiguous grammar -- it has cycles in its epsilon transitions!")
+        end
+        table.insert(child_paths, new_path)
       end
     end
 
     if path.current_state.final then
       if not path.stack:isempty() then
         -- The stack has context that determines what state we should return to.
-        queue:enqueue(path:return_from_rule())
+        table.insert(child_paths, path:return_from_rule())
       else
         -- There is no context -- we could be in any state that follows this state
         -- anywhere in the grammar.
-        for state in each(follow_states[path.follow_base.rtn]) do
-          if not seen_follow_states[path.prediction]:contains(state) then
-            queue:enqueue(path:return_from_rule(state))
-            seen_follow_states[path.prediction]:add(state)
-          else
+        local follow_base
+        if #path.presumed_stack > 0 then
+          follow_base = path.presumed_stack[#path.presumed_stack]
+        else
+          follow_base = path.original_state
+        end
+        for state in each(follow_states[follow_base.rtn]) do
+          if not path.epsilon_seen_follow_states:contains(state) then
+            table.insert(child_paths, path:return_from_rule(state))
           end
         end
       end
     end
+    return child_paths
   end
 
-  return closure_paths
+  return depth_first_traversal(path, child_epsilon_paths)
+end
+
+function get_rtn_state_closure(paths, grammar, follow_states)
+  local closure = Set:new()
+  for path in each(paths) do
+    closure:add_collection(get_rtn_state_closure_for_path(path, grammar, follow_states))
+  end
+  return closure
 end
 
 -- vim:et:sts=2:sw=2

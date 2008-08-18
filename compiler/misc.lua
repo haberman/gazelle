@@ -153,4 +153,21 @@ function str_join(list, separator)
   return str
 end
 
+function table_contains(table, element)
+  for i, table_element in pairs(table) do
+    if element == table_element then
+      return true
+    end
+  end
+  return false
+end
+
+function clamp_table(tab, len)
+  local my_table = table_shallow_copy(tab)
+  while #my_table > len do
+    table.remove(my_table)
+  end
+  return my_table
+end
+
 -- vim:et:sts=2:sw=2
