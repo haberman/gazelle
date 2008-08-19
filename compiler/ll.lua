@@ -31,10 +31,99 @@ require "fa"
 function compute_lookahead(grammar, k)
   local gla_needing_rtn_states = grammar:get_rtn_states_needing_gla()
   local follow_states = get_follow_states(grammar)
+  check_for_nonrecursive_alt(grammar)
 
   for state in each(gla_needing_rtn_states) do
     state.gla = construct_gla(state, grammar, follow_states, k)
     state.gla.rtn_state = state
+  end
+end
+
+
+--[[--------------------------------------------------------------------
+
+  check_for_nonrecursive_alt(grammar): Checks every rule in the grammar
+  to verify that it has at least one path through its RTN that can return
+  and not recurse infinitely.  For example, grammars that fail this
+  check are:
+
+  a -> a;
+
+  a -> "X" a;  -- note, this grammar is not left-recursive!
+
+  a -> "X" b;
+  b -> "X" a;
+
+  Every rule must satisfy this check to be valid, and we must check it
+  separately from the rest of lookhead generation, because we will not
+  otherwise even attempt to generate lookahead for languages such as:
+
+  a -> a;
+
+  ...and notice that they are complete nonsense as we should.
+
+--------------------------------------------------------------------]]--
+
+function check_for_nonrecursive_alt(grammar)
+  local always_recurses = {}
+
+  --[[------------------------------------------------------------------
+  As a first step, do a depth-first traversal on each rule to
+  answer the question:
+
+    "For rule X, what states must I *always* recurse into,
+     regardless of what path I take through the rule?"
+
+   We store the answer to that question for each rule in always_recurses.
+  ------------------------------------------------------------------]]--
+  for name, rtn in each(grammar.rtns) do
+    local all_paths_see
+    local found_nonrecursive_alt = false
+    function child_states(state_tuple)
+      local state, seen_nonterms, seen_states = unpack(state_tuple)
+      if state.final then
+        if all_paths_see then
+          all_paths_see = all_paths_see:intersection(seen_nonterms)
+        else
+          all_paths_see = seen_nonterms:dup()
+        end
+        return nil
+      else
+        local dest_states = Set:new()
+        local new_seen_states = seen_states:dup()
+        new_seen_states:add(state)
+        for edge_val, dest_state in state:transitions() do
+          if new_seen_states:contains(dest_state) then
+            -- skip
+          elseif not fa.is_nonterm(edge_val) then
+            dest_states:add({dest_state, seen_nonterms, new_seen_states})
+          else
+            local new_seen = seen_nonterms:dup()
+            new_seen:add(edge_val.name)
+            dest_states:add({dest_state, new_seen, new_seen_states})
+          end
+        end
+        return dest_states
+      end
+    end
+    depth_first_traversal({rtn.start, Set:new(), Set:new()}, child_states)
+    always_recurses[name] = all_paths_see
+  end
+
+  -- Now, look for cycles in the graph of what rules *always* call into
+  -- each other.  Cycles indicate that there is a cycle of rules that
+  -- can never be returned from.  This indicates a bug in the grammar.
+  for name, all_paths_see in pairs(always_recurses) do
+    function child_recurses(rtn_name, stack)
+      local children = {}
+      for child_rtn_name in each(always_recurses[rtn_name]) do
+        if stack:contains(child_rtn_name) then
+          error(string.format("Invalid grammar: rule %s had no non-recursive alternative", name))
+        end
+      end
+      return always_recurses[rtn_name]
+    end
+    depth_first_traversal(name, child_recurses)
   end
 end
 

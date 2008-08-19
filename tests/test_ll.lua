@@ -556,7 +556,7 @@ function assert_ambiguous(grammar_str)
 end
 
 function assert_no_nonrecursive_alt(grammar_str)
-  assert_fails_with_error(grammar_str, "no non-recursive alternative")
+  assert_fails_with_error(grammar_str, "no non%-recursive alternative")
 end
 
 function assert_not_ll(grammar_str)
@@ -592,7 +592,7 @@ end
 function TestDetectNonLLStar:test_left_recursive4()
   assert_left_recursive(
   [[
-    s -> a b;
+    s -> a b?;
     a -> "X"?;
     b -> s;
   ]]
@@ -793,6 +793,25 @@ function TestNoNonRecursiveAlt:test3()
   [[
     a -> "X" b;
     b -> a;
+  ]]
+  )
+end
+
+function TestNoNonRecursiveAlt:test4()
+  assert_no_nonrecursive_alt(
+  [[
+    s -> a b;
+    a -> "X"?;
+    b -> s;
+  ]]
+  )
+end
+
+function TestNoNonRecursiveAlt:test4()
+  assert_no_nonrecursive_alt(
+  [[
+    a -> "X" b;
+    b -> "X" a;
   ]]
   )
 end

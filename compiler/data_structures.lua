@@ -122,6 +122,16 @@ Set = {name="Set"}
     self.elements[x] = nil
   end
 
+  function Set:intersection(x)
+    local new_set = Set:new()
+    for element in self:each() do
+      if x:contains(element) then
+        new_set:add(element)
+      end
+    end
+    return new_set
+  end
+
   function Set:add_collection(arr)
     for elem in each(arr) do
       self:add(elem)
