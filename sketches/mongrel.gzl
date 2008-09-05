@@ -1,46 +1,61 @@
+/*********************************************************************
+
+  This is a port of the Mongrel/Thin parser for HTTP, which was
+  originally written in Ragel.  Mongrel and Thin use it for handling
+  incoming HTTP requests, and its main design goals are speed and
+  security.
+
+  Here is the original parser, from which this port is based:
+  http://github.com/macournoyer/thin/tree/master/ext/thin_parser/common.rl
+
+*********************************************************************/
+
+@import std;
+@start Request;
 
 // line endings
 CRLF: "\r\n";
 
 // character types
-CTL:        cntrl | [ \x7f ];
-safe:       [ $ _ . - ];
+CTL:        [ #{std.cntrl} \x7f ];
+safe:       [ $ - _ . ];
 extra:      [ ! * ' ( ) , ];
 reserved:   [ ; / ? : @ & = + ];
 sorta_safe: [ " < > ];
-unsafe:     [ #{CTL} \s # % #{sorta_safe} ];
-national:   [^#{alpha} #{digit} #{reserved} #{extra} #{safe} #{unsafe} ];
-unreserved: [ #{alpha} #{digit} #{safe} #{extra} #{national} ];
+unsafe:     [ ${CTL} \s # % ${sorta_safe} ];
+national:   [^${std.alpha} ${std.digit} ${reserved} ${extra} ${safe} ${unsafe} ];
+unreserved: [ ${std.alpha} ${std.digit} ${safe} ${extra} ${national} ];
 
 escape:     / % [0-9A-Fa-f]{2} /;
-uchar:      / #{unreserved} | #{escape} /;
-pchar:      / #{uchar}      | [ : @ & = + ] /;
+uchar:      / ${unreserved} | ${escape} | ${sorta_safe} /;
+pchar:      / ${uchar}      | [ : @ & = + ] /;
 tspecials:  [ ( ) < > @ , ; : \\ " / [ \] ? = { } \s \t ];
 
 // elements
-token:      [^ #{CTL} #{tspecials} ];
+token:      [ ${std.ascii} ^ ${CTL} ${tspecials} ];
 
 // URI schemes and absolute paths
-scheme:       / [ #{alpha} #{digit} + - . ]* /;
-absolute_uri: / (#{scheme}) ":" ([#{uchar} | #{reserved}]*) /;
+scheme:       / [ ${alpha} ${digit} + - . ]* /;
+absolute_uri: / ( ${scheme} ) ":" ([${uchar} | ${reserved}]*) /;
 
-path   -> pchar+ ( "/" /#{pchar}*/ )*;
-query:    /[ #{uchar} | #{reserved} ]*/;
-param:    /[ #{pchar}  / ]*/;
-params -> param (";" param )*;
+path ->     /${pchar}+/ ( "/" /${pchar}*/ )*;
+query:      /[ ${uchar} | ${reserved} ]*/;
+param:      /[ ${pchar}  / ]*/;
+params ->   param *[;]
 rel_path -> path? (";" params)? ("?" query)?;
 absolute_path -> "/"+ rel_path;
 
 Request_URI -> "*" | absolute_uri | absolute_path;
-Fragment: / [#{uchar} #{reserved}]* /;
-Method:   / [#{upper} #{digit} #{safe}]{1,20} /;
+Fragment: / [${uchar} ${reserved}]* /;
+Method:   / [${upper} ${digit} ${safe}]{1,20} /;
 
-http_number: / #{digit}+ \. #{digit}+/;
+http_number: / ${digit}+ \. ${digit}+/;
 HTTP_Version -> "HTTP/" http_number;
 Request_Line -> Method " " Request_URI ("#" Fragment)? " " HTTP_Version CRLF;
 
-field_name: / (#{token} -- ":")+ /;
+field_name: / (${token} -- ":")+ /;
 
 message_header -> field_name ":" " "* /[^\r]*/ CRLF;
 
 Request -> Request_Line message_header* CRLF;
+
