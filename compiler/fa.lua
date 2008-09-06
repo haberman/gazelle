@@ -101,11 +101,25 @@ function FAState:transitions()
   end
 end
 
+function FAState:clear_transitions()
+  self._transitions = {}
+end
+
 function FAState:transitions_for(val, prop)
-  local targets = Set:new()
+  local targets
+  if prop == "ANY" then
+    targets = {}
+  else
+    targets = Set:new()
+  end
+
   for edge_val, target_state, properties in self:transitions() do
-    if edge_val == val and ((prop == "ANY") or (prop == properties)) then
-      targets:add(target_state)
+    if edge_val == val and ((prop == "ANY") or (prop == "ALL") or (prop == properties)) then
+      if prop == "ANY" then
+        table.insert(targets, {target_state, properties})
+      else
+        targets:add(target_state)
+      end
     end
   end
   return targets
@@ -113,16 +127,16 @@ end
 
 function FAState:dest_state_for(val)
   local states = self:transitions_for(val, "ANY")
-  if states:count() > 1 then
+  if #states > 1 then
     error(">1 transition found")
-  elseif states:count() == 0 then
+  elseif #states == 0 then
     return nil
   else
-    local dest
-    for dest_state in each(states) do
-      dest = dest_state
+    local dest_state
+    for dest_state_properties in each(states) do
+      dest_state, properties = unpack(dest_state_properties)
     end
-    return dest
+    return dest_state
   end
 end
 
@@ -142,10 +156,6 @@ function FA:new(init)
     obj.start = init.start or obj:new_state()
     obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
     if init.symbol then
-      if init.properties ~= nil then
-        init.properties = ShallowTable:new(init.properties)
-      end
-
       obj.start:add_transition(init.symbol, obj.final, init.properties)
     elseif init.string then
       local int_set = IntSet:new()

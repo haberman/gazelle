@@ -32,6 +32,7 @@ function compute_lookahead(grammar, k)
   local gla_needing_rtn_states = grammar:get_rtn_states_needing_gla()
   local follow_states = get_follow_states(grammar)
   check_for_nonrecursive_alt(grammar)
+  check_for_left_recursion(grammar)
 
   for state in each(gla_needing_rtn_states) do
     state.gla = construct_gla(state, grammar, follow_states, k)
@@ -79,7 +80,7 @@ function check_for_nonrecursive_alt(grammar)
   for name, rtn in each(grammar.rtns) do
     local all_paths_see
     local found_nonrecursive_alt = false
-    function child_states(state_tuple)
+    local child_states = function(state_tuple)
       local state, seen_nonterms, seen_states = unpack(state_tuple)
       if state.final then
         if all_paths_see then
@@ -114,7 +115,7 @@ function check_for_nonrecursive_alt(grammar)
   -- each other.  Cycles indicate that there is a cycle of rules that
   -- can never be returned from.  This indicates a bug in the grammar.
   for name, all_paths_see in pairs(always_recurses) do
-    function child_recurses(rtn_name, stack)
+    local child_recurses = function(rtn_name, stack)
       local children = {}
       for child_rtn_name in each(always_recurses[rtn_name]) do
         if stack:contains(child_rtn_name) then
@@ -124,6 +125,36 @@ function check_for_nonrecursive_alt(grammar)
       return always_recurses[rtn_name]
     end
     depth_first_traversal(name, child_recurses)
+  end
+end
+
+
+--[[--------------------------------------------------------------------
+
+  check_for_left_recursion(grammar): Checks all RTNs in the grammar to
+  see if they are left recursive.  Errors if so.
+
+--------------------------------------------------------------------]]--
+
+function check_for_left_recursion(grammar)
+  for name, rtn in each(grammar.rtns) do
+    local states = Set:new()
+
+    local children = function(state, stack)
+      local children = {}
+      for edge_val, dest_state in state:transitions() do
+        if fa.is_nonterm(edge_val) then
+          if edge_val.name == name then
+            error("Grammar is not LL(*): it is left-recursive!")
+          end
+          table.insert(children, grammar.rtns:get(edge_val.name).start)
+        end
+      end
+      return children
+    end
+
+    depth_first_traversal(rtn.start, children)
+
   end
 end
 
@@ -194,18 +225,13 @@ function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   obj.is_epsilon_cyclic = false
   obj.epsilon_seen_sigs = Set:new()
   obj.epsilon_seen_follow_states = Set:new()
-  obj.left_recursive_seen_states = Set:new()
   return obj
 end
 
-function Path:enter_rule(rtn, return_to_state)
+function Path:enter_rule(rtn, return_to_state, priorities)
   local new_path = self:dup()
   new_path.current_state = rtn.start
-  table.insert(new_path.history, {"enter", rtn.name})
-  if new_path.left_recursive_seen_states:contains(rtn.name) then
-    new_path.is_left_recursive = true
-  end
-  new_path.left_recursive_seen_states:add(rtn.name)
+  table.insert(new_path.history, {"enter", rtn.name, new_path.current_state, priorities})
 
   -- Key point: if return_to_state is final and has no outgoing transitions,
   -- then we need not push anything on the stack.  This is the equivalent of a
@@ -222,39 +248,33 @@ function Path:enter_rule(rtn, return_to_state)
   return new_path
 end
 
-function Path:return_from_rule(return_to_state)
+function Path:return_from_rule(return_to_state, priorities)
   local new_path = self:dup()
   if return_to_state then
+    if not new_path.stack:isempty() then error("Must not specify return_to_state!") end
+    new_path.current_state = return_to_state
     new_path.epsilon_seen_follow_states:add(return_to_state)
     table.insert(new_path.presumed_stack, return_to_state)
-    table.insert(new_path.history, {"return", return_to_state.rtn.name})
+    table.insert(new_path.history, {"return", return_to_state.rtn.name, new_path.current_state, priorities})
   else
-    table.insert(new_path.history, {"return"})
-  end
-
-  -- return_to_state must be specified iff the stack is empty.
-  if new_path.stack:isempty() then
-    if not return_to_state then error("Must specify return_to_state!") end
-    new_path.current_state = return_to_state
-  else
-    if return_to_state then error("Must not specify return_to_state!") end
+    if new_path.stack:isempty() then error("Must specify return_to_state!") end
     new_path.current_state = new_path.stack:pop()
+    table.insert(new_path.history, {"return", nil, new_path.current_state, priorities})
   end
 
   new_path:check_for_cycles()
   return new_path
 end
 
-function Path:enter_state(term, state)
+function Path:enter_state(term, state, priorities)
   local new_path = self:dup()
   new_path.current_state = state
   new_path.lookahead_k = new_path.lookahead_k + 1
-  table.insert(new_path.history, {"term", term})
+  table.insert(new_path.history, {"term", term, state, priorities})
 
   -- Clear everything concerned with epsilon transitions.
   new_path.epsilon_seen_sigs = Set:new()
   new_path.epsilon_seen_follow_states = Set:new()
-  new_path.left_recursive_seen_states = Set:new()
 
   new_path:check_for_cycles()
   return new_path
@@ -314,7 +334,6 @@ function Path:dup()
   new_path.is_epsilon_cyclic = self.is_epsilon_cyclic
   new_path.epsilon_seen_sigs = self.epsilon_seen_sigs:dup()
   new_path.epsilon_seen_follow_states = self.epsilon_seen_follow_states:dup()
-  new_path.left_recursive_seen_states = self.left_recursive_seen_states:dup()
 
   return new_path
 end
@@ -337,16 +356,13 @@ function construct_gla(state, grammar, follow_states, k)
   local noterm_paths = Set:new()  -- paths that did not consume their first terminal
   local prediction_languages = {}
 
-  for edge_val, dest_state in state:transitions() do
+  for edge_val, dest_state, properties in state:transitions() do
     local path = Path:new(state, edge_val, dest_state)
-    -- Initialize all prediction languages to "fixed" (which is what they are
-    -- until demonstrated otherwise).
-    prediction_languages[path.prediction] = "fixed"
     if fa.is_nonterm(edge_val) then
-      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state))
+      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state, properties.priorities))
     else
       initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or Set:new()
-      initial_term_transitions[edge_val]:add(path:enter_state(edge_val, dest_state))
+      initial_term_transitions[edge_val]:add(path:enter_state(edge_val, dest_state, properties.priorities))
     end
   end
 
@@ -354,7 +370,7 @@ function construct_gla(state, grammar, follow_states, k)
   if state.final then
     local path = Path:new(state, 0, 0)
     for follow_state in each(follow_states[state.rtn]) do
-      noterm_paths:add(path:return_from_rule(follow_state))
+      noterm_paths:add(path:return_from_rule(follow_state, state.final.priorities))
     end
   end
 
@@ -374,6 +390,11 @@ function construct_gla(state, grammar, follow_states, k)
 
   for term, paths in pairs(initial_term_transitions) do
     local new_gla_state = fa.GLAState:new(paths)
+    for path in each(paths) do
+      -- Initialize all prediction languages to "fixed" (which is what they are
+      -- until demonstrated otherwise).
+      prediction_languages[path.prediction] = "fixed"
+    end
     gla.start:add_transition(term, new_gla_state)
     gla_states[paths:hash_key()] = new_gla_state
     queue:enqueue(new_gla_state)
@@ -418,11 +439,130 @@ function construct_gla(state, grammar, follow_states, k)
   end
 
   gla = hopcroft_minimize(gla)
+  remove_excess_states(gla)
   gla.longest_path = fa_longest_path(gla)
+
+  -- Check for predictions that have no final state indicating them.  These
+  -- indicate alternatives that will never be taken.
+  local untaken_predictions = Set:new()
+  for prediction, _ in pairs(prediction_languages) do
+    untaken_predictions:add(prediction)
+  end
+  for state in each(gla:states()) do
+    if state.final then
+      untaken_predictions:remove(state.final)
+    end
+  end
+
+  if untaken_predictions:count() > 0 then
+    -- In the grammar s -> "X" / "X"; the second prioritized choice will never be taken.
+    -- This is an error in the grammar, because it means the second option is redundant.
+    error("Error in grammar: transition in " .. state.rtn.name .. " will never be taken.")
+  end
 
   return gla
 end
 
+--[[--------------------------------------------------------------------
+
+  remove_excess_states(gla): Given a minimized GLA, find states that
+  can be removed because a previous state already has enough
+  information to predict an alternative.  This can happen when
+  a user has used ambiguity resolution, which removed a path that
+  would have otherwise been ambiguous.  The path has already been
+  traced all the way to the ambiguous state, but with the lower-priority
+  path removed, the decision might be possible to make in fewer
+  transitions.
+
+--------------------------------------------------------------------]]--
+
+function remove_excess_states(gla)
+  for state in each(gla:states()) do
+    local seen_alts = Set:new()
+    local child_states = function(state)
+      if state.final then
+        seen_alts:add(state.final)
+      end
+      local dest_states = {}
+      for edge_val, dest_state in state:transitions() do
+        table.insert(dest_states, dest_state)
+      end
+      return dest_states
+    end
+    depth_first_traversal(state, child_states)
+    if seen_alts:count() == 0 then
+      error("Unexpected -- please report this stack trace and the input grammar!")
+    elseif seen_alts:count() == 1 then
+      state.final = seen_alts:sample()
+      state:clear_transitions()
+    end
+  end
+end
+
+--[[--------------------------------------------------------------------
+
+  get_lower_priority_paths(paths): Given a set of paths that have
+  already been discovered to be ambiguous, for any that diverged
+  at a point where the user specified prioritized choice, return the
+  path(s) that took the lower-priority choice.
+
+  This is a heinous n^2 algorithm right now -- I'm pretty sure it
+  could be made cheaper than that.
+
+--------------------------------------------------------------------]]--
+
+function get_lower_priority_paths(paths)
+  local presumed_stacks = {}
+  for path in each(paths) do
+    table.insert(presumed_stacks, path.presumed_stack)
+  end
+  local paths_to_remove = Set:new()
+  for path1 in each(paths) do
+    for path2 in each(paths) do
+      if path1 ~= path2 then
+        -- find the state where the paths diverge
+        local i = 0
+        while true do
+          i = i + 1
+          if path1.history[i] == nil or path2.history[i] == nil then break end
+          local _, _, dest_state1, priorities1 = unpack(path1.history[i])
+          local _, _, dest_state2, priorities2 = unpack(path2.history[i])
+          if priorities1 ~= priorities2 then
+            if priorities1 and priorities2 then
+              for priority_class, priority1 in pairs(priorities1) do
+                local priority2 = priorities2[priority_class]
+                if priority2 then
+                  if priority1 > priority2 then
+                    paths_to_remove:add(path2)
+                  elseif priority2 > priority1 then
+                    paths_to_remove:add(path1)
+                  end
+                end
+              end
+            end
+            break
+          end
+        end
+      end
+    end
+  end
+
+  for path in each(paths_to_remove) do
+    paths:remove(path)
+  end
+
+  local common_prefix_len = get_common_prefix_len(presumed_stacks)
+
+  if paths:count() == 1 then
+    -- If the only remaining path(s) have presumed stacks, then we can't
+    -- build a proper GLA for this RTN state.
+    if #paths:sample().presumed_stack > common_prefix_len then
+      error("Gazelle cannot support this resolution of the ambiguity in rule " .. paths:sample().original_state.rtn.name)
+    end
+  end
+
+  return paths_to_remove
+end
 
 --[[--------------------------------------------------------------------
 
@@ -441,6 +581,7 @@ end
 
 --------------------------------------------------------------------]]--
 
+
 function check_for_ambiguity(gla_state)
   local signatures = {}
 
@@ -451,6 +592,12 @@ function check_for_ambiguity(gla_state)
   end
 
   for signature, paths in pairs(signatures) do
+    if paths:count() > 1 then
+      local lower_priority_paths = get_lower_priority_paths(paths, gla_state)
+      for path in each(lower_priority_paths) do
+        gla_state.rtn_paths:remove(path)
+      end
+    end
     if not get_unique_predicted_alternative(paths) then
       -- We know at this point that we cannot support this grammar.
       -- However we do a little bit more detective work to understand
@@ -468,7 +615,7 @@ function check_for_ambiguity(gla_state)
 
       for _, same_stack_paths in pairs(presumed_stacks) do
         if same_stack_paths:count() > 1 then
-          err = "Ambiguous grammar for paths: "
+          local err = "Ambiguous grammar for paths: "
           for path in each(same_stack_paths) do
             err = err .. serialize(path.history) .. " AND "
           end
@@ -480,7 +627,7 @@ function check_for_ambiguity(gla_state)
       for path in each(paths) do
         local stack = get_unique_table_for(clamp_table(path.presumed_stack, common_k))
         if common_stacks[stack] then
-          error("Gazelle cannot handle this grammar.  It is not Strong-LL or full-LL")
+          error("Gazelle cannot handle this grammar.  It is not Strong-LL or full-LL (and may be ambiguous, but we don't know).")
         end
         common_stacks[stack] = true
       end
@@ -526,7 +673,15 @@ end
 --------------------------------------------------------------------]]--
 
 function check_for_termination_heuristic(gla_state, prediction_languages)
-  for path in each(gla_state.rtn_paths) do
+  -- First remove all lower-priority paths in cases where ambiguity resolution
+  -- was used, so that we don't trigger the heuristic for paths that are being
+  -- explicitly prioritized.
+  local non_prioritized_paths = gla_state.rtn_paths:dup()
+  for path in each(get_lower_priority_paths(non_prioritized_paths)) do
+    non_prioritized_paths:remove(path)
+  end
+
+  for path in each(non_prioritized_paths) do
     if not path:is_regular() then
       prediction_languages[path.prediction] = "nonregular"
     end
@@ -606,8 +761,15 @@ function get_dest_states(rtn_paths, edge_val)
   local dest_states = Set:new()
 
   for path in each(rtn_paths) do
-    for dest_state in each(path.current_state:transitions_for(edge_val, "ANY")) do
-      dest_states:add(path:enter_state(edge_val, dest_state))
+    for dest_state_properties in each(path.current_state:transitions_for(edge_val, "ANY")) do
+      local dest_state, properties = unpack(dest_state_properties)
+      local priorities
+      if properties then
+        priorities = properties.priorities
+      else
+        priorities = {}
+      end
+      dest_states:add(path:enter_state(edge_val, dest_state, priorities))
     end
   end
 
@@ -628,16 +790,16 @@ end
 -- This method is a helper method for the depth-first search of
 -- get_rtn_state_closure.
 function get_rtn_state_closure_for_path(path, grammar, follow_states)
-  function child_epsilon_paths(path)
+  local child_epsilon_paths = function(path)
     local child_paths = {}
-    for edge_val, dest_state in path.current_state:transitions() do
+    if path.current_state.transitions == nil then
+      print(serialize(path.current_state, 4, "  "))
+    end
+    for edge_val, dest_state, properties in path.current_state:transitions() do
       if fa.is_nonterm(edge_val) then
         local dest_rtn = grammar.rtns:get(edge_val.name)
-        local new_path = path:enter_rule(dest_rtn, dest_state)
-        if new_path.is_left_recursive then
-          -- TODO: mention what rules were left-recursive
-          error("Grammar is not LL(*): it is left-recursive!")
-        elseif new_path.is_epsilon_cyclic then
+        local new_path = path:enter_rule(dest_rtn, dest_state, properties.priorities)
+        if new_path.is_epsilon_cyclic then
           error("Ambiguous grammar -- it has cycles in its epsilon transitions!")
         end
         table.insert(child_paths, new_path)
@@ -647,7 +809,7 @@ function get_rtn_state_closure_for_path(path, grammar, follow_states)
     if path.current_state.final then
       if not path.stack:isempty() then
         -- The stack has context that determines what state we should return to.
-        table.insert(child_paths, path:return_from_rule())
+        table.insert(child_paths, path:return_from_rule(nil, path.current_state.final.priorities))
       else
         -- There is no context -- we could be in any state that follows this state
         -- anywhere in the grammar.
@@ -659,7 +821,7 @@ function get_rtn_state_closure_for_path(path, grammar, follow_states)
         end
         for state in each(follow_states[follow_base.rtn]) do
           if not path.epsilon_seen_follow_states:contains(state) then
-            table.insert(child_paths, path:return_from_rule(state))
+            table.insert(child_paths, path:return_from_rule(state, path.current_state.final.priorities))
           end
         end
       end

@@ -91,6 +91,64 @@ function copy_attributes(rtn, new_rtn)
   end
 end
 
+function Grammar:assign_priorities()
+  -- For each non-epsilon transition in the grammar, we want to find the epsilon
+  -- closure (within the rule -- no following nonterminal or final transitions)
+  -- of all reverse transitions and assign any priorities the epsilon
+  -- transitions have to the non-epsilon transition.
+
+  -- Begin by building a list of reverse epsilon transitions.  For each state
+  -- that has at least one epsilon transition going into it, we build a 2-tuple
+  -- of {set of states that are the source of an epsilon transitions,
+  --     map of priority_class -> priority in that class}
+  for name, rtn in each(self.rtns) do
+    local reverse_epsilon_transitions = {}
+    for state in each(rtn:states()) do
+      for edge_val, dest_state, properties in state:transitions() do
+        if edge_val == fa.e then
+          reverse_epsilon_transitions[dest_state] = reverse_epsilon_transitions[dest_state] or {Set:new(), {}}
+          reverse_epsilon_transitions[dest_state][1]:add(state)
+          if properties and properties.priority_class then
+            if reverse_epsilon_transitions[dest_state][2][properties.priority_class] then
+              error("Unexpected.")
+            end
+            reverse_epsilon_transitions[dest_state][2][properties.priority_class] = properties.priority
+          end
+        end
+      end
+    end
+
+    local priorities = {}
+    local children = function(state, stack)
+      local reverse_transitions = reverse_epsilon_transitions[state]
+      if reverse_transitions then
+        local child_states, priority_classes = unpack(reverse_transitions)
+        for priority_class, priority in pairs(priority_classes) do
+          if priorities[priority_class] then
+            error("Unexpected please report the grammar that triggered this error!")
+          end
+          priorities[priority_class] = priority
+        end
+        return child_states
+      end
+    end
+    for state in each(rtn:states()) do
+      priorities = {}
+      depth_first_traversal(state, children)
+      for edge_val, dest_state, properties in state:transitions() do
+        if edge_val ~= fa.e then
+          -- non-epsilon transitions should always have properties assigned,
+          -- because they always have slotnums and slotnames.
+          properties.priorities = priorities
+        end
+      end
+      if state.final then
+        state.final = {priorities = priorities}
+      end
+    end
+  end
+end
+
 function Grammar:determinize_rtns()
   local new_rtns = OrderedMap:new()
   for name, rtn in each(self.rtns) do

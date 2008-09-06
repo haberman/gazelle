@@ -117,7 +117,7 @@ function parse_grammar(chars)
       chars:consume(";")
     else
       local before_offset = chars.offset
-      stmt = parse_statement(chars, attributes)
+      local stmt = parse_statement(chars, attributes)
       if not stmt then
         break
       elseif stmt.nonterm then
@@ -169,12 +169,21 @@ function parse_derivations(chars, attributes)
   local derivations = {}
 
   repeat
-    if chars:match(" e ") then
-      table.insert(derivations, fa.RTN:new{symbol=fa.e, properties={slotnum=attributes.slotnum}})
-      attributes.slotnum = attributes.slotnum + 1
-    else
-      table.insert(derivations, parse_derivation(chars, attributes))
+    local derivation = parse_derivation(chars, attributes)
+
+    -- Any prioritized derivations we parse together as a group, then build
+    -- an NFA of *prioritized* alternation.
+    if chars:lookahead(1) == "/" then
+      chars:consume("/")
+      local prioritized_derivations = {derivation}
+      repeat
+        local prioritized_derivation = parse_derivation(chars, attributes)
+        table.insert(prioritized_derivations, prioritized_derivation)
+      until chars:lookahead(1) ~= "/" or not chars:consume("/")
+      derivation = nfa_construct.alt(prioritized_derivations, true)
     end
+
+    table.insert(derivations, derivation)
   until chars:lookahead(1) ~= "|" or not chars:consume("|")
 
   chars:ignore(old_ignore)
@@ -184,7 +193,8 @@ end
 function parse_derivation(chars, attributes)
   local old_ignore = chars:ignore("whitespace")
   local ret = parse_term(chars, attributes)
-  while chars:lookahead(1) ~= "|" and chars:lookahead(1) ~= ";" and chars:lookahead(1) ~= ")" do
+  while chars:lookahead(1) ~= "|" and chars:lookahead(1) ~= "/" and
+        chars:lookahead(1) ~= ";" and chars:lookahead(1) ~= ")" do
     ret = nfa_construct.concat(ret, parse_term(chars, attributes))
   end
   chars:ignore(old_ignore)
@@ -201,7 +211,7 @@ function parse_term(chars, attributes)
   end
 
   local symbol
-  if chars:lookahead(1) == "/" then
+  if chars:lookahead(1) == "/" and name then
     name = name or attributes.nonterm.name
     intfa, text = parse_regex(chars)
     attributes.grammar:add_terminal(name, intfa, text)
@@ -231,22 +241,37 @@ function parse_term(chars, attributes)
 
   local one_ahead = chars:lookahead(1)
   if one_ahead == "?" or one_ahead == "*" or one_ahead == "+" then
-    local modifier, sep = parse_modifier(chars, attributes)
+    local modifier, sep, favor_repeat = parse_modifier(chars, attributes)
     -- foo +(bar) == foo (bar foo)*
     -- foo *(bar) == (foo (bar foo)*)?
     if sep then
       if modifier == "?" then error("Question mark with separator makes no sense") end
-      ret = nfa_construct.concat(ret:dup(), nfa_construct.kleene(nfa_construct.concat(sep, ret:dup())))
+      ret = nfa_construct.concat(ret:dup(), nfa_construct.kleene(nfa_construct.concat(sep, ret:dup()), favor_repeat))
       if modifier == "*" then
-        ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret)
+        -- TODO: should the priority for the question mark use the same priority
+        -- class as the priority for the repetition?  Are the two even distinguishable
+        -- (ie. is there a test whose output depends on this)?
+        if favor_repeat then
+          ret = nfa_construct.alt2(ret, fa.RTN:new{symbol=fa.e}, true)
+        elseif favor_repeat == false then
+          ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret, true)
+        else
+          ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret)
+        end
       end
     else
       if modifier == "?" then
-        ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret)
+        if favor_repeat then
+          ret = nfa_construct.alt2(ret, fa.RTN:new{symbol=fa.e}, true)
+        elseif favor_repeat == false then
+          ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret, true)
+        else
+          ret = nfa_construct.alt2(fa.RTN:new{symbol=fa.e}, ret)
+        end
       elseif modifier == "*" then
-        ret = nfa_construct.kleene(ret)
+        ret = nfa_construct.kleene(ret, favor_repeat)
       elseif modifier == "+" then
-        ret = nfa_construct.rep(ret)
+        ret = nfa_construct.rep(ret, favor_repeat)
       end
     end
   end
@@ -265,7 +290,7 @@ end
 
 function parse_modifier(chars, attributes)
   local old_ignore = chars:ignore()
-  local modifier, str
+  local modifier, str, prefer_repeat
   modifier = chars:consume_pattern("[?*+]")
   if chars:lookahead(1) == "(" then
     chars:consume("(")
@@ -280,8 +305,16 @@ function parse_modifier(chars, attributes)
     attributes.slotnum = attributes.slotnum + 1
     chars:consume(")")
   end
+  if chars:lookahead(1) == "+" or chars:lookahead(1) == "-" then
+    local prefer_repeat_ch = chars:consume_pattern("[+-]")
+    if prefer_repeat_ch == "+" then
+      prefer_repeat = true
+    else
+      prefer_repeat = false
+    end
+  end
   chars:ignore(old_ignore)
-  return modifier, str
+  return modifier, str, prefer_repeat
 end
 
 function parse_nonterm(chars)

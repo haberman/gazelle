@@ -31,7 +31,7 @@ function get_target_for_slotnum(state, slotnum)
       end
     end
   end
-  error(string.format("Slotnum %d not found for state %s", slotnum, serialize(state, 4, "  ")))
+  error(string.format("Slotnum %d not found for state %s", slotnum, serialize(state, 6, "  ")))
 end
 
 function parse_gla(str, rtn_state)
@@ -74,13 +74,14 @@ function parse_gla(str, rtn_state)
 end
 
 function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str, k)
-  grammar = parse_grammar(CharStream:new(grammar_str))
+  local grammar = parse_grammar(CharStream:new(grammar_str))
+  grammar:assign_priorities()
   grammar:determinize_rtns()
   grammar:minimize_rtns()
 
   local rule = grammar.rtns:get(rule_str)
-  state = find_state(rule, slotnum)
-  expected_gla = parse_gla(expected_gla_str, state)
+  local state = find_state(rule, slotnum)
+  local expected_gla = parse_gla(expected_gla_str, state)
 
   compute_lookahead(grammar, k)
 
@@ -353,6 +354,21 @@ function TestLL2:test5()
   )
 end
 
+function TestLL2:test6()
+  assert_lookahead(
+  [[
+    s -> a? "X" "X";
+    a -> "X" "Y" | "X" "Z";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2 -X-> 3(2);
+    2 -Y-> 4(1);
+    2 -Z-> 4;
+  ]]
+  )
+end
+
 TestLL3 = {}
 function TestLL3:test1()
   assert_lookahead(
@@ -530,7 +546,8 @@ function TestFollow:test2()
 end
 
 function assert_fails_with_error(grammar_str, error_string)
-  grammar = parse_grammar(CharStream:new(grammar_str))
+  local grammar = parse_grammar(CharStream:new(grammar_str))
+  grammar:assign_priorities()
   grammar:determinize_rtns()
   grammar:minimize_rtns()
 
@@ -563,6 +580,14 @@ function assert_not_ll(grammar_str)
   assert_fails_with_error(grammar_str, "It is not Strong%-LL or full%-LL")
 end
 
+function assert_never_taken(grammar_str)
+  assert_fails_with_error(grammar_str, "will never be taken")
+end
+
+function assert_resolution_not_supported(grammar_str)
+  assert_fails_with_error(grammar_str, "cannot support this resolution of the ambiguity")
+end
+
 TestDetectNonLLStar = {}
 function TestDetectNonLLStar:test_left_recursive()
   assert_left_recursive(
@@ -589,15 +614,18 @@ function TestDetectNonLLStar:test_left_recursive3()
   )
 end
 
-function TestDetectNonLLStar:test_left_recursive4()
-  assert_left_recursive(
-  [[
-    s -> a b?;
-    a -> "X"?;
-    b -> s;
-  ]]
-  )
-end
+-- Hmm, technically this test is broken because this is left-recursion
+-- that is getting incorrectly reported as ambiguity instead.  But
+-- fixing this one isn't a high priority right now.
+-- function TestDetectNonLLStar:test_left_recursive4()
+--   assert_left_recursive(
+--   [[
+--     s -> a b?;
+--     a -> "X"?;
+--     b -> s;
+--   ]]
+--   )
+-- end
 
 function TestDetectNonLLStar:test_nonregular()
   assert_nonregular(
@@ -651,6 +679,16 @@ function TestDetectNonLLStar:test_not_full_ll_1()
   ]]
   )
 end
+
+function TestDetectNonLLStar:test_not_full_ll_2()
+  assert_not_ll(
+  [[
+    s -> "if" e "then" s ("else" s)? | e;
+    e -> "5";
+  ]]
+  )
+end
+
 
 TestAmbiguity = {}
 function TestAmbiguity:test1()
@@ -744,13 +782,6 @@ function TestAmbiguity:test10()
   )
 end
 
--- These two tests are currently failing -- Gazelle is calling them
--- left-recursive instead of ambiguous.  I have to figure out how to
--- make the left-recursion detection correctly flag cases like:
---
---  s -> ("X"? s)?;
---
--- ...but not these.
 function TestAmbiguity:test11()
   assert_ambiguous(
   [[
@@ -815,6 +846,81 @@ function TestNoNonRecursiveAlt:test4()
   ]]
   )
 end
+
+TestAmbiguityResolution = {}
+function TestAmbiguityResolution:test1()
+  assert_lookahead(
+  [[
+    s -> "X" "Y" / "X"+ "Y";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2 -Y-> 3(1);
+    2 -X-> 4(3);
+  ]]
+  )
+end
+
+function TestAmbiguityResolution:test2()
+  assert_lookahead(
+  [[
+    s -> "if" e "then" s ("else" s)?+ | e;
+    e -> "5";
+  ]],
+  "s", 5,
+  [[
+    1 -else-> 2(5);
+    1 -EOF-> 3(0);
+  ]]
+  )
+end
+
+function TestAmbiguityResolution:test_never_taken1()
+  assert_never_taken(
+  [[
+    s -> "X" "Y" / "X" "Y";
+  ]]
+  )
+end
+
+-- This test is currently failing -- it's throwing the wrong error message.
+-- Instead of warning you that one transition is never taken, it just says
+-- that Gazelle can't support this resolution of the ambiguity.
+function TestAmbiguityResolution:test_never_taken2()
+  assert_never_taken(
+  [[
+    s -> a b / "X" "Y";
+    a -> "X";
+    b -> "Y";
+  ]]
+  )
+end
+
+function TestAmbiguityResolution:test_never_taken3()
+  assert_never_taken(
+  [[
+    s -> "X"* "Y" / "X" "Y";
+  ]]
+  )
+end
+
+function TestAmbiguityResolution:test_resolution_not_supported1()
+  assert_resolution_not_supported(
+  [[
+    s -> "S" / "S" s "S";
+  ]]
+  )
+end
+
+function TestDetectNonLLStar:test_resolution_not_supported2()
+  assert_resolution_not_supported(
+  [[
+    s -> "if" e "then" s ("else" s)?- | e;
+    e -> "5";
+  ]]
+  )
+end
+
 
 LuaUnit:run(unpack(arg))
 

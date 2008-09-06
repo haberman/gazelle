@@ -52,11 +52,20 @@ end
 
 --------------------------------------------------------------------]]--
 
-function alt(nfas)
+function alt(nfas, prioritized)
   local new_nfa = nfas[1]:new_graph()
+  local priority_class = {}
 
   for i=1,#nfas do
-    new_nfa.start:add_transition(fa.e, nfas[i].start)
+    local properties
+    if prioritized then
+      properties = {
+        priority_class = priority_class,
+        priority = #nfas - i + 1  -- priorities count down from #nfas to 0
+      }
+    end
+
+    new_nfa.start:add_transition(fa.e, nfas[i].start, properties)
     nfas[i].final:add_transition(fa.e, new_nfa.final)
   end
 
@@ -64,10 +73,29 @@ function alt(nfas)
 end
 
 -- alt2(nfa1, nfa2): a convenience wrapper for alternation of 2 NFAs.
-function alt2(nfa1, nfa2)
-  return alt({nfa1, nfa2})
+function alt2(nfa1, nfa2, prioritized)
+  return alt({nfa1, nfa2}, prioritized)
 end
 
+function get_repeating_properties(favor_repeating)
+  local repeat_properties
+  local finish_properties
+
+  if favor_repeating ~= nil then
+    local priority_class = {}  -- just a unique value
+    repeat_properties = {priority_class=priority_class}
+    finish_properties = {priority_class=priority_class}
+    if favor_repeating then
+      repeat_properties.priority = 2
+      finish_properties.priority = 1
+    else
+      repeat_properties.priority = 1
+      finish_properties.priority = 2
+    end
+  end
+
+  return repeat_properties, finish_properties
+end
 
 --[[--------------------------------------------------------------------
 
@@ -89,11 +117,12 @@ end
 
 --------------------------------------------------------------------]]--
 
-function rep(nfa)
+function rep(nfa, favor_repeat)
   local new_nfa = nfa:new_graph()
+  local repeat_properties, finish_properties = get_repeating_properties(favor_repeating)
   new_nfa.start:add_transition(fa.e, nfa.start)
-  nfa.final:add_transition(fa.e, nfa.start)
-  nfa.final:add_transition(fa.e, new_nfa.final)
+  nfa.final:add_transition(fa.e, nfa.start, repeat_properties)
+  nfa.final:add_transition(fa.e, new_nfa.final, finish_properties)
   return new_nfa
 end
 
@@ -114,12 +143,13 @@ end
 
 --------------------------------------------------------------------]]--
 
-function kleene(nfa)
+function kleene(nfa, favor_repeat)
   local new_nfa = rep(nfa)
+  local repeat_properties, finish_properties = get_repeating_properties(favor_repeat)
   new_nfa.start:add_transition(fa.e, nfa.start)
-  new_nfa.start:add_transition(fa.e, new_nfa.final)
-  nfa.final:add_transition(fa.e, nfa.start)
-  nfa.final:add_transition(fa.e, new_nfa.final)
+  new_nfa.start:add_transition(fa.e, new_nfa.final, finish_properties)
+  nfa.final:add_transition(fa.e, nfa.start, repeat_properties)
+  nfa.final:add_transition(fa.e, new_nfa.final, finish_properties)
   return new_nfa
 end
 

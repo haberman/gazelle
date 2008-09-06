@@ -62,6 +62,10 @@ Stack = {name="Stack"}
     return self.stack[#self.stack]
   end
 
+  function Stack:get(i)
+    return self.stack[i]
+  end
+
   function Stack:isempty()
     return #self.stack == 0
   end
@@ -108,6 +112,13 @@ Set = {name="Set"}
       obj:add_collection(init)
     end
     return obj
+  end
+
+  function Set:sample()
+    for element in self:each() do
+      return element
+    end
+    return nil
   end
 
   function Set:contains(x)
@@ -463,36 +474,5 @@ IntSet = {name="IntSet"}
     return self:tostring(function (x) return tostring(x) end)
   end
 -- class IntSet
-
-ShallowTable = {name="ShallowTable"}
-function ShallowTable:new(val)
-  if val == nil then return nil end
-
-  if not self.cache then
-    self.cache = {}
-    --setmetatable(self.cache, {__mode = "v"})  -- make values weak
-  end
-
-  local str = ""
-  local keys = {}
-  for key in pairs(val) do table.insert(keys, key) end
-  table.sort(keys)
-  for key in each(keys) do
-    if type(val[key]) == "table" and val[key].class == fa.NonTerm then
-      str = str .. "|" .. key .. ":NONTERM" .. tostring(val[key].name)
-    else
-      str = str .. "|" .. key .. ":" .. tostring(val[key])
-    end
-  end
-
-  if not self.cache[str] then
-    self.cache[str] = newobject(self)
-    for k,v in pairs(val) do
-      self.cache[str][k] = v
-    end
-  end
-
-  return self.cache[str]
-end
 
 -- vim:et:sts=2:sw=2

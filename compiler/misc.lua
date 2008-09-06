@@ -58,6 +58,20 @@ function table_shallow_copy(t)
   return table_copy(t, 1)
 end
 
+function get_common_prefix_len(arrays)
+  local common_len = 0
+  while common_len <= #arrays[1] do
+    local elem = arrays[1][common_len+1]
+    for array in each(arrays) do
+      if array[common_len+1] ~= elem then
+        return common_len
+      end
+    end
+    common_len = common_len + 1
+  end
+  return common_len
+end
+
 cache = {}
 function get_unique_table_for(val)
   local string_table = {}
@@ -78,7 +92,7 @@ function depth_first_traversal(obj, children_func)
 end
 
 function depth_first_traversal_helper(obj, children_func, stack, seen)
-  children = children_func(obj, stack) or {}
+  local children = children_func(obj, stack) or {}
   for child in each(children) do
     if not seen:contains(child) then
       seen:add(child)

@@ -175,6 +175,7 @@ function emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
       local transitions = ordered_rtn.transitions[gla.rtn_state]
       local transition_offset = nil
       if state.final[1] == 0 and state.final[2] == 0 then
+        -- This is a "return" prediction
         transition_offset = 0
       else
         for i=1,#transitions do
@@ -201,7 +202,7 @@ function emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
     for edge_val, dest_state in state:transitions() do
       local edge_num = 0
       if edge_val ~= fa.eof then
-        edge_num = strings:offset_of(edge_val)
+        edge_num = strings:offset_of(edge_val) + 1
       end
       bc_file:write_abbreviated_record(abbrevs.bc_gla_transition,
                                        edge_num,

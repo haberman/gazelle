@@ -142,6 +142,10 @@ grm_str = input_file:read("*a")
 print_verbose("Parsing grammar...")
 grammar = parse_grammar(CharStream:new(grm_str))
 
+-- assign priorities to RTN transitions
+print_verbose("Assigning RTN transition priorities...")
+grammar:assign_priorities()
+
 -- make the RTNs in the grammar determistic and minimal
 print_verbose("Convering RTN NFAs to DFAs...")
 grammar:determinize_rtns()

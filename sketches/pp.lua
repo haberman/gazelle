@@ -22,7 +22,7 @@ function serialize(o, maxdepth, indent, s)
 
   if t == "string" then
     result = string.format("%q", o)
-  elseif t == "table" and o.__index == o then
+  elseif t == "table" and o.__index == o and o.name then
     result = string.format("Class: %q", o.name)
   elseif t == "table" and not (o.class and o.class.__tostring) then
     local nestedIndent
