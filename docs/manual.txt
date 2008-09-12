@@ -769,7 +769,7 @@ expression grammar using the rule `prim -> /0-9+/ | "("expr ")";`.
 
 ["prim.png", "graph 1: prim -> /0-9+/ | \"(\" expr \")\";"]
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-prim -> /0-9+/ | "(" expr ")";
+prim -> .number=/0-9+/ | "(" expr ")";
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You should find that you can look at the graph for a rule and intuitively
