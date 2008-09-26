@@ -1,3 +1,16 @@
+--[[--------------------------------------------------------------------
+
+  Gazelle: a system for building fast, reusable parsers
+
+  tests/test_ll.lua
+
+  Tests for the LL(*) lookahead generation.  This is the among the
+  most complicated things the complier does, and it has a lot of edge
+  cases and failure modes, so this file is complicated and subtle.
+
+  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 
 require "luaunit"
 require "ll"

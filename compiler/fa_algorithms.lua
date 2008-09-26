@@ -285,9 +285,22 @@ function fa_isequal(fa1, fa2)
       return false
     end
 
-    if (s1.final or s2.final) and not
-      (s1.final and s2.final and table_shallow_eql(s1.final, s2.final)) then
-      return false
+    if (s1.final or s2.final) then
+      if not (s1.final and s2.final) then
+        return false
+      end
+
+      if type(s1.final) ~= type(s2.final) then
+        return false
+      end
+
+      if type(s1.final) == "table" then
+        if not table_shallow_eql(s1.final, s2.final) then
+          return false
+        end
+      elseif s1.final ~= s2.final then
+        return false
+      end
     end
 
     for edge_val, dest_state in s1:transitions() do

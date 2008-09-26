@@ -315,11 +315,24 @@ function IntFAState:transitions_for(val, prop)
   if type(val) == "table" and val.class == IntSet then
     val = val:sampleint()
   end
+  if prop == nil then
+    prop = "ALL"
+  end
+
+  if prop == "ANY" then
+    targets = {}
+  else
+    targets = Set:new()
+  end
 
   for edge_val, target_state, properties in self:transitions() do
     if edge_val == val or (val ~= fa.e and edge_val.class == IntSet and edge_val:contains(val)) then
-      if (prop == "ANY") or (prop == properties) then
-        targets:add(target_state)
+      if (prop == "ALL") or (prop == "ANY") or (prop == properties) then
+        if prop == "ANY" then
+          table.insert(targets, {target_state, properties})
+        else
+          targets:add(target_state)
+        end
       end
     end
   end
