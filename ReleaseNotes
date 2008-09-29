@@ -1,4 +1,55 @@
 
+Gazelle 0.3, released September 30, 2008  ======================================
+
+  Overview: This release represents a lot of work on Gazelle's grammar analysis
+  and lookahead generation.  What this means for users is that many many cases
+  where Gazelle would previously hang or generate incorrect grammar have been
+  fixed, and there are lots of unit tests to ensure these don't break in the
+  future.  There is also one new feature: explicit ambiguity resolution.
+
+  Core Parsing Algorithm:
+  * Gazelle now detects many errors in grammars:
+    - left-recursion
+    - rules that have no non-recursive alternative
+    - grammars that are probably not LL(*) (using a heuristic)
+  * Gazelle now supports many LL(*) grammars (that have cyclic GLA's) in
+    addition to LL(k).  This puts us on par with ANTLR.
+  * It is no longer possible to make Gazelle hang by feeding it the wrong
+    grammar.  Since the problem of whether a grammar is LL(*) is undecidable
+    in general, Gazelle gives you two options for how to bound the amount of
+    work.  You can either use a heuristic to detect cases where the grammar
+    is probably not LL(*), or you can specify a bound on k.
+  * The generated lookahead can now take EOF into account, which allows us to
+    support grammars where we don't know what alternative to take until we see
+    EOF.
+
+  New Features:
+  * Grammar files now support C-style comments: // and /* */.
+  * Explicit ambiguity resolution allows grammar authors to specify priorities
+    between alternatives that would otherwise be ambiguous.  The need for this
+    arises in cases like the famous "if-then-else" problem, which is inherently
+    ambigous but has a rule for how this ambiguity should be resolved.
+
+  Backward Incompatibilities:
+  * All regular expressions that are defined within rules (as opposed to being
+    named beforehand) must now be named within the rule.  For example:
+
+      a -> /foo/;
+
+    ...is no longer allowed, you must write:
+
+      a -> .foo=/foo/;
+
+    It's important that regular expressions get a reasonable name.  Also,
+    unnamed regular expressions conflict with the new syntax for prioritized
+    choice.
+
+  Caveats:
+  * Although the compiler supports EOF in lookahead, proper support has not
+    been added to the runtime yet.
+  * There's still no way to ignore whitespace yet.  This will hopefully come
+    in the next release.
+
 Gazelle 0.2, released June 29, 2008  ===========================================
 
   Overview: This is a major overhaul of Gazelle's guts.  It also has
