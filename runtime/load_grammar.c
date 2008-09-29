@@ -299,9 +299,13 @@ void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
             else if(ri.id == BC_GLA_TRANSITION)
             {
                 struct gla_transition *transition = &gla->transitions[transition_offset++];
-
-                transition->term = g->strings[bc_rs_read_next_32(s)];
-                transition->dest_state = &gla->states[bc_rs_read_next_32(s)];
+                int term = bc_rs_read_next_32(s);
+                int dest_state_offset = bc_rs_read_next_32(s);
+                transition->dest_state = &gla->states[dest_state_offset];
+                if(term == 0)
+                    transition->term = NULL;
+                else
+                    transition->term = g->strings[term-1];
             }
         }
         else if(ri.record_type == EndBlock)

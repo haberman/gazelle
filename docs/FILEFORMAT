@@ -9,7 +9,7 @@ This file describes the meaning of the information that Gazelle
 puts into the bytecode.
 
 Bitcode file, application magic number = "GH"
-All offsets are 0-based.
+All offsets are 0-based unless otherwise specified.
 
 STRINGS -- all strings are put into the STRINGS block, and referenced
            by offset in other parts of the file
@@ -36,7 +36,7 @@ GLAS
     [GLA_FINAL_STATE, 1-based rtn alt offset (0 is return from final)]
     ...
 
-    [GLA_TRANSITION, terminal_name_int+1 (0 is EOF), dest GLA state offset]
+    [GLA_TRANSITION, 1-based terminal_name_int (0 is EOF), dest GLA state offset]
     ...
 
 RTNS -- a list of all the RTNs

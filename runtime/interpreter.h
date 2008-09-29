@@ -104,7 +104,7 @@ struct gla
 
 struct gla_transition
 {
-    char *term;
+    char *term;  /* if NULL, then the term is EOF */
     struct gla_state *dest_state;
 };
 
