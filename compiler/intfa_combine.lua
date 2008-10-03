@@ -100,7 +100,13 @@ function intfa_combine(all_terminals, state_term_pairs)
   local intfa_nums = {}
   for state_term_pair in each(state_term_pairs) do
     local state, terms = unpack(state_term_pair)
-    intfa_nums[state] = create_or_reuse_termset_for(terms, conflicts, termsets)
+    local nonterm
+    if state.rtn == nil then
+      nonterm = state.gla.rtn_state.rtn.name
+    else
+      nonterm = state.rtn.name
+    end
+    intfa_nums[state] = create_or_reuse_termset_for(terms, conflicts, termsets, nonterm)
   end
 
   local dfas = OrderedSet:new()

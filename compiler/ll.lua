@@ -439,6 +439,9 @@ function construct_gla(state, grammar, follow_states, k)
   end
 
   gla = hopcroft_minimize(gla)
+  for state in each(gla:states()) do
+    state.gla = gla
+  end
   remove_excess_states(gla)
   gla.longest_path = fa_longest_path(gla)
 
