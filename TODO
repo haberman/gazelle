@@ -9,7 +9,14 @@ harder.
   true seems like a lot of hard thought.  Let's think of it as an optimization
   and do it later.
 
+Language:
+* make semicolons optional at end of line.
+
 Compiler / Grammar Analysis (all changes should have test-cases):
+* make tostring() methods for all of the grammar objects.
+* create Lua bindings for the C grammar representation, which we can use
+  to write tests that verify that the grammar makes it through the bytecode
+  step unchanged.
 * (maybe) take regular subset of non-regular lookahead when it doesn't
   cause alternatives' languages to intersect.
 * (maybe) support full-LL by having first states of GLA have edges that
