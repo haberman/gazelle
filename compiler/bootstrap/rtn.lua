@@ -69,7 +69,11 @@ CharStream = {}
     self:skip_ignored()
     local actual_str = self.string:sub(self.offset, self.offset+str:len()-1)
     if actual_str ~= str then
-      error(string.format("Error parsing grammar; expected %s, got %s", str, actual_str))
+      local lineno = 1
+      for nl in self.string:sub(0, self.offset):gmatch("[\n\r]") do lineno = lineno + 1 end
+      local first, last = self.string:sub(0, self.offset):find(".*[\n\r]")
+      local colno = self.offset - last
+      error(string.format("Error parsing grammar %s:\nat line %s, column %s expected '%s', got '%s'", input_filename, lineno, colno, str, actual_str))
     end
     self.offset = self.offset + str:len()
     self:skip_ignored()
