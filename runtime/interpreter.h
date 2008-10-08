@@ -18,7 +18,7 @@
 #include "bc_read_stream.h"
 #include "dynarray.h"
 
-#define GAZELLE_VERSION "0.2"
+#define GAZELLE_VERSION "0.3"
 #define GAZELLE_WEBPAGE "http://www.reverberate.org/gazelle/"
 
 /*

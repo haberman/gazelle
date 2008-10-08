@@ -19,9 +19,10 @@ require "ll"
 
 require "pp"
 
-usage = [[
+version = "Gazelle v0.3"
+usage = string.format([[
 gzlc -- Gazelle grammar compiler.
-Gazelle v0.2-prerelase  http://www.reverberate.org/gazelle/
+%s  http://www.reverberate.org/gazelle/
 
 Usage: gzlc [options] input-file
 
@@ -47,9 +48,8 @@ Usage: gzlc [options] input-file
                      output statistics.
 
   --version          dump Gazelle version
-]]
+]], version)
 
-version = "Gazelle v0.2"
 
 -- parse options
 input_filename = nil
@@ -156,7 +156,7 @@ end
 
 -- Generate GLAs by doing lookahead calculations.
 -- This annotates every nontrivial state in the grammar with a GLA.
-print_verbose("Doing LL(k) lookahead calculations...")
+print_verbose("Doing LL(*) lookahead calculations...")
 compute_lookahead(grammar, k)
 
 -- we now have everything figured out at the RTN and GLA levels.  Now we just
