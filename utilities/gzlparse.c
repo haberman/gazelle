@@ -27,8 +27,9 @@ void usage()
     fprintf(stderr, "Usage: gzlparse [OPTIONS] GRAMMAR.gzc INFILE\n");
     fprintf(stderr, "Input file can be '-' for stdin.\n");
     fprintf(stderr, "\n");
-    fprintf(stderr, "  --dump-json     Dump a parse tree in JSON as text is parsed.\n");
+    fprintf(stderr, "  --dump-json    Dump a parse tree in JSON as text is parsed.\n");
     fprintf(stderr, "  --dump-total   When parsing finishes, print the number of bytes parsed.\n");
+    fprintf(stderr, "  --help         You're looking at it.\n");
     fprintf(stderr, "\n");
 }
 
@@ -150,6 +151,12 @@ void end_rule_callback(struct parse_state *parse_state)
 
 int main(int argc, char *argv[])
 {
+    if(strcmp(argv[1], "--help") == 0)
+    {
+        usage();
+        exit(0);
+    }
+
     if(argc < 3)
     {
         fprintf(stderr, "Not enough arguments.\n");

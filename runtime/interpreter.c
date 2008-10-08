@@ -363,6 +363,21 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
             }
         }
     }
+    else
+    {
+        /* This will be appropriate when we properly handle EOF in GLAs. */
+        //for(int i = 0; i < dest_gla_state->d.nonfinal.num_transitions; i++)
+        //{
+        //    fprintf(stderr, "Looking at GLA state.\n");
+        //    struct gla_transition *t = &dest_gla_state->d.nonfinal.transitions[i];
+        //    if(t->term == NULL)  /* EOF */
+        //    {
+        //        fprintf(stderr, "EOF is ok.\n");
+        //        frame->eof_ok = true;
+        //        break;
+        //    }
+        //}
+    }
     return frame;
 }
 
