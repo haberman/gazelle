@@ -1,7 +1,7 @@
 Gazelle Manual
 ==============
 Joshua Haberman <joshua@reverberate.org>
-v0.2, June 2008
+v0.3, October 2008
 :toc:
 
 Gazelle is a system for parsing context-free grammars.  It takes inspiration
@@ -13,21 +13,12 @@ Once a grammar is written for a language, it should be possible to use it
 for anything from a compiler to the syntax highlighting component of a text
 editor.  That is Gazelle's single most fundamental design criterion.
 
-[WARNING]
-This manual is very much a work in progress, just as Gazelle itself it.
-There is a lot of information in here, and it's a great way to get
-acquainted with Gazelle, especially if you are already familiar with
-parsing tools in general.  However, there isn't a lot of friendly
-introductory material yet, and some of the
-information may be out of sync with the implementation.  As Gazelle
-stabilizes, so will the relationship between the manual and reality.
-
-
 An Introductory Tour
 --------------------
 
 This section offers a quick tour of Gazelle and its capabilities.  It assumes
-you have already compiled Gazelle successfully.
+you have already compiled Gazelle successfully; the instructions for doing so
+are in the README.
 
 Hello, World
 ~~~~~~~~~~~~
@@ -69,7 +60,7 @@ this compiled version of the grammar to bytecode.
 $ . lua_path
 $ ./compiler/gzlc --help
 gzlc -- Gazelle grammar compiler.
-Gazelle v0.2  http://www.reverberate.org/gazelle/
+Gazelle v0.3  http://www.reverberate.org/gazelle/
 
 Usage: gzlc [options] input-file
 
@@ -77,6 +68,16 @@ Usage: gzlc [options] input-file
 
   -d,                dump detailed output about the grammar to
                      html/index.html.
+
+  -k <depth>         Maximum LL(k) to consider (by default, uses a
+                     heuristic that attempts to determine if the
+                     grammar is LL(k) for *any* k).
+
+  --no-minimize-rtns
+                     skip the minimization step for RTNs.  This results
+                     in larger RTNs, but may be necessary if minimization
+                     is taking too long (this should only occur in
+                     artificially-complicated grammars).
 
   -o <file>          output filename.  Default is input filename
                      with extension replaced with .gzc
@@ -95,20 +96,21 @@ default output filename is the input filename with 'gzl' replaced with 'gzc'.
 
 ------------------------------------------------
 Tallis:gazelle joshua$ ls -l hello*
--rw-r--r--  1 joshua  joshua  212 Jun 28 18:57 hello.gzc
--rw-r--r--  1 joshua  joshua   43 Jun 28 18:43 hello.gzl
+-rw-r--r--  1 joshua  joshua  212 Sep 30 21:11 hello.gzc
+-rw-r--r--  1 joshua  joshua   43 Sep 30 21:11 hello.gzl
 ------------------------------------------------
 
 If you want to see a bit more verbose output, run +gzlc+ with +-v+.
 
 ------------------------------------------------
 $ ./compiler/gzlc -v hello.gzl
-Gazelle v0.2
+Gazelle v0.3
 Opening input file 'hello.gzl'...
 Parsing grammar...
+Assigning RTN transition priorities...
 Convering RTN NFAs to DFAs...
 Minimizing RTN DFAs...
-Doing LL(k) lookahead calculations...
+Doing LL(*) lookahead calculations...
 Generating lexer DFAs...
 Writing to output file 'hello.gzc'...
 Writing 4 strings...
@@ -122,16 +124,17 @@ Now, the magic moment where we do our first actual parsing.  We'll write some
 valid input text for this language, then use +gzlparse+ to actually parse it.
 
 ------------------------------------------------
-$ echo '((((500))))' > hello_text
+$ echo -n '((((500))))' > hello_text
 $ ./utilities/gzlparse --help
 gzlparse -- A command-line tool for parsing input text.
-Gazelle 0.2  http://www.reverberate.org/gazelle/.
+Gazelle 0.3  http://www.reverberate.org/gazelle/.
 
 Usage: gzlparse [OPTIONS] GRAMMAR.gzc INFILE
 Input file can be '-' for stdin.
 
-  --dump-json     Dump a parse tree in JSON as text is parsed.
+  --dump-json    Dump a parse tree in JSON as text is parsed.
   --dump-total   When parsing finishes, print the number of bytes parsed.
+  --help         You're looking at it.
 
 $ ./utilities/gzlparse hello.gzc hello_text
 $
@@ -185,59 +188,58 @@ $ ./compiler/gzlc -d hello.gzl
 Now open +html/index.html+ in a web browser to view the HTML dump.  You will
 see an illustration of the "hello" rule, and you should see that it corresponds
 to your intuitive understanding of this rule.  There are two paths through the
-rule -- either +"(", hello, ")"+ or +digits+.  You will also see the state
-machine that does the lexing: it recognizes either parentheses or a series of
-one or more digits.
+rule -- either +"(", hello, ")"+ or +digits+.
 
+You will also see the state machine that does the lexing: it recognizes three
+different tokens: a left parenthesis, a right parenthesis, and one called
+"digits" that is a string of repeated numbers.  Notice that Gazelle built a
+lexer for you based on the grammar you entered.  You don't have to give Gazelle
+a separate lexer specification.
+
+Creating a lexer was trivial in the above example because none of the different
+token types conflict.  Because left parenthesis, right parenthesis, and
+"digits" are all distinct and do not conflict, Gazelle simply combined them all
+into a single DFA that breaks the input into tokens.  But consider a more
+complicated example: a grammar to describe files of comma-separated values,
+where the values can either be strings or numbers.  For example:
+
+------------------------------------------------
+1,5,"X","42","Hello, world!\n",31415926
+------------------------------------------------
+
+What makes this example more complicated is that outside of quotes, commas and
+digits mean one thing, but inside quotes they mean another.  Here is a grammar
+to describe this format:
+
+------------------------------------------------
+// A CSV line is any number of comma-separated values separated by commas,
+// ending with a newline.
+csv_line -> csv_value *(,) "\n";
+
+// A comma-separated value is either a number or a quoted string.
+csv_value -> .number=/\d+/ | '"' string_fragment* '"';
+
+// Inside a string, there can be either regular characters or a
+// backslash-escaped character.
+string_fragment -> .chars=/[^\\"]*/ | .escaped_char=/\\./;
+------------------------------------------------
+
+If you compile this grammar with +gzlc -d+ and view the HTML output, you will
+see that Gazelle has generated two different IntFAs (DFAs used by the lexer) --
+one that is used inside strings that one that is used the rest of the time.
+Inside a string the text "42" will be lexed as the token "chars", but outside
+a string it will be lexed as the token "number."
 
 Caveats
 ~~~~~~~
 
-Gazelle is still quite rough around the edges.  We'll look at a few examples of
-things Gazelle can't handle yet and how the failures manifest themselves, so
-you can know what to expect if you run into these problems yourself.
+Gazelle has come a long way, but it still has a long way to go.  The biggest
+outstanding issues at this point are:
 
-
-------------------------------------------------
-$ echo 'bad -> bad "X" | "Y";' > bad1.gzl
-$ ./compiler/gzlc bad1.gzl
-<hangs forever>
-------------------------------------------------
-
-This grammar is left-recursive, and there is no way for Gazelle (a top-down
-parser) to successfully analyze it.  However, Gazelle doesn't detect this case
-yet, and will happy spend until eternity trying.  So if you see this behavior
-from +gzlc+, you've likely written a grammar that cannot be parsed with an
-LL(k) parser.  This isn't always as obvious as left-recursion -- here is
-another example of a grammar that will hang if you feed it to gzlc:
-
-------------------------------------------------
-bad -> a | b;
-a   -> "X"* "Y";
-b   -> "X"* "Z";
-------------------------------------------------
-
-There are also some grammars that will be compiled incorrectly.  For example:
-
-------------------------------------------------
-bad -> "X" "Y" | "X";
-------------------------------------------------
-
-Gazelle should (and in the future will) notice that "X" followed by EOF should
-trigger the second alternative, but at the moment EOF does not get this special
-handling.  So Gazelle will always wait to see a "Y" and not be satisfied with
-just an "X".  You can look at the +gzlc -d+ input to get a better picture of
-why this fails.
-
-------------------------------------------------
-$ echo 'bad -> "X" "Y" | "X";' > bad2.gzl
-$ echo -n 'X' > bad2_text
-$ ./compiler/gzlc bad2.gzl
-$ ./utilities/gzlparse bad2.gzc bad2_text
-Premature end-of-file.
-------------------------------------------------
-
-This is an incorrect error from Gazelle -- "X" alone should be valid input.
+* There is currently no way to ignore whitespace.  This is my top priority
+  and will be addressed in the next version.
+* Gazelle's error messages are quite rough around the edges.  This will
+  improve as well.
 
 Where to go from here
 ~~~~~~~~~~~~~~~~~~~~~
@@ -390,8 +392,8 @@ parse tree apart much more sane.  If you are tempted to nest
 repetitions, make the innermost repetition into its own rule.
 
 
-Terminals
-~~~~~~~~~
+Terms
+~~~~~
 
 So far we have neglected to describe in detail what can appear
 on the right-hand-side of a rule.  In the previous examples we
@@ -417,11 +419,11 @@ named regular expressions::
 You can name a regex, and later refer to that regex by name.
 
 Strings and regular expressions are referred to collectively as
-``terminals,''  because they represent actual strings of the input text.
-Gazelle can take the terminals defined in the grammar and use them
+``tokens,''  because they represent actual strings of the input text.
+Gazelle can take the tokens defined in the grammar and use them
 to create a lexer-like component of the parser automatically.  Unlike a
 separated lexer however, the lexer component of a Gazelle parser knows
-exactly what terminals it is expecting.  Using this information, a
+exactly what tokens it is expecting.  Using this information, a
 Gazelle parser could, for example, parse a language that allowed
 keywords as variable names, as long as the context was enough to
 disambiguate the two.
@@ -526,7 +528,7 @@ at parse time.
 Special Commands
 ~~~~~~~~~~~~~~~~
 
-Definitions of nonterminals and terminals will be the bulk of most syntax
+Definitions of nonterminals and tokens will be the bulk of most syntax
 files; however there are several commands that give Gazelle important
 information about the grammar that isn't expressed in rules.
 
@@ -565,7 +567,7 @@ In this case, the rule version is much longer and more verbose, because the
 regular expression offers a useful tool that strings in rules do not offer:
 the character class.  In addition, the second form could make the grammar
 as a whole more expensive to parse by requiring more tokens of lookahead.
-Since a number is no longer a single terminal, it cannot be used as a
+Since a number is no longer a single token, it cannot be used as a
 single unit of lookahead.
 
 Does this mean that we should prefer regular expressions whenever we can?
