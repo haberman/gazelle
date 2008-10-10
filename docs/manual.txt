@@ -236,14 +236,14 @@ to describe this format:
 ------------------------------------------------
 // A CSV line is any number of comma-separated values separated by commas,
 // ending with a newline.
-csv_line -> csv_value *(,) "\n";
+csv_line -> csv_value *(,);
 
 // A comma-separated value is either a number or a quoted string.
-csv_value -> .number=/\d+/ | '"' string_fragment* '"';
+csv_value -> .number=/[0-9]+/ | '"' string_fragment* '"';
 
 // Inside a string, there can be either regular characters or a
 // backslash-escaped character.
-string_fragment -> .chars=/[^\\"]*/ | .escaped_char=/\\./;
+string_fragment -> .chars=/[^\\"]+/ | .escaped_char=/\\./;
 ------------------------------------------------
 
 If you compile this grammar with `gzlc -d` and view the HTML output, you will
@@ -471,9 +471,9 @@ Strings
 
 When a string appears on a right-hand-side, it specifies exactly what string
 we expect to see at this point in the input.  Strings can be either single
-or double quoted.  They interpret some backslash sequences (TODO: there are
-some decisions left to make here -- do both interpret the same sequences?)
-
+or double quoted.  Backslashes can be used to quote the next character, but
+no special backslash sequences are currently recognized (this clearly needs
+to be fixed in future versions of Gazelle).
 
 [[X2]]
 Regular Expressions
@@ -572,6 +572,7 @@ in the grammar is the start symbol.  The syntax of this command is simply:
 
 `@start` is not required, and may not appear more than once per grammar.
 
+[[X3]]
 Ambiguity Resolution
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -592,11 +593,11 @@ Gazelle cannot handle this grammar.
 It is not Strong-LL or full-LL (and may be ambiguous, but we don't know).
 -------------------------------------------
 
-Unfortunately, Gazelle cannot tell you with certainty that the problem
-is an ambiguous grammar -- that problem is undecidable (impossible to
-compute).  In the future a more detailed error message will make clear
-the root of the problem, which is that Gazelle cannot decide whether to
-match an "else" or not with input text like:
+Unfortunately, Gazelle cannot tell you with certainty that the problem is an
+ambiguous grammar -- detecting whether a grammar is ambiguous is undecidable
+(impossible to compute in all cases).  In the future a more detailed error
+message will make clear the root of the problem, which is that Gazelle cannot
+decide whether to match an "else" or not with input text like:
 
 -------------------------------------------
 if true then
@@ -672,12 +673,11 @@ out before it's parsed an "if" whether or not it will have an "else",
 but that requires unbounded lookahead that has to count (it has to match
 the "ifs" that it sees with "elses").
 
-The moral of the story is this: in most cases you should avoid
-ambiguities in your grammar.  In some cases you can't avoid them and
-ambiguity resolution will be a satisfactory solution (if/then/else is
-the most likely case for this).  In other cases ambiguity resolution
-won't suffice and you'll have to get down and dirty with some imperative
-Lua code.
+The moral of the story is this: in most cases you should avoid ambiguities in
+your grammar.  In some cases you can't avoid them and these ambiguity
+resolution operators will be a satisfactory solution (if/then/else is the most
+likely case for this).  In other cases ambiguity resolution won't suffice and
+you'll have to get down and dirty with some imperative Lua code.
 
 Regular Expressions vs. Repetition Within Rules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -741,44 +741,155 @@ any logical sub-parts.*  If you find that your regular expression has
 sub-parts that you might want to pull apart later, make each sub-part
 into its own component.
 
-Dealing with Conflicts and Ambiguity
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Dealing with Non-LL(*) Grammars
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-So far we have covered all the components of describing the syntax of your
-language to Gazelle.  At this point there is good news and bad news.
+Gazelle uses an algorithm known as LL(*) for parsing.  The benefit of this
+algorithm is that it is very fast and uses very little memory.  The drawback
+is that it cannot parse all grammars.  Using all the tools that Gazelle
+gives you, it should be able to parse all real-world 'languages', it just
+might require you to rearrange your grammar a bit.
 
-The bad news is that in some cases, even if your grammar is perfectly valid
-Gazelle syntax, Gazelle will not be able to accept your grammar.  The good news
-is that dealing with these problems is not a big deal, and Gazelle will work to
-give you as much information as it possibly can about how to fix them.
+For anyone with unpleasant memories of trying to debug LALR(1) parsers like
+yacc or Bison, it bears mentioning that debugging Gazelle grammars should
+eventually be significantly easier than debugging Bison grammars.  The LL(*) grammar analysis
+that Gazelle performs is far more understandable than LALR tables.  However
+currently some of Gazelle's error messages do not give you the amount of information
+you really need to debug the problem.  This will improve in future versions of
+Gazelle.
 
-[NOTE]
-At this stage in Gazelle development, Gazelle may not be particularly helpful
-in dealing with these bad cases; it may fail to detect the problem, lie to you
-about it, complain when there is no problem, or even insult your mother.
-The tone of this section reflects where I want Gazelle to be -- not where it
-is right now.
+What follows is a list of errors your grammar can have, what they mean, and
+how to fix them.
 
-There are two main reasons you might have to adjust your grammar.  One possible
-problem is that your grammar could be ambiguous.  It is very easy to write a
-grammar that is perfectly valid Gazelle syntax, but could yield more than one
-parse tree for the same input.  Here is a very simple example:
+Left Recursion
+^^^^^^^^^^^^^^
 
-------------------------------------------------
-# With this grammar, 1+2+3 can be parsed as either (1+2)+3 or 1+(2+3)
+As a top-down parser, Gazelle cannot handle left-recursion.  Left-recursion
+is simply a rule whose first component is a recursive invocation of the
+same rule.  Examples are:
 
-expr -> expr "+" expr | /[0-9]+/;
-------------------------------------------------
+-----------------------------------------------------
+// Right hand side begins with "list".
+list -> list "," "item" | "item";
 
-Gazelle can't deal with this ambiguity, and will give you a message
-explaining the source of the problem.
+// still left-recursive: even though "list" isn't the first component
+// on the right-hand side, it still can occur first in the rule's pattern.
+list -> "item" | list "," "item";
 
-The other reason is this: while there are a few algorithms that can parse
-any nonambiguous grammar, they are much slower than algorithms than
-algorithms that restrict the language somewhat.  Since speed is another
-focus of Gazelle, and because the grammar restrictions are not that
-onerous, Gazelle focuses on grammars that can be parsed using the
-faster algorithms.
+// still left-recursive: even though "prefix" can come before list, it
+// can also be omitted, leaving "list" as the first component in the rule.
+list -> "item" | "prefix"? list "," "item";
+
+// Two or more rules can be left-recursive together.
+rule_a -> rule_b "foo";
+rule_b -> rule_a | "bar";
+-----------------------------------------------------
+
+Trying to compile any of these grammars will cause Gazelle to throw the error:
+
+-----------------------------------------------------
+Grammar is not LL(*): it is left-recursive!
+-----------------------------------------------------
+
+In the future this message will give more information about which rule(s)
+were left-recursive.  For the moment you have to figure this out yourself.
+
+Eliminating left-recursion is not difficult.  The most common reason for
+writing left-recursion is to express some kind of list:
+
+-----------------------------------------------------
+list -> list "," "item" | "item";
+-----------------------------------------------------
+
+The way to fix this is to express the list using repetition operators instead
+of left-recursion.
+
+-----------------------------------------------------
+list -> "item" *(,);
+-----------------------------------------------------
+
+Ambiguity
+^^^^^^^^^
+
+The earlier section on <<X3, ambiguity resolution>> discussed ambiguity some.
+A grammar is 'ambiguous' if there is input text that could be interpreted more
+than one way according to the grammar.  Examples are:
+
+-----------------------------------------------------
+s -> "X" | "X";    // Does a single X match the first or the second component?
+s -> "X"? "X"?;    // Does a single X match the first or the second component?
+
+// When X is matched, have we gone a -> b -> c, or just a -> c?
+a -> b | c;
+b -> c;
+c -> "X";
+-----------------------------------------------------
+
+In these cases, Gazelle knows that the grammar is ambiguous and can tell
+you so in the error message:
+
+-----------------------------------------------------
+Ambiguous grammar for state starting in rule s, paths={{"term", "X"}} AND {{"term", "X"}}
+-----------------------------------------------------
+
+This is telling you simply that in matching a single terminal "X" Gazelle was
+able to take two different paths through the grammar and end up in the same
+place (the definition of an ambiguity).  Here is the error message from the
+last example above of three rules:
+
+-----------------------------------------------------
+Ambiguous grammar for state starting in rule a,
+paths={{"enter", "b"}, {"enter", "c"}, {"term", "X"}} AND {{"enter", "c"}, {"term", "X"}}
+-----------------------------------------------------
+
+As you can see, Gazelle saw that it could either enter `b` and then `c` or just
+enter `c`.
+
+To fix problems of ambiguity, you need to rewrite the grammar such that
+the given input text cannot be interpreted in more than one way.  Another option
+is to use the <<X3, ambiguity resolution operators>>.
+
+Note that while Gazelle can detect some cases where the grammar is ambiguous
+(such as the above examples), in other cases it may only detect that the grammar
+is not LL(*) but not realize that this is because of an ambiguity.  This is
+the case in the if/then/else example.
+
+Rule has no non-recursive alternative
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Every rule must have at least one non-recursive alternative.  For example
+this rule is invalid, because it can never stop recursing:
+
+-----------------------------------------------------
+s -> "X" s;
+-----------------------------------------------------
+
+Gazelle complains with this error message:
+
+-----------------------------------------------------
+Invalid grammar: rule s had no non-recursive alternative
+-----------------------------------------------------
+
+The solution is simple: every rule must have one alternative that stops
+recursing.  For example, you can fix the above rule like so:
+
+-----------------------------------------------------
+s -> "X" s?;
+-----------------------------------------------------
+
+Like left-recursion, two or more rules can work together to create this
+error:
+
+-----------------------------------------------------
+a -> "X" b;
+b -> "Y" a;
+-----------------------------------------------------
+
+Grammar is not LL(*)
+^^^^^^^^^^^^^^^^^^^^
+
+These can be the trickiest errors to solve -- more information about solving
+them will be in future versions of the manual.
 
 
 The C Runtime
