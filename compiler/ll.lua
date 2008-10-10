@@ -228,6 +228,14 @@ function Path:new(rtn_state, predicted_edge, predicted_dest_state)
   return obj
 end
 
+function Path:get_abbreviated_history()
+  local abbrev = {}
+  for hist in each(self.history) do
+    table.insert(abbrev, {hist[1], hist[2]})
+  end
+  return abbrev
+end
+
 function Path:enter_rule(rtn, return_to_state, priorities)
   local new_path = self:dup()
   new_path.current_state = rtn.start
@@ -618,9 +626,20 @@ function check_for_ambiguity(gla_state)
 
       for _, same_stack_paths in pairs(presumed_stacks) do
         if same_stack_paths:count() > 1 then
-          local err = "Ambiguous grammar for paths: "
+          local path
+          for p in each(same_stack_paths) do
+            path = p
+          end
+          local err = "Ambiguous grammar for state starting in rule " ..
+                      path.original_state.rtn.name .. ", paths="
+          local first = true
           for path in each(same_stack_paths) do
-            err = err .. serialize(path.history) .. " AND "
+            if first then
+              first = false
+            else
+              err = err .. " AND "
+            end
+            err = err .. serialize(path:get_abbreviated_history())
           end
           error(err)
         end
