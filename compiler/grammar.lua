@@ -58,6 +58,18 @@ function Grammar:add_terminal(name, intfa)
   self.terminals[name] = intfa
 end
 
+function Grammar:check_defined()
+  for name, rtn in each(self.rtns) do
+    for rtn_state in each(rtn:states()) do
+      for edge_val in rtn_state:transitions() do
+        if fa.is_nonterm(edge_val) and not self.rtns:contains(edge_val.name) then
+          error(string.format("Rule '%s' was referred to but never defined.", edge_val.name))
+        end
+      end
+    end
+  end
+end
+
 function Grammar:get_rtn_states_needing_intfa()
   local states = Set:new()
   for name, rtn in each(self.rtns) do

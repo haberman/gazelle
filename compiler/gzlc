@@ -141,6 +141,7 @@ grm_str = input_file:read("*a")
 
 print_verbose("Parsing grammar...")
 grammar = parse_grammar(CharStream:new(grm_str))
+grammar:check_defined()
 
 -- assign priorities to RTN transitions
 print_verbose("Assigning RTN transition priorities...")

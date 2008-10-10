@@ -294,6 +294,10 @@ OrderedMap = {name="OrderedMap"}
     return self.key_offsets[elem] - 1
   end
 
+  function OrderedMap:contains(elem)
+    return self.key_offsets[elem] ~= nil
+  end
+
   function OrderedMap:count()
     return #self.elements
   end
