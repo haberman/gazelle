@@ -4,14 +4,36 @@ Joshua Haberman <joshua@reverberate.org>
 v0.3, October 2008
 :toc:
 
-Gazelle is a system for parsing context-free grammars.  It takes inspiration
-from parser generator tools like Yacc/Bison and ANTLR, but makes several
-design decisions that set it apart -- namely, the focus on making grammars
-reusable and making them language-agnostic.
+Gazelle is a system for parsing formal languages.  A formal language is any
+language with formally-specified, non-ambiguous syntax.  This includes but
+is not limited to:
 
-Once a grammar is written for a language, it should be possible to use it
-for anything from a compiler to the syntax highlighting component of a text
-editor.  That is Gazelle's single most fundamental design criterion.
+* programming languages (C, C++, Java, etc.)
+* data languages (XML, JSON, YAML, etc.)
+* text-based protocols (HTTP, SMTP, IMAP, etc.)
+* configuration files
+* logfiles
+
+Gazelle defines a grammar language that is intended to give you enough tools to
+parse real-world languages and all of their idiosynchracies, while still being
+efficient enough to use in time-sensitive and/or memory-constrained situations.
+Gazelle takes a multi-paradigm approach.  While Gazelle is based around
+context-free grammars, it also supports:
+
+* repetition operators like `?` (optional), `*` (zero or more), and `+`
+  (one or more).
+* ambiguity-resolution operators like `/` (prioritized choice, as in
+  Parsing Expression Grammars) and greedy/non-greedy repetition.
+* '(planned)' operator-precedence parsing, so that you can define infix
+  expressions in terms of their operators, precedences, and associativity.
+* '(planned)' an imperative language (Lua) to use as an "escape hatch" when
+  none of the other formalisms address a language's idiosynchracy.
+
+Gazelle also puts a primary focus on making its grammars reusable.  Once a
+grammar is written for a language, it should be possible to use it unmodified,
+from any host language that Gazelle supports, for anything from a compiler to
+the syntax highlighting component of a text editor.  That is Gazelle's single
+most fundamental design criterion.
 
 An Introductory Tour
 --------------------
@@ -25,7 +47,7 @@ Hello, World
 
 For our "Hello, World" example, we'll write a grammar for a language that
 is simply an integer surrounded by an arbitrary number of balanced parentheses.
-To begin, use a text editor to write this grammar to +hello.gzl+.
+To begin, use a text editor to write this grammar to `hello.gzl`.
 
 ------------------------------------------------
 hello -> "(" hello ")" | .digits=/[0-9]+/;
@@ -33,7 +55,7 @@ hello -> "(" hello ")" | .digits=/[0-9]+/;
 
 This text is a complete Gazelle grammar.  It defines a single rule called "hello",
 which expands to either another (recursive) hello surrounded by parentheses, or
-a string of one or more numeric digits (and this term is named "digits").
+a string of one or more numeric digits (and this terminal is named "digits").
 
 This language will match any of the following inputs:
 
@@ -91,7 +113,7 @@ $
 ------------------------------------------------
 
 You won't see any output -- that means that the grammar was compiled
-successfully.  Just like +gcc+, +gzlc+ is silent when things succeed.  The
+successfully.  Just like `gcc`, `gzlc` is silent when things succeed.  The
 default output filename is the input filename with 'gzl' replaced with 'gzc'.
 
 ------------------------------------------------
@@ -100,7 +122,7 @@ Tallis:gazelle joshua$ ls -l hello*
 -rw-r--r--  1 joshua  joshua   43 Sep 30 21:11 hello.gzl
 ------------------------------------------------
 
-If you want to see a bit more verbose output, run +gzlc+ with +-v+.
+If you want to see a bit more verbose output, run `gzlc` with `-v`.
 
 ------------------------------------------------
 $ ./compiler/gzlc -v hello.gzl
@@ -121,7 +143,7 @@ Writing 1 RTNs...
 ------------------------------------------------
 
 Now, the magic moment where we do our first actual parsing.  We'll write some
-valid input text for this language, then use +gzlparse+ to actually parse it.
+valid input text for this language, then use `gzlparse` to actually parse it.
 
 ------------------------------------------------
 $ echo -n '((((500))))' > hello_text
@@ -142,7 +164,7 @@ $
 
 Again, by default Gazelle doesn't print any output when things were successful.
 If there had been a parse error, Gazelle would have printed an error and exited.
-If you want to see more output, the flags +--dump-json+ and +--dump-total+ will
+If you want to see more output, the flags `--dump-json` and `--dump-total` will
 print a parse tree in JSON format and a total byte count, respectively.
 
 ------------------------------------------------
@@ -172,7 +194,7 @@ $ ./utilities/gzlparse --dump-json --dump-total hello.gzc hello_text
 $
 ------------------------------------------------
 
-The next thing you will want to do is use +gzlc+ to produce an HTML dump of
+The next thing you will want to do is use `gzlc` to produce an HTML dump of
 the grammar as the compiler sees it.  This is an invaluable way to check
 and be sure that the compiler is seeing things the way you meant it to.
 If not, you might have misspecified the grammar, or you may have found a
@@ -185,10 +207,10 @@ installed, this will also be used to create thumbnails.
 $ ./compiler/gzlc -d hello.gzl
 ------------------------------------------------
 
-Now open +html/index.html+ in a web browser to view the HTML dump.  You will
+Now open `html/index.html` in a web browser to view the HTML dump.  You will
 see an illustration of the "hello" rule, and you should see that it corresponds
 to your intuitive understanding of this rule.  There are two paths through the
-rule -- either +"(", hello, ")"+ or +digits+.
+rule -- either `"(", hello, ")"` or `digits`.
 
 You will also see the state machine that does the lexing: it recognizes three
 different tokens: a left parenthesis, a right parenthesis, and one called
@@ -224,22 +246,11 @@ csv_value -> .number=/\d+/ | '"' string_fragment* '"';
 string_fragment -> .chars=/[^\\"]*/ | .escaped_char=/\\./;
 ------------------------------------------------
 
-If you compile this grammar with +gzlc -d+ and view the HTML output, you will
+If you compile this grammar with `gzlc -d` and view the HTML output, you will
 see that Gazelle has generated two different IntFAs (DFAs used by the lexer) --
 one that is used inside strings that one that is used the rest of the time.
 Inside a string the text "42" will be lexed as the token "chars", but outside
 a string it will be lexed as the token "number."
-
-Caveats
-~~~~~~~
-
-Gazelle has come a long way, but it still has a long way to go.  The biggest
-outstanding issues at this point are:
-
-* There is currently no way to ignore whitespace.  This is my top priority
-  and will be addressed in the next version.
-* Gazelle's error messages are quite rough around the edges.  This will
-  improve as well.
 
 Where to go from here
 ~~~~~~~~~~~~~~~~~~~~~
@@ -253,18 +264,11 @@ but for the moment please bear with me!
 
 I hope you enjoy Gazelle!
 
-
 Writing Grammars for Gazelle
 ----------------------------
 
-Gazelle has been designed to make writing grammars as easy as possible.
-Whether you are working from a published language specification or
-designing your own language, the Gazelle grammar format is designed to
-let you write grammars in the way you think about them.
-
 This chapter focuses on the syntax of Gazelle grammars, and the considerations
 of making your grammar easily parseable.
-
 
 [[X1]]
 Rules
@@ -278,10 +282,10 @@ example that describes an assignment statement.
 assign -> ident "=" expr;
 ------------------------------------------------
 
-This declares that an assignment statement is an identifier
-followed by the string ``='' followed by an expression.  We assume here
-that ``ident'' and ``expr'' are defined elsewhere in the
-grammar.
+This declares that an assignment statement is an identifier followed by the
+string ``='' followed by an expression.  We say that `assign` is the rule's
+'name'; `ident`, `"="`, and `expr` are its 'components'.  We assume here that
+``ident'' and ``expr'' are defined elsewhere in the grammar.
 
 For every rule you write, Gazelle builds a graph that describes the
 possible paths that the input can take through this rule.  Since this
@@ -300,7 +304,7 @@ Alternation
 Often you will have a rule that can be expanded in more than one way.
 For example, you might have a boolean expression that can be either ``true'' or
 ``false.''  You can specify alternation to Gazelle with the vertical
-bar (+|+).
+bar (`|`).
 
 ------------------------------------------------
 boolexpr -> "true" | "false";
@@ -342,33 +346,33 @@ expressed as recursion), but using it can make grammars easier to
 write, understand, and ultimately parse.
 
 Gazelle offers these repetition modifiers; place them after the
-term you want to modify.
+component you want to modify.
 
-+?+::
-The +?+ modifier specifies 0 or 1 occurrences of the previous term.
-It corresponds to square brackets (+[]+) in EBNF.
+`?`::
+The `?` modifier specifies 0 or 1 occurrences of the previous component.
+It corresponds to square brackets (`[]`) in EBNF.
 
-+*+::
-The +*+ modifier specifies 0 or more occurrences of the previous term.
-It corresponds to curly brackets (+{}+) in EBNF.
+`*`::
+The `*` modifier specifies 0 or more occurrences of the previous component.
+It corresponds to curly brackets (`{}`) in EBNF.
 
-+++::
-The +++ modifier specifies 1 or more occurrences of the previous term.
+`+`::
+The `+` modifier specifies 1 or more occurrences of the previous component.
 
 `*(sep)`::
 The `\*(sep)` modifier specifies 0 or more occurrences of the previous
-term, where each occurrence is separated by +sep+.  It is a more
-straightforward way of writing `(term (sep term)*)?`.  +sep+ can be any
-valid term (or in unusual cases, expression of terms) that can
-appear on a right-hand-side of a rule.  
+component, where each occurrence is separated by `sep`.  It is a more
+straightforward way of writing `(component (sep component)*)?`.  `sep` can be any
+valid component (or in unusual cases, expression of components) that can
+appear on a right-hand-side of a rule.
 
 
 `+(sep)`::
 The `\+(sep)` modifier specifies 1 or more occurrences of the previous
-term, where each occurrence is separated by `sep`.  It is a more
-straightforward way of writing `term (sep term)*`.  `sep` can be any
-valid term (or in unusual cases, expression of terms) that can
-appear on a right-hand-side of a rule.
+component, where each occurrence is separated by `sep`.  It is a more
+straightforward way of writing `component (sep component)*`.  `sep` can be any
+valid component (or in unusual cases, expression of components) that can appear
+on a right-hand-side of a rule.
 
 Here is an example that uses repetition; it is the definition of an
 object in JSON:
@@ -392,15 +396,15 @@ parse tree apart much more sane.  If you are tempted to nest
 repetitions, make the innermost repetition into its own rule.
 
 
-Terms
-~~~~~
+Components
+~~~~~~~~~~
 
-So far we have neglected to describe in detail what can appear
-on the right-hand-side of a rule.  In the previous examples we
-have seen strings and nonterminals -- in this section we flesh
-out exactly what can appear there.
+So far we have neglected to describe in detail what can appear as a
+component on the right-hand-side of a rule.  In the previous examples we
+have seen strings and nonterminals -- in this section we flesh out
+exactly what can appear there.
 
-There are four fundamental kinds of terms that can appear on a
+There are four fundamental kinds of components that can appear on a
 right-hand-side.
 
 nonterminals::
@@ -413,30 +417,53 @@ strings::
 A literal string that we expect to see at this point in the input.
 
 regular expressions::
-A _pattern_ of characters we expect to see at this point in the input.
+A 'pattern' of characters we expect to see at this point in the input.
 
 named regular expressions::
 You can name a regex, and later refer to that regex by name.
 
 Strings and regular expressions are referred to collectively as
-``tokens,''  because they represent actual strings of the input text.
-Gazelle can take the tokens defined in the grammar and use them
-to create a lexer-like component of the parser automatically.  Unlike a
-separated lexer however, the lexer component of a Gazelle parser knows
-exactly what tokens it is expecting.  Using this information, a
-Gazelle parser could, for example, parse a language that allowed
-keywords as variable names, as long as the context was enough to
-disambiguate the two.
+``tokens''  or ``nonterminals'' because they represent actual strings of
+the input text.  Gazelle can take the tokens defined in the grammar and
+use them to create a lexer-like component of the parser automatically.
 
-A more practical application of this mechanism is the ability to
-nest languages easily.  For example, many web templating systems
-nest a language like Perl, PHP, or Ruby inside of regular HTML,
-by using special tags to delimit the two languages.  In this
-situation, Gazelle automatically knows when to switch to the lexer
-that parses the nested language's tokens.  In many cases the same could be
-accomplished with a traditional lexer by using lexer states, but
-doing so would require far more manual effort; Gazelle can do
-this automatically.
+Component Names
+^^^^^^^^^^^^^^^
+
+All rule components must have a name that is unique within that rule.
+Names can be specified explicitly with the syntax:
+
+----------------------------------------------
+rule -> .name=other_rule;
+rule -> .name="string";
+rule -> .name=/regex/;
+rule -> .name = /regex/;  // the whitespace is insignificant.
+----------------------------------------------
+
+The component names are important when it comes to pulling apart the
+resulting parse tree, which is why every component must have one.
+Strings, rules, and named regular expressions have default names:
+
+----------------------------------------------
+rule -> other_rule;        // name defaults to "other_rule"
+rule -> "string";          // name defaults to "string"
+rule -> .name=/regex/;     // no default!  name must be specified!
+----------------------------------------------
+
+The last case is important: regular expressions must have explicit
+names.  This is for two reasons: one is that we don't have a good way to
+generate a reasonable default name for a regular expression.  The second
+is that if regular expressions could be specified without an explicit
+name, Gazelle's grammar would be ambiguous:
+
+----------------------------------------------
+s -> a / b;
+a -> c / d;
+----------------------------------------------
+
+Are these two rules, or one rule that has a long, multi-line regex in
+it?  To avoid this ambiguity, every regular expression inside a rule
+must have an explicit name.
 
 
 Strings
@@ -453,25 +480,25 @@ Regular Expressions
 ^^^^^^^^^^^^^^^^^^^
 
 Regular expressions (regexes for short) describe patterns of text.  Users of
-languages like Perl, Python, or Ruby, or of tools like +grep+, will find the
+languages like Perl, Python, or Ruby, or of tools like `grep`, will find the
 regular expressions in Gazelle very familiar.  The main difference that you
 will notice is that whitespace in Gazelle regular expressions is insignificant
-(as you would get in Perl with +/x+).
+(as you would get in Perl with `/x`).
 
-Regular expressions in Gazelle are delimited with +/+ (forward slash):
+Regular expressions in Gazelle are delimited with `/` (forward slash):
 
 ----------------------------------------------
-name: /<body of regex>/
+/<body of regex>/
 ----------------------------------------------
 
 In a regular expression, characters match themselves with the following
 exceptions:
 
-+.+::
+`.`::
 A single dot matches any character (including a newline -- as if doing
 a multiline match in Perl, Python, or Ruby).
 
-+\+::
+`\`::
 A backslash always escapes the next character, causing it to lose any
 special meaning it would otherwise have.
 
@@ -480,19 +507,19 @@ To increase readability, whitespace inside regular expressions is
 insignificant .  You are encouraged to use whitespace
 to make your regular expressions more readable.
 
-+[]+::
+`[]`::
 A left square bracket begins a character class, and a right square
 bracket ends it.
 
-+{}+::
+`{}`::
 Curly brackets allow you to specify repetition with limits.  The high
 and low limits are separated by a comma, and either limit can be
 omitted to mean 0 and infinite, respectively.
 
-+?+::
+`?`::
 A question mark specifies 0 or 1 repetition.
 
-+*+::
+`*`::
 An asterisk specifies 0 or more repetition.
 
 `+`::
@@ -506,17 +533,17 @@ Named Regular Expressions
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A regular expression can be named and referred to later by using the
-_named regular expression_ syntax.
+'named regular expression' syntax.
 
 -------------------------------------------
-term: /<some regex>/;
+regex: /<some regex>/;
 -------------------------------------------
 
 This appears to be almost identical to declaring a rule with a single
 regex on the right-hand-side, like so:
 
 -------------------------------------------
-nonterm -> /<some regex>/;
+rule -> .regex=/<some regex>/;
 -------------------------------------------
 
 The primary difference is that the named regular expression syntax avoids creating a
@@ -532,24 +559,131 @@ Definitions of nonterminals and tokens will be the bulk of most syntax
 files; however there are several commands that give Gazelle important
 information about the grammar that isn't expressed in rules.
 
-+@start+
+`@start`
 ^^^^^^^^
 
-The +@start+ command tells Gazelle what the top-level nonterminal for a grammar
-is.  If +@start+ is not specified, Gazelle assumes that the first nonterminal
+The `@start` command tells Gazelle what the top-level nonterminal for a grammar
+is.  If `@start` is not specified, Gazelle assumes that the first nonterminal
 in the grammar is the start symbol.  The syntax of this command is simply:
 
 -------------------------------------------
 @start nonterm;
 -------------------------------------------
 
-+@start+ is not required, and may not appear more than once per grammar.
+`@start` is not required, and may not appear more than once per grammar.
+
+Ambiguity Resolution
+~~~~~~~~~~~~~~~~~~~~
+
+Some grammars are 'ambiguous', meaning that some input strings could be
+parsed in more than one way.  The most common example of this is the
+classic if/then/else case:
+
+-------------------------------------------
+stmt -> "if" expr "then" stmt ("else" stmt)? | expr;
+expr -> "true" | "false";
+-------------------------------------------
+
+If you try to compile this grammar, Gazelle will give you this error
+message:
+
+-------------------------------------------
+Gazelle cannot handle this grammar.
+It is not Strong-LL or full-LL (and may be ambiguous, but we don't know).
+-------------------------------------------
+
+Unfortunately, Gazelle cannot tell you with certainty that the problem
+is an ambiguous grammar -- that problem is undecidable (impossible to
+compute).  In the future a more detailed error message will make clear
+the root of the problem, which is that Gazelle cannot decide whether to
+match an "else" or not with input text like:
+
+-------------------------------------------
+if true then
+  if true then
+    true
+else false
+-------------------------------------------
+
+As the grammar is specified above, the "else" in this example could go
+with either if.  This ambiguity exists in many language's grammars, but
+is explicitly resolved by saying "an `else` goes with the most recent
+`if`".  You can express this ambiguity resolution directly to Gazelle by
+using its ambiguity resolution operators.
+
+`/`::
+A slash indicates 'prioritized choice', as in Parsing Expression
+Grammars (PEGs).  Use it in place of `|` (non-prioritized choice) when
+you want to indicate that the first alternative should be used in cases
+where both alternatives match.
+
+`+`::
+Greedy repetition: add to another repetition operator (`+`, `*`, or `?`)
+to make the repetition prefer to keep matching.
+
+`-`::
+Non-greedy repetition: add to another repetition operator (`+`, `*`, or `?`)
+to make the repetition prefer to stop matching.
+
+Here are examples of these operators in use:
+
+-------------------------------------------
+// Match "else" to its most recent "if"
+stmt -> "if" expr "then" stmt ("else" stmt)?+ | expr;
+
+// "X" "Y" matches the first alternative, but with more than one "X"
+// match the second alternative instead.
+example -> "X" "Y" / "X"+ "Y";
+-------------------------------------------
+
+Gazelle can only support some resolutions of ambiguity.  For example, we
+can't use Gazelle to resolve the if/then/else problem the other way:
+
+-------------------------------------------
+// WON'T WORK.  Throws the error below:
+stmt -> "if" expr "then" stmt ("else" stmt)?- | expr;
+expr -> "true" | "false";
+
+Gazelle cannot support this resolution of the ambiguity in rule stmt.
+-------------------------------------------
+
+Because of Gazelle's overriding goal to ensure that the resulting parser
+is both efficient and as "on-line" as possible, Gazelle can't support
+all grammars or ambiguity resolutions.  If you wanted to resolve the
+"else" problem the opposite way, you would need to write custom code
+that makes the decision of whether or not to match the "else", because
+the logic to do so is nontrivial.
+
+Unfortunately, the same is true if you try to resolve if/then/else with
+prioritized choice:
+
+-------------------------------------------
+// WON'T WORK.  Throws the error below:
+stmt -> "if" expr "then" stmt "else" stmt / "if" expr "then" stmt | expr;
+expr -> "true" | "false";
+
+Language is probably not LL(k) or LL(*): when calculating lookahead for
+a state in stmt, one lookahead language was nonregular, others were not
+all fixed
+-------------------------------------------
+
+The problem in this case is that you're trying to make Gazelle figure
+out before it's parsed an "if" whether or not it will have an "else",
+but that requires unbounded lookahead that has to count (it has to match
+the "ifs" that it sees with "elses").
+
+The moral of the story is this: in most cases you should avoid
+ambiguities in your grammar.  In some cases you can't avoid them and
+ambiguity resolution will be a satisfactory solution (if/then/else is
+the most likely case for this).  In other cases ambiguity resolution
+won't suffice and you'll have to get down and dirty with some imperative
+Lua code.
 
 Regular Expressions vs. Repetition Within Rules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You will notice that regular expressions and rules both give you the
-+?+, +*+, and `+` operators.  Given this, there are are many situations where you
+`?`, `*`, and `+` operators.  Given this, there are are many situations where you
 will find that you can use either regular expressions or rules.  For example,
 consider this regular expression that describes a number:
 
@@ -575,33 +709,37 @@ Not always.  Consider this example of a quoted string that contain
 backslash escapes:
 
 -----------------------------------------------------
-string   -> '"' str_frag* '"';
-str_frag -> /[^\\"]+/ | /\\./
+"Hello, world!\n\tThis string will be parsed by Gazelle!"
 -----------------------------------------------------
 
-We could rewrite this using a single regular expression:
+We could write a Gazelle grammar to parse this using a single regular
+expression.
 
 -----------------------------------------------------
-string: /" ([^\\"]|\\.)* "/
+string -> .string=/" ([^\\"]|\\.)* "/;
 -----------------------------------------------------
 
 However, if we write it this way, we lose the information about where
-each backslash escape was in the string, because capture groups in a regular
-expression cannot keep track of multiple occurrences.  We would have
-to re-parse the string after the fact to find the escape sequences.
-In this case, writing the pattern using rules is superior, because
-it preserves all the important information about where each sequence
-was seen.
+each backslash escape was in the string, because regular expressions in
+Gazelle do not have capture groups.  In Gazelle, you find boundaries for
+subexpressions by making those subexpressions their own components.  In
+this case, writing the pattern using rules is superior, because it
+preserves all the important information about where each sequence was
+seen.
+
+-----------------------------------------------------
+// Written this way, each str_frag is either a backslash sequence
+// (like \n) or a string of characters.  You don't have to re-parse
+// the str_frag's later to find the backslash sequences.
+string   -> '"' str_frag* '"';
+str_frag -> /[^\\"]+/ | /\\./;
+-----------------------------------------------------
 
 So what general rule can we extrapolate from this?  *In general, you
-should prefer using a regular expression unless it will match a string
-that can contain an arbitrary number of points of interest.*
-
-In the number example, there were two fixed points of interest: the optional
-negative sign and the string of numbers.  In the string example, the string
-could contain an arbitrary number of escape sequences inside it.  If you stick
-to this guideline, you can't go far wrong.
-
+should only use regular expressions to match strings that don't have
+any logical sub-parts.*  If you find that your regular expression has
+sub-parts that you might want to pull apart later, make each sub-part
+into its own component.
 
 Dealing with Conflicts and Ambiguity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -650,7 +788,7 @@ This section will document the API for the parsing runtime, and explained
 how it can be used for event-based parsing, syntax trees, ASTs, and
 whitespace-preserving transformations.  It will also discuss best
 practices for wrapping the C runtime in other languages.  It will
-_not_ offer documentation about each language's wrappers -- I think
+'not' offer documentation about each language's wrappers -- I think
 that belongs in separate manuals, but I may change my mind about that.
 
 
@@ -723,7 +861,7 @@ The LL(k) lookahead information for any nontrivial RTN state is encoded
 in a DFA known as a GLA.  The final states of GLAs indicate what RTN
 transition should be taken.  We choose this approach rather than using
 a table because lookup information is typically extremely sparse, not
-even remotely approaching its theoretical +O(2^k)+ upper limit.
+even remotely approaching its theoretical `O(2^k)` upper limit.
 
 Character-level Integer DFA (IntFA)::
 Serving the role usually played by separate lexers, IntFAs transition
@@ -778,14 +916,14 @@ You should find that you can look at the graph for a rule and intuitively
 understand what it does.  In this case, you should be able to easily see
 that a `prim` starts with either a number (the regular expression `/0-9+/`)
 or a left parenthesis.  If it was a number, the rule is done; if it was
-a left parenthesis, we expect an +expr+ followed by a right parenthesis.
+a left parenthesis, we expect an `expr` followed by a right parenthesis.
 You should be able to understand the graph for any rule you write in this
 way.
 
 Notice that there are two kinds of transitions in this graph: one that matches
-a string or pattern of strings (`/0-9+/`, +"("+ and +")"+ above) and one that
-refers to another rule (+expr+). For the grammar to be complete, let us also
-define +expr+ and a companion rule +factor+, to make a small but complete set
+a string or pattern of strings (`/0-9+/`, `"("` and `")"` above) and one that
+refers to another rule (`expr`). For the grammar to be complete, let us also
+define `expr` and a companion rule `factor`, to make a small but complete set
 of rules:
 
 ------------------------------------------------
@@ -794,13 +932,13 @@ factor -> prim +("*");
 prim   -> /0-9+/ | "(" expr ")";
 ------------------------------------------------
 
-Recall that the +++ repetition operator can include a separator as seen here,
-so +expr+ is essentially equivalent to `expr -> factor ("+" factor) *`.
+Recall that the `+` repetition operator can include a separator as seen here,
+so `expr` is essentially equivalent to `expr -> factor ("+" factor) *`.
 You wouldn't actually write the grammar this way in Gazelle because expression
 parsing provides a more natural way of writing the same thing, but this example
 will serve well to illustrate the concepts.
 
-Because +expr+ and +factor+ have repetition in them, the graphs that Gazelle
+Because `expr` and `factor` have repetition in them, the graphs that Gazelle
 builds for them have cycles in them, as you can see:
 
 ["expr.png", "graph 2: expr -> factor +(\"+\");"]
@@ -817,7 +955,7 @@ In the field of parsing, this set of graphs (one for each rule in the grammar)
 is known as a "Recursive Transition Network."  We overload this terminology
 slightly by also referring to a single graph in this set as an RTN.  It's
 recursive because every time we take a transition that refers to another rule,
-we push our state within the _current_ rule onto a stack.  When the sub-rule
+we push our state within the 'current' rule onto a stack.  When the sub-rule
 "returns," we pop our saved state off the stack.  This concept will become more
 clear in the illustration below.
 
@@ -849,9 +987,9 @@ gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 word -> numbers | letters;
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If we are in the start state for +word+ and we see a "5" in the input, what
-transition should we take?  You might guess that we should take +numbers+,
-but that's entirely dependent on the definition of +numbers+ and +letters+.
+If we are in the start state for `word` and we see a "5" in the input, what
+transition should we take?  You might guess that we should take `numbers`,
+but that's entirely dependent on the definition of `numbers` and `letters`.
 We need a way to "see into" those definitions, so we know what transition
 to take based on what we see in the input.
 
@@ -863,10 +1001,10 @@ gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 sentence -> word*;
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If we are in the start state for +sentence+, should we return from the
+If we are in the start state for `sentence`, should we return from the
 current rule since we are in a final state, or should we stay and match
 more words?  To answer this question we need not only the ability to "see
-into" +word+, but also the ability to "see up from" whatever set of
+into" `word`, but also the ability to "see up from" whatever set of
 rules we are currently recursed into.
 
 This set of problems turns out to be somewhat difficult to solve -- in fact, it
@@ -876,13 +1014,13 @@ enough information at this point in the text to possibly know what transition
 to take.  We always have to look at the next token of input to decide, but
 in some cases we might have to look ahead 2, 3, or even more tokens before we
 have enough information to make a decision.  It is even possible to write
-grammars where the token that tells us the difference is _arbitrarily_ far
-away.  These classes of grammars are known as +LL(k)+ if we have to look
-+k+ tokens ahead to make a decision, or +LL(*)+ if that decision can be
+grammars where the token that tells us the difference is 'arbitrarily' far
+away.  These classes of grammars are known as `LL(k)` if we have to look
+`k` tokens ahead to make a decision, or `LL(*)` if that decision can be
 arbitrarily far away.
 
 [NOTE]
-This description of +LL(k)+ only tells part of the story.  LL algorithms
+This description of `LL(k)` only tells part of the story.  LL algorithms
 are further divided into "full" LL, Strong-LL, and Simple-LL.  Nearly
 all practical "LL" algorithms are actually Strong-LL, and this is also
 the case for Gazelle.  Though Strong-LL parsers can only parse a subset
@@ -895,11 +1033,11 @@ Techniques: A Practical Guide] by Grune and Jacobs.
 So how do we decide what transition to take in the RTN?  The answer is that
 Gazelle analyzes the grammar at compile time, and figures out for each RTN
 state what tokens we expect to see here, and what RTN transition each series of
-tokens implies.  This information is encoded into a DFA known as a _GLA_ -- a
+tokens implies.  This information is encoded into a DFA known as a 'GLA' -- a
 Grammar Lookahead Automaton.  If after analyzing the grammar Gazelle determines
 that it is possible to build a GLA for every RTN state, it builds them and
-encodes it into the byte-code.  If it is _not_ possible to build the GLA (which
-implies that that the grammar is not +LL(k)+), Gazelle interrupts the
+encodes it into the byte-code.  If it is 'not' possible to build the GLA (which
+implies that that the grammar is not `LL(k)`), Gazelle interrupts the
 compilation with an error.
 
 When Gazelle is actually parsing, it stops at every RTN state and tries to
@@ -943,26 +1081,26 @@ x = while;
 
 A traditional C lexer in this case will return the tokens:
 
-* +IDENTIFIER+ (x)
-* +EQUALS+
-* +WHILE+
-* +SEMICOLON+
+* `IDENTIFIER` (x)
+* `EQUALS`
+* `WHILE`
+* `SEMICOLON`
 
 It treats "while" as a keyword, even though it is in a context where
 "while" doesn't make sense.  Of course, this is required by the C standard,
 since keywords cannot be variable names, but suppose we were dealing with
 a language that did not have this restriction.  What do we do?  Our traditional
-lexer design is too weak to return the token +WHILE+ in contexts where it makes
-sense and an +IDENTIFIER+ named "while" in contexts where an identifier is
+lexer design is too weak to return the token `WHILE` in contexts where it makes
+sense and an `IDENTIFIER` named "while" in contexts where an identifier is
 expected.  Another strategy will be required, adding complexity to the parser.
 
 Gazelle, on the other hand, can handle this situation just fine, because
 parsing and lexing are combined.  The key is that every GLA state knows what
 tokens are valid at this point in the input, so it can choose an IntFA that
 only recognizes the valid tokens.  In the above example, when a Gazelle
-parser/lexer reached +while+ in the input, the current GLA state would select
-an IntFA that recognizes +IDENTIFIER+ tokens (because they make sense here) but
-not a +WHILE+ keyword token (because it does not make sense here).  Therefore
+parser/lexer reached `while` in the input, the current GLA state would select
+an IntFA that recognizes `IDENTIFIER` tokens (because they make sense here) but
+not a `WHILE` keyword token (because it does not make sense here).  Therefore
 languages that allow keywords as variables names are easily and naturally
 supported.
 
@@ -980,7 +1118,7 @@ Character decoding DFA
 
 There is one final detail that is not handled by any of the previous layers:
 where do the characters come from that are fed into the IntFAs?  In the case of
-ASCII or other single-byte encodings, the answer is simple: the bytes _are_ the
+ASCII or other single-byte encodings, the answer is simple: the bytes 'are' the
 characters.  However, more and more programming languages are moving towards
 allowing their source to be in encodings other than ASCII, most commonly
 Unicode.  We need a character decoding step to handle the intracacies of
