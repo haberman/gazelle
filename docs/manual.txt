@@ -741,8 +741,8 @@ any logical sub-parts.*  If you find that your regular expression has
 sub-parts that you might want to pull apart later, make each sub-part
 into its own component.
 
-Dealing with Non-LL(*) Grammars
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Dealing with Errors in your Grammars
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Gazelle uses an algorithm known as LL(*) for parsing.  The benefit of this
 algorithm is that it is very fast and uses very little memory.  The drawback
@@ -752,11 +752,11 @@ might require you to rearrange your grammar a bit.
 
 For anyone with unpleasant memories of trying to debug LALR(1) parsers like
 yacc or Bison, it bears mentioning that debugging Gazelle grammars should
-eventually be significantly easier than debugging Bison grammars.  The LL(*) grammar analysis
-that Gazelle performs is far more understandable than LALR tables.  However
-currently some of Gazelle's error messages do not give you the amount of information
-you really need to debug the problem.  This will improve in future versions of
-Gazelle.
+eventually be significantly easier than debugging Bison grammars.  The LL(*)
+grammar analysis that Gazelle performs is far easier for humans to understand
+than LALR tables.  However currently some of Gazelle's error messages do not
+give you the amount of information you really need to debug the problem.  This
+will improve in future versions of Gazelle.
 
 What follows is a list of errors your grammar can have, what they mean, and
 how to fix them.
@@ -906,35 +906,31 @@ that belongs in separate manuals, but I may change my mind about that.
 The Gazelle Algorithm
 ---------------------
 
-This section describes Gazelle's parsing algorithm.
-It will primarily be of interest to parsing aficionados, but may also
-provide insight to people who are trying to do tricky or advanced things
-with Gazelle.
+This section describes Gazelle's parsing algorithm.  Unlike LALR(1) tables with
+their reputation for being mysterious and hard to understand, the top-down
+algorithm that Gazelle uses should be easy for the average programmer to
+understand.  Gazelle users are encouraged to read this section to understand
+the way your grammars are analyzed and parsed.
 
-Gazelle's parsing algorithm stands on the shoulders of giants.  The field of
-Computer Science has seen decades of high-quality research in parsing, and
-the author has spent many months (and many trips to the library) working
-to understand the existing literature.  There are also many open source
-tools that have provided key insights into the practical applications of
-parsing theory.
+Gazelle's algorithm takes a great deal of inspiration from ANTLR, the LL(*)
+parser generator written by Terence Parr.  While Gazelle seeks to augment the
+theory that Terence developed, the foundations of Gazelle are strongly based in
+ANTLR's achievements.  Like ANTLR, Gazelle is a top-down parser that models its
+lookahead as possibly-cyclic state machines.  Gazelle's algorithm for
+generating this lookahead is based on ANTLR's algorithm.
 
-That said, the Gazelle algorithm combines some of these concepts in ways
-that have not been previously done, to the author's knowledge.
-Gazelle offers these key innovations over existing top-down parsing tools.
+Compared to ANTLR, Gazelle adds the following capabilities:
 
-* Gazelle combines parsing and lexing into a single unit: users of
-  Gazelle implement both lexing and parsing in a single, unified
-  grammar file.  This
-  provides significant benefits: grammars are easier to read and write,
-  it is easy to embed one language's grammar into another (for example, embedding
-  an imperative language into HTML, as the many templating engines do),
-  and it makes it possible to support context-sensitive lexing decisions,
-  like languages that allow keywords to be variable names.
-  This technique was debuted in Eelco Visser's 1997 paper
-  http://www.program-transformation.org/Transform/ScannerlessGeneralizedLRParsing[Scannerless Generalized-LR Parsing],
-  but has not, to the author's knowledge, been attempted in a top-down
-  parsing tool.
-* Gazelle supports operator-precedence expression parsing, which makes it
+* Gazelle can handle tail recursion when generating lookahead.  This allows
+  it to handle grammars that ANTLR currently cannot (though these grammars
+  are probably better expressed using explicit repetition than tail recursion).
+* Gazelle integrates the lexer more closely to the parsre than ANTLR does.
+  In Gazelle, the parser essentially calls into the lexer, which allows it
+  to pass on information about what tokens it is expecting to see.  This allows,
+  context-sensitive lexing, such as language that allow keywords as identifiers
+  or languages that embed other languages inside them (where the two languages
+  have different lexical vocabularies).
+* '(planned)' Gazelle will support operator-precedence expression parsing, which will make it
   much easier to describe infix operator expressions, especially if there
   are many levels of precedence.  It is already known (if not widely
   advertised) that it is possible to "sandwich" an operator precedence
@@ -943,24 +939,22 @@ Gazelle offers these key innovations over existing top-down parsing tools.
   version of GCC's C/C++ parser -- but this feature has not been offered
   (to the author's knowledge) in a top-down parsing tool.
 
+Compared to ANTLR, Gazelle does not yet support syntactic or semantic predicates,
+but these (or capabilities like them) are planned for the future.
 
 Overview
 ~~~~~~~~
 
-What follows is a high-level overview of Gazelle's algorithm that speaks
-using the language of the field.  A gentler explanation follows in the
-next section.
+Gazelle's algorithm is based around making each rule in a grammar into a
+http://en.wikipedia.org/wiki/Syntax_diagram[syntax diagram].  Diagrams of this
+sort are common for describing syntax in a way that is easy for humans to
+understand visually.  Here are some examples of such diagrams:
 
-Gazelle is a top-down parser that supports Strong-LL(k) lookahead for
-fixed k.  In the future this may be extended to LL(*) lookahead using
-ANTLR's algorithm (devised by Terence Parr) -- this would expand the
-set of grammars Gazelle can handle, but the parsing algorithm itself
-would remain the same.
+.JSON object from `json.org`
+====
+image::json_object.gif[JSON Object]
+====
 
-Gazelle parses using a stack of discrete finite automata (DFAs) that
-serve distinct purposes.  Four kinds of automata work together to do
-both lexing and parsing.  Starting from the top level and working down
-we have:
 
 Recursive Transition Network (RTN)::
 a DFA is built representing each grammar rule, and this DFA transitions
