@@ -1,5 +1,5 @@
 
-Gazelle 0.3, released September 30, 2008  ======================================
+Gazelle 0.3, released November 30, 2008  =======================================
 
   Overview: This release represents a lot of work on Gazelle's grammar analysis
   and lookahead generation.  What this means for users is that many many cases
