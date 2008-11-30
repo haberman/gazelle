@@ -924,7 +924,7 @@ Compared to ANTLR, Gazelle adds the following capabilities:
 * Gazelle can handle tail recursion when generating lookahead.  This allows
   it to handle grammars that ANTLR currently cannot (though these grammars
   are probably better expressed using explicit repetition than tail recursion).
-* Gazelle integrates the lexer more closely to the parsre than ANTLR does.
+* Gazelle integrates the lexer more closely to the parser than ANTLR does.
   In Gazelle, the parser essentially calls into the lexer, which allows it
   to pass on information about what tokens it is expecting to see.  This allows,
   context-sensitive lexing, such as language that allow keywords as identifiers
@@ -942,21 +942,19 @@ Compared to ANTLR, Gazelle adds the following capabilities:
 Compared to ANTLR, Gazelle does not yet support syntactic or semantic predicates,
 but these (or capabilities like them) are planned for the future.
 
-Overview
-~~~~~~~~
 
-Gazelle's algorithm is based around making each rule in a grammar into a
-http://en.wikipedia.org/wiki/Syntax_diagram[syntax diagram].  Diagrams of this
-sort are common for describing syntax in a way that is easy for humans to
-understand visually.  Here are some examples of such diagrams:
+High Level Overview
+~~~~~~~~~~~~~~~~~~~
 
-.JSON object from `json.org`
-====
-image::json_object.gif[JSON Object]
-====
+Gazelle's parsing algorithm boils down to nothing more than a stack of state
+machines.  Each byte of the input transtions these state machines one or more
+times, and the entire state of the parse can be represented by the stack of
+state machines that are currently active and which state each one is in.
 
+These are the four different kinds of state machines.  Each is explained in
+detail in the following sections:
 
-Recursive Transition Network (RTN)::
+Rule Graph or Recursive Transition Network (RTN)::
 a DFA is built representing each grammar rule, and this DFA transitions
 once for each token of input.  A runtime stack maintains the list of
 recursed nonterminals.
@@ -991,96 +989,84 @@ with a variety of strategies that let the grammar implementor "hook in"
 to the above process with imperative code.
 
 
-A Tour of the Parsing Stack
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This section provides a gentle tour of Gazelle's parsing stack.  It is
-intended that any programmer can follow it, even if you have no parsing
-experience.
+Rules and Rule Graphs
+~~~~~~~~~~~~~~~~~~~~~
 
-Gazelle parses using four layers of state machines, and each layer serves a
-distinct purpose.  While this may sound complicated at first, seeing each of
-the layers in action should convince you that this is a simple, natural, and
-easy-to-understand model.
+Gazelle's algorithm is based around making each rule in a grammar into a graph
+that resembles a http://en.wikipedia.org/wiki/Syntax_diagram[syntax diagram].
+Syntax diagrams are a common way to describe syntax in a way that is easy
+for humans to understand visually.  Here are some examples of such diagrams:
 
+.JSON object from `json.org`
+====
+image::json_object.gif[JSON Object]
+====
 
-Recursive Transition Network
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.UPDATE statement from the SQLite documentation
+====
+image::sqlite-update-stmt.gif[SQLite UPDATE]
+====
 
-We saw in the <<X1, Rules>> section of the manual that every time you write
-a rule, Gazelle creates a graph that describes the paths the parser can take
-through that rule.  Here is an example, describing a part of an arithmetic
-expression grammar using the rule `prim -> /0-9+/ | "("expr ")";`.
+Syntax diagrams like the ones above visually specify what syntax patterns are
+allowed by the language.  You read them by following the the lines from one
+grammar element to the next.  If there is a fork in the road you can take
+either path, since both options are valid according to the language.  Syntax
+diagrams are also known as "railroad diagrams" because they are like a network
+of railroad tracks that have switches at all the decision points.
 
-["prim.png", "graph 1: prim -> /0-9+/ | \"(\" expr \")\";"]
+Gazelle turns each rule into a similar kind of diagram, but Gazelle's diagrams
+are represented a little bit differently.  Here is Gazelle's rendering of the
+same JSON rule as the first example:
+
+["json.png", "Gazelle's graph of the JSON rule above"]
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-prim -> .number=/0-9+/ | "(" expr ")";
-gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-You should find that you can look at the graph for a rule and intuitively
-understand what it does.  In this case, you should be able to easily see
-that a `prim` starts with either a number (the regular expression `/0-9+/`)
-or a left parenthesis.  If it was a number, the rule is done; if it was
-a left parenthesis, we expect an `expr` followed by a right parenthesis.
-You should be able to understand the graph for any rule you write in this
-way.
-
-Notice that there are two kinds of transitions in this graph: one that matches
-a string or pattern of strings (`/0-9+/`, `"("` and `")"` above) and one that
-refers to another rule (`expr`). For the grammar to be complete, let us also
-define `expr` and a companion rule `factor`, to make a small but complete set
-of rules:
-
-------------------------------------------------
-expr   -> factor +("+");
-factor -> prim +("*");
-prim   -> /0-9+/ | "(" expr ")";
-------------------------------------------------
-
-Recall that the `+` repetition operator can include a separator as seen here,
-so `expr` is essentially equivalent to `expr -> factor ("+" factor) *`.
-You wouldn't actually write the grammar this way in Gazelle because expression
-parsing provides a more natural way of writing the same thing, but this example
-will serve well to illustrate the concepts.
-
-Because `expr` and `factor` have repetition in them, the graphs that Gazelle
-builds for them have cycles in them, as you can see:
-
-["expr.png", "graph 2: expr -> factor +(\"+\");"]
-gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-expr -> factor +("+");
+object -> "{" (string ":" value) *(,) "}";
 gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-["factor.png", "graph 3: factor -> prim +(\"*\");"]
-gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-factor -> prim +("*");
-gzl-rtn-graph~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Gazelle calls these "rule graphs" or RTNs (for "Recursive Transition Network").
+Rule graphs are state machines, and are one of the several kinds of state
+machines Gazelle uses to track its parsing state as a whole.  You can view
+the rule graphs for any Gazelle grammar by compiling the grammar with `gzlc -d`
+and viewing the HTML output.
 
-In the field of parsing, this set of graphs (one for each rule in the grammar)
-is known as a "Recursive Transition Network."  We overload this terminology
-slightly by also referring to a single graph in this set as an RTN.  It's
-recursive because every time we take a transition that refers to another rule,
-we push our state within the 'current' rule onto a stack.  When the sub-rule
-"returns," we pop our saved state off the stack.  This concept will become more
-clear in the illustration below.
+In rule graphs the grammar elements (like "string", "value," etc.) are on the
+edges instead of being the nodes.  Also, in rule graphs the lines (the graph
+edges) don't have decisions or "forks in the road" -- the decisions come from
+deciding what edge to take out of a state.  Finally, in a rule graph you reach
+the "end" of the rule by transitioning to a final state, which is drawn as a
+state with a double circle.  When the parser reaches this state, the rule it
+was parsing can be considered finished (but need not be -- final states can
+also have transitions out of them).
 
-Once we have the recursive transition network, we can use it to parse
-input text by starting in the "Start" state for the top-level rule and taking
-whatever transitions are indicated by the input text.  Let's walk through
-an example.
+While the rule graph may look more chaotic than the nicely-laid-out railroad
+diagram above, Gazelle's rule graph has one important advantage.  In Gazelle's
+rule graph, the states represent real states that the parser can be in.  The
+states in a railroad diagram are not as easy to identify.  At any time you can
+inspect Gazelle's parsing state and see what rule graph state it is in.  This
+is also the basis of how Gazelle can save and restore its parsing state.
 
-TODO: invest the time to make a friendly graphical walkthrough.
+The edges of rule graphs can be both terminals and nonterminals.  Terminals
+are physical tokens of input like `{` and `}`, while nonterminals are references
+to other rules like 'string' and 'value' above.
+
+When the parser takes a nonterminal transition, it temporarily stops processing
+the current rule and moves to a sub-rule corresponding to that nonterminal.  To
+remember where it was, the parser pushes the destination state of the
+nonterminal transition onto a runtime stack.  This whole process is easy to
+understand when viewed in the context of an example, which will be included
+in future versions of the manual.
 
 
 Grammar Lookahead Automaton
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You may have noticed that we glossed over one important detail in the previous
-section.  How do we decide what transition in the RTN to take?  In some cases
-it seems obvious: if all the outgoing transitions in our RTN state are
-terminals (strings or regular expressions), we can tell by comparing each
-transition with the next characters of the input text.  In some cases, however,
-the decision can be a lot more complicated to make.
+section.  How do we decide what transition in the rule graph to take?  Rule graphs
+can be nondeterministic: there can be more than one transition out of a state for
+the same terminal.  There can also be final states that have transitions out of
+them.  This means that while Gazelle is parsing, there can be more that one
+option for what transition to take.  How does Gazelle pick the right one?
 
 There are two situations where knowing what transition to take is difficult.
 First, if any of the transitions that lead out of our RTN state are
@@ -1135,27 +1121,28 @@ information on the subject, I heartily recommend the book
 http://www.amazon.com/Parsing-Techniques-Practical-Monographs-Computer/dp/038720248X[Parsing
 Techniques: A Practical Guide] by Grune and Jacobs.
 
-So how do we decide what transition to take in the RTN?  The answer is that
-Gazelle analyzes the grammar at compile time, and figures out for each RTN
-state what tokens we expect to see here, and what RTN transition each series of
-tokens implies.  This information is encoded into a DFA known as a 'GLA' -- a
-Grammar Lookahead Automaton.  If after analyzing the grammar Gazelle determines
-that it is possible to build a GLA for every RTN state, it builds them and
-encodes it into the byte-code.  If it is 'not' possible to build the GLA (which
-implies that that the grammar is not `LL(k)`), Gazelle interrupts the
-compilation with an error.
+So how do we decide what transition to take in the rule graph?  The answer is
+that Gazelle analyzes the grammar at compile time, and figures out for each
+rule graph state what tokens we expect to see here, and what transition each
+series of tokens implies.  This information is encoded into a DFA known as a
+'GLA' -- a Grammar Lookahead Automaton.  If after analyzing the grammar Gazelle
+determines that it is possible to build a GLA for every rule graph state, it
+builds them and encodes it into the byte-code.  If it is 'not' possible to
+build the GLA (which implies that that the grammar is not `LL(k)`), Gazelle
+interrupts the compilation with an error.
 
-When Gazelle is actually parsing, it stops at every RTN state and tries to
-determine what transition to take next.  To make this decision, Gazelle
-finds the GLA for this RTN state and runs it for the tokens of the
-input until the it hits a final state.  That final state will tell the
-RTN what transition to take.
+When Gazelle is actually parsing, it stops at every rule graph state and tries
+to determine what transition to take next.  To make this decision, Gazelle
+finds the GLA for this rule graph state and runs it for the tokens of the input
+until the it hits a final state.  That final state will tell the rule graph
+what transition to take.
 
 TODO: flesh out this section with more examples
 
 
+
 Character-level Integer DFA
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In the previous section, we assumed that we had a stream of tokens to feed
 into the GLA.  But where do these tokens come from?  The answer is that
@@ -1219,7 +1206,7 @@ the patterns an identifier is not allowed to have.
 
 
 Character decoding DFA
-^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~
 
 There is one final detail that is not handled by any of the previous layers:
 where do the characters come from that are fed into the IntFAs?  In the case of
