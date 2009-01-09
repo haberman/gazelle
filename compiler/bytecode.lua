@@ -248,18 +248,24 @@ function emit_rtn(name, rtn, rtns, glas, intfas, strings, bc_file, abbrevs)
   for state in each(rtn.states) do
     for transition in each(rtn.transitions[state]) do
       local edge_val, dest_state, properties = unpack(transition)
+      local bytecode_slotnum
+      if properties.slotnum == -1 then
+        bytecode_slotnum = 0
+      else
+        bytecode_slotnum = properties.slotnum
+      end
       if fa.is_nonterm(edge_val) then
         bc_file:write_abbreviated_record(abbrevs.bc_rtn_transition_nonterm,
                                          rtns:offset_of_key(edge_val.name),
                                          rtn.states:offset_of(dest_state),
                                          strings:offset_of(properties.name),
-                                         properties.slotnum-1)
+                                         bytecode_slotnum)
       else
         bc_file:write_abbreviated_record(abbrevs.bc_rtn_transition_terminal,
                                          strings:offset_of(edge_val),
                                          rtn.states:offset_of(dest_state),
                                          strings:offset_of(properties.name),
-                                         properties.slotnum-1)
+                                         bytecode_slotnum)
       end
     end
   end

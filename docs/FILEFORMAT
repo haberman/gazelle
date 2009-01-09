@@ -48,7 +48,10 @@ RTNS -- a list of all the RTNs
     [RTN_TRIVIAL_STATE, # of transitions, is final]
     ...
 
-    [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum]
-    [RTN_TRANSITION_NONTERM, rtn_offset, dest RTN state offset, slotname_int, slotnum]
+    -- slotnums are 0-based in the runtime, but 1-based in the bytecode and in the
+    -- compiler.  We use 0 in the bytecode to represent "no slotnum" (-1 elsewhere),
+    -- as used by subparsers.
+    [RTN_TRANSITION_TERMINAL, terminal_name_int, dest RTN state offset, slotname_int, slotnum+1]
+    [RTN_TRANSITION_NONTERM, rtn_offset, dest RTN state offset, slotname_int, slotnum+1]
     ...
 

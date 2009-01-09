@@ -442,7 +442,7 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
 
                 transition->dest_state = &rtn->states[bc_rs_read_next_32(s)];
                 transition->slotname   = g->strings[bc_rs_read_next_32(s)];
-                transition->slotnum    = bc_rs_read_next_32(s);
+                transition->slotnum    = ((int)bc_rs_read_next_32(s)) - 1;
             }
         }
         else if(ri.record_type == EndBlock)
