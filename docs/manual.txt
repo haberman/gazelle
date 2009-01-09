@@ -927,7 +927,7 @@ Compared to ANTLR, Gazelle adds the following capabilities:
 * Gazelle integrates the lexer more closely to the parser than ANTLR does.
   In Gazelle, the parser essentially calls into the lexer, which allows it
   to pass on information about what tokens it is expecting to see.  This allows,
-  context-sensitive lexing, such as language that allow keywords as identifiers
+  context-sensitive lexing, such as languages that allow keywords as identifiers
   or languages that embed other languages inside them (where the two languages
   have different lexical vocabularies).
 * '(planned)' Gazelle will support operator-precedence expression parsing, which will make it
