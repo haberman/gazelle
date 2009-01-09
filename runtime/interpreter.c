@@ -62,6 +62,18 @@ void dump_stack(struct parse_state *s, FILE *output)
     fprintf(output, "\n");
 }
 
+void set_eof_ok_flag_for_rtn_frame(struct parse_state *s)
+{
+    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
+    assert(frame->frame_type == FRAME_TYPE_RTN);
+    struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
+    if(rtn_frame->rtn_state->is_final &&
+       (s->parse_stack_len == 1 || s->parse_stack[s->parse_stack_len-2].eof_ok))
+        frame->eof_ok = true;
+    else
+        frame->eof_ok = false;
+}
+
 struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_type frame_type,
                                            int start_offset)
 {
@@ -130,6 +142,13 @@ struct parse_stack_frame *push_rtn_frame_for_transition(struct parse_state *s,
                                                         int start_offset)
 {
     struct rtn_frame *old_rtn_frame = &DYNARRAY_GET_TOP(s->parse_stack)->f.rtn_frame;
+
+    /* Hack. */
+    struct rtn_state *state = old_rtn_frame->rtn_state;
+    old_rtn_frame->rtn_state = t->dest_state;
+    set_eof_ok_flag_for_rtn_frame(s);
+    old_rtn_frame->rtn_state = state;
+
     old_rtn_frame->rtn_transition = t;
     return push_rtn_frame(s, t->edge.nonterminal, start_offset);
 }
@@ -146,18 +165,6 @@ struct parse_stack_frame *pop_frame(struct parse_state *s)
         frame = NULL;
 
     return frame;
-}
-
-void set_eof_ok_flag_for_rtn_frame(struct parse_state *s)
-{
-    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
-    assert(frame->frame_type == FRAME_TYPE_RTN);
-    struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
-    if(rtn_frame->rtn_state->is_final &&
-       (s->parse_stack_len == 0 || s->parse_stack[s->parse_stack_len-2].eof_ok))
-        frame->eof_ok = true;
-    else
-        frame->eof_ok = false;
 }
 
 struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
@@ -178,6 +185,11 @@ struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
         {
             rtn_frame->rtn_state = rtn_frame->rtn_transition->dest_state;
             set_eof_ok_flag_for_rtn_frame(s);
+        }
+        else
+        {
+          // Should only happen at the top level.
+          assert(s->parse_stack_len == 1);
         }
     }
     return frame;
