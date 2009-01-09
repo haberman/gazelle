@@ -19,17 +19,18 @@ function serialize(o, maxdepth, indent, s)
   end
 
   local result
+  local nestedIndent
+  if indent then
+    nestedIndent = indent .. "  "
+  end
 
   if t == "string" then
     result = string.format("%q", o)
+  elseif t == "boolean" or t == "number" then
+    result = tostring(t)
   elseif t == "table" and o.__index == o and o.name then
     result = string.format("Class: %q", o.name)
-  elseif t == "table" and not (o.class and o.class.__tostring) then
-    local nestedIndent
-    if indent then
-      nestedIndent = indent .. "  "
-    end
-
+  elseif t == "table" and not (o.class and o.class.tostring) then
     result = "{"
     if nestedIndent then result = result .. "\n" .. nestedIndent end
     local nextIndex = 1
@@ -58,7 +59,7 @@ function serialize(o, maxdepth, indent, s)
     end
     result = result .. "}"
   else
-    result = tostring(o)
+    result = o:tostring(nestedIndent)
   end
 
   seen:pop()

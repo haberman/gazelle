@@ -67,6 +67,26 @@ function FAState:new()
   return obj
 end
 
+function FAState:tostring()
+  local str = string.format("{%s, %d transitions", self.class.name, self:num_transitions())
+  -- TODO: rename .rtn to .fa, to be more generic
+  if self.rtn then
+    str = str .. string.format(", from rule named %s", self.rtn.name)
+    if self.rtn.start == self then
+      str = str .. ", start"
+    else
+      str = str .. ", NOT start"
+    end
+  end
+  if self.final then
+    str = str .. ", final"
+  else
+    str = str .. ", NOT final"
+  end
+  str = str .. "}"
+  return str
+end
+
 function FAState:child_states()
   local children = Set:new()
   for edge_value, target_state in self:transitions() do

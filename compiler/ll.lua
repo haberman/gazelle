@@ -145,7 +145,7 @@ function check_for_left_recursion(grammar)
       for edge_val, dest_state in state:transitions() do
         if fa.is_nonterm(edge_val) then
           if edge_val.name == name then
-            error("Grammar is not LL(*): it is left-recursive!")
+            error(string.format("Grammar is not LL(*): it is left-recursive!  Cycle: %s", stack:tostring()))
           end
           table.insert(children, grammar.rtns:get(edge_val.name).start)
         end
@@ -236,10 +236,10 @@ function Path:get_abbreviated_history()
   return abbrev
 end
 
-function Path:enter_rule(rtn, return_to_state, priorities)
+function Path:enter_rule(rtn, return_to_state, priorities, is_subparser)
   local new_path = self:dup()
   new_path.current_state = rtn.start
-  table.insert(new_path.history, {"enter", rtn.name, new_path.current_state, priorities})
+  table.insert(new_path.history, {"enter", rtn.name, new_path.current_state, priorities, is_subparser})
 
   -- Key point: if return_to_state is final and has no outgoing transitions,
   -- then we need not push anything on the stack.  This is the equivalent of a
@@ -367,7 +367,7 @@ function construct_gla(state, grammar, follow_states, k)
   for edge_val, dest_state, properties in state:transitions() do
     local path = Path:new(state, edge_val, dest_state)
     if fa.is_nonterm(edge_val) then
-      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state, properties.priorities))
+      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state, properties.priorities, properties.slotnum == -1))
     else
       initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or Set:new()
       initial_term_transitions[edge_val]:add(path:enter_state(edge_val, dest_state, properties.priorities))
@@ -575,6 +575,74 @@ function get_lower_priority_paths(paths)
   return paths_to_remove
 end
 
+
+--[[--------------------------------------------------------------------
+
+  get_subparser_redundant_paths(paths): Given a set of paths that have
+  already been discovered to be ambiguous, for any that differ only by
+  where the call to the subparser happens, return all but one path
+  (the one that takes the subparser earliest).
+
+--------------------------------------------------------------------]]--
+
+function get_subparser_redundant_paths(paths)
+  -- First question: are any of the paths identical except for where they
+  -- put the subparser?  To determine this, create copies of all paths with
+  -- subparser calls removed.
+  local no_subparser_paths = {}
+  for path in each(paths) do
+    local no_subparser_history = {}
+    local subparser_depth = 0
+    for history in each(path.history) do
+      if subparser_depth > 0 then
+        if history[1] == "return" then
+          subparser_depth = subparser_depth - 1
+        elseif history[1] == "enter" then
+          subparser_depth = subparser_depth + 1
+        end
+      elseif history[1] == "enter" and history[5] == true then
+        subparser_depth = 1
+      else
+        table.insert(no_subparser_history, get_unique_table_for(history))
+      end
+    end
+    local history_key = get_unique_table_for(no_subparser_history)
+    no_subparser_paths[history_key] = no_subparser_paths[history_key] or Set:new()
+    no_subparser_paths[history_key]:add(path)
+  end
+
+  -- Now, for any paths that only differ by placement of the subparser,
+  -- create a list of all but the one that puts the subparser the earliest.
+  local redundant_paths = {}
+  for history_key, paths in pairs(no_subparser_paths) do
+    if paths:count() > 1 then
+      local offset = 1
+      local winning_path = nil
+      while true do
+        for path in each(paths) do
+          if path.history[offset][5] == true then
+            -- This path has the subparser first and therefore wins.
+            winning_path = path
+          end
+        end
+        if winning_path then
+          break
+        end
+      end
+
+      -- Create a list of all but the winning path.
+      for path in each(paths) do
+        if path ~= winning_path then
+          table.insert(redundant_paths, path)
+        end
+      end
+
+    end
+  end
+
+  return redundant_paths
+end
+
 --[[--------------------------------------------------------------------
 
   check_for_ambiguity(gla_state): If for any series of terminals
@@ -604,11 +672,25 @@ function check_for_ambiguity(gla_state)
 
   for signature, paths in pairs(signatures) do
     if paths:count() > 1 then
-      local lower_priority_paths = get_lower_priority_paths(paths, gla_state)
+      -- If one path is prioritized higher than the others by explicit ambiguity
+      -- resolution, remove all other (lower-priority) paths.
+      local lower_priority_paths = get_lower_priority_paths(paths)
       for path in each(lower_priority_paths) do
         gla_state.rtn_paths:remove(path)
       end
+
+      -- Subparsers (whitespace ignoring) create real ambiguity because there
+      -- are often cases where the whitespace could be attached to any number
+      -- of places in the parse tree.  In these cases we choose whatever path
+      -- attaches the subparser to the higest part of the tree -- whatever path
+      -- processes the whitespace/subparser earliest.
+      local subparser_redundant_paths = get_subparser_redundant_paths(paths)
+      for path in each(subparser_redundant_paths) do
+        gla_state.rtn_paths:remove(path)
+        paths:remove(path)
+      end
     end
+
     if not get_unique_predicted_alternative(paths) then
       -- We know at this point that we cannot support this grammar.
       -- However we do a little bit more detective work to understand
@@ -820,7 +902,7 @@ function get_rtn_state_closure_for_path(path, grammar, follow_states)
     for edge_val, dest_state, properties in path.current_state:transitions() do
       if fa.is_nonterm(edge_val) then
         local dest_rtn = grammar.rtns:get(edge_val.name)
-        local new_path = path:enter_rule(dest_rtn, dest_state, properties.priorities)
+        local new_path = path:enter_rule(dest_rtn, dest_state, properties.priorities, properties.slotnum==-1)
         if new_path.is_epsilon_cyclic then
           error("Ambiguous grammar -- it has cycles in its epsilon transitions!")
         end

@@ -100,6 +100,23 @@ Stack = {name="Stack"}
     end
     return arr
   end
+
+  function Stack:tostring(indent)
+    indent = indent or "  "
+    local string = indent .. string.format("{Stack, %d elements:\n", self:count())
+    local first = true
+    local sub_indent = indent .. "  "
+    for element in self:each() do
+      if first then
+        first = false
+      else
+        string = string .. ",\n"
+      end
+      string = string .. sub_indent .. serialize(element, 3, sub_indent)
+    end
+    string = string .. indent .. "}"
+    return string
+  end
 -- class Stack
 
 
@@ -194,6 +211,27 @@ Set = {name="Set"}
     str = ""
     for elem in each(arr) do str = str .. elem end
     return str
+  end
+
+  function Set:tostring(indent)
+    indent = indent or ""
+    local string = indent .. string.format("{Set, %d elements: ", self:count())
+    local first = true
+    local sub_indent = indent .. "  "
+    for element in self:each() do
+      if first then
+        string = string .. "\n"
+        first = false
+      else
+        string = string .. ",\n"
+      end
+      string = string .. indent .. serialize(element, 3, sub_indent)
+    end
+    if not first then
+      string = string .. indent
+    end
+    string = string .. "}"
+    return string
   end
 -- class Set
 

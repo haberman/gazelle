@@ -58,6 +58,39 @@ function Grammar:add_terminal(name, intfa)
   self.terminals[name] = intfa
 end
 
+function Grammar:add_allow(what_to_allow, start_nonterm, end_nonterm)
+  -- kind of a hack to do this here.
+  self:determinize_rtns()
+
+  local children_func = function(rule_name)
+    if rule_name ~= end_nonterm then
+      local rtn = self.rtns:get(rule_name)
+      if not rtn then
+        error(string.format("Error computing ignore: rule %s does not exist", rule_name))
+      end
+
+      -- get sub-rules
+      local subrules = Set:new()
+      for state in each(rtn:states()) do
+        for edge_val, dest_state, properties in state:transitions() do
+          if fa.is_nonterm(edge_val) and properties.slotnum ~= -1 then
+            subrules:add(edge_val.name)
+          end
+        end
+      end
+
+      -- add self-transitions for every state
+      for state in each(rtn:states()) do
+        state:add_transition(what_to_allow, state, {name=what_to_allow.name, slotnum=-1})
+      end
+
+      return subrules
+    end
+  end
+
+  depth_first_traversal(start_nonterm, children_func)
+end
+
 function Grammar:check_defined()
   for name, rtn in each(self.rtns) do
     for rtn_state in each(rtn:states()) do

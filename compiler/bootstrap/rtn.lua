@@ -119,6 +119,14 @@ function parse_grammar(chars)
       chars:consume_pattern(" *@start")
       grammar.start = parse_nonterm(chars).name;
       chars:consume(";")
+    elseif chars:match(" *@allow") then
+      chars:consume_pattern(" *@allow")
+      local what_to_allow = parse_nonterm(chars);
+      local start_nonterm = parse_nonterm(chars).name;
+      chars:consume_pattern("%.%.%.")
+      local end_nonterm = parse_nonterm(chars).name;
+      chars:consume(";")
+      grammar:add_allow(what_to_allow, start_nonterm, end_nonterm)
     else
       local before_offset = chars.offset
       local stmt = parse_statement(chars, attributes)
