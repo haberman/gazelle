@@ -1,0 +1,47 @@
+
+// Providing eof_ok information is problematic for this grammar
+// because if we've seen "XZ" the stack looks like this:
+//
+// +---------------------+
+// | Rule: a             |
+   |  Current State      |
+   |  |                  |
+   |  V                  |
+// |  ,-x1-> o -y-,      |
+// |  o           *      |
+// |  `-x2-> o -z-'      |
+// +---------------------+
+// | GLA                 |
+// |  Current State      |
+// |       \             |
+// |        \,-y-> *     |
+// |  o -x-> o           |
+// |         `-z-> *     |
+// +---------------------+
+// | IntFA               |
+// |         ,-.         |
+// |  ,-Y-> *<--Y        |
+// |  o                  |
+// |  `-Z-> *<--Z        |
+// |        ^`-'         |
+// |        |            |
+// | Current State       |
+// +---------------------+
+//
+// The problem is that to know that we are in an eof_ok state,
+// we have to:
+// 1. recognize that the IntFA is in a final state (no prob -- we do this already)
+// 2. speculatively assume the token is finished
+// 3. speculatively transition the GLA to its final state
+// 4. speculatively take the x2 transition in rule a
+// 5. speculatively take the z transition in rule a
+//
+// Of course this is possible, but it's complicated both in terms of programming
+// effort and run-time efficiency.
+
+x: /X+/;
+y: /Y+/;
+z: /Z+/;
+
+a -> .x1=x y | .x2=x z;
+
