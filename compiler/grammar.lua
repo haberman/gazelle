@@ -58,12 +58,13 @@ function Grammar:add_terminal(name, intfa)
   self.terminals[name] = intfa
 end
 
-function Grammar:add_allow(what_to_allow, start_nonterm, end_nonterm)
+function Grammar:add_allow(what_to_allow, start_nonterm, end_nonterms)
   -- kind of a hack to do this here.
   self:determinize_rtns()
 
   local children_func = function(rule_name)
-    if rule_name ~= end_nonterm then
+    if not end_nonterms:contains(rule_name) then
+      print(rule_name)
       local rtn = self.rtns:get(rule_name)
       if not rtn then
         error(string.format("Error computing ignore: rule %s does not exist", rule_name))

@@ -124,9 +124,14 @@ function parse_grammar(chars)
       local what_to_allow = parse_nonterm(chars);
       local start_nonterm = parse_nonterm(chars).name;
       chars:consume_pattern("%.%.%.")
-      local end_nonterm = parse_nonterm(chars).name;
+      local end_nonterms = Set:new()
+      end_nonterms:add(parse_nonterm(chars).name)
+      while chars:match(" *,") do
+        chars:consume(",")
+        end_nonterms:add(parse_nonterm(chars).name)
+      end
       chars:consume(";")
-      grammar:add_allow(what_to_allow, start_nonterm, end_nonterm)
+      grammar:add_allow(what_to_allow, start_nonterm, end_nonterms)
     else
       local before_offset = chars.offset
       local stmt = parse_statement(chars, attributes)
