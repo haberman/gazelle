@@ -218,9 +218,10 @@ int main(int argc, char *argv[])
 
     struct gzlparse_state user_state;
     INIT_DYNARRAY(user_state.first_child, 1, 16);
-    struct parse_state state = {
-        .user_data = &user_state
-    };
+
+    struct parse_state *state = alloc_parse_state();
+    state->user_data = &user_state;
+
     struct bound_grammar bg = {
         .grammar = g,
     };
@@ -230,22 +231,19 @@ int main(int argc, char *argv[])
         bg.end_rule_cb = end_rule_callback;
         fputs("{\"parse_tree\":", stdout);
     }
-    init_parse_state(&state, &bg);
+    init_parse_state(state, &bg);
 
     char buf[4096];
     int total_read = 0;
     while(1) {
         int consumed_buf_len;
-        bool eof_ok;
         int read = fread(buf, 1, sizeof(buf), file);
-        enum parse_status status = parse(&state, buf, read, &consumed_buf_len, &eof_ok);
+        enum parse_status status = parse(state, buf, read, &consumed_buf_len);
         total_read += consumed_buf_len;
 
         if(read == 0)
         {
-            if(eof_ok)
-                finish_parse(&state);
-            else
+            if(!finish_parse(state))
             {
                 printf("\n");
                 fprintf(stderr, "Premature end-of-file.\n");
@@ -266,7 +264,7 @@ int main(int argc, char *argv[])
     if(dump_total)
         fprintf(stderr, "%d bytes parsed.\n", total_read);
 
-    free_parse_state(&state);
+    free_parse_state(state);
     free_grammar(g);
     fclose(file);
 }

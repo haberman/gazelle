@@ -6,18 +6,17 @@
   int name ## _len; \
   int name ## _size;
 
-#define RESIZE_DYNARRAY(name, desired_len) \
-  if(name ## _size < (desired_len)) \
-  { \
+#define RESIZE_DYNARRAY(name, desired_len) { \
+  int orig_size = name ## _size; \
+  while(name ## _size < (desired_len)) \
     name ## _size *= 2; \
+  /* don't bother shrinking for now.  when/if we do, we'll want to bake in \
+   * some kind of hysteresis so that we don't shrink until we've been under \
+   * for a while. */ \
+  if(name ## _size != orig_size) \
     name = realloc(name, name ## _size * sizeof(*name)); \
-  } \
-  else if(name ## _size > (MAX(desired_len, 1) * 32)) \
-  { \
-    name ## _size /= 2; \
-    name = realloc(name, name ## _size * sizeof(*name)); \
-  } \
-  name ## _len = desired_len;
+  name ## _len = desired_len; \
+}
 
 #define INIT_DYNARRAY(name, initial_len, initial_size) \
   name ## _len = initial_len; \

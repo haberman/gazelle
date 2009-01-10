@@ -226,7 +226,6 @@ struct parse_stack_frame
       } intfa_frame;
     } f;
 
-    bool eof_ok;
     int start_offset;
 
     enum frame_type {
@@ -316,8 +315,6 @@ struct parse_state
  *    according to the grammar.  out_consumed_buf_len reflects how many
  *    characters were read before parsing reached this state.
  *
- * eof_ok indicates whether the input including this buffer forms a complete
- * and valid file according to the grammar.
  */
 enum parse_status {
   PARSE_STATUS_OK,
@@ -325,17 +322,17 @@ enum parse_status {
   PARSE_STATUS_EOF,
 };
 enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
-                        int *out_consumed_buf_len, bool *out_eof_ok);
+                        int *out_consumed_buf_len);
 
-/* If parse() above has previously returned out_eof_ok==true and there is
- * no more input, call this function to complete the parse.  This primarily
- * involves calling all the final callbacks. */
-void finish_parse(struct parse_state *s);
+/* Call this function to complete the parse.  This primarily involves
+ * calling all the final callbacks.  Will return false if the parse
+ * state does not allow EOF here. */
+bool finish_parse(struct parse_state *s);
 
-void alloc_parse_state(struct parse_state *state);
+struct parse_state *alloc_parse_state();
+struct parse_state *dup_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
 void init_parse_state(struct parse_state *state, struct bound_grammar *bg);
-void reinit_parse_state(struct parse_state *state, struct bound_grammar *bg);
 
 /*
  * Local Variables:

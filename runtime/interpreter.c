@@ -57,21 +57,8 @@ void dump_stack(struct parse_state *s, FILE *output)
                 break;
             }
         }
-        fprintf(output, ", start_offset: %d, eof_ok: %d\n", frame->start_offset, frame->eof_ok);
     }
     fprintf(output, "\n");
-}
-
-void set_eof_ok_flag_for_rtn_frame(struct parse_state *s)
-{
-    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
-    assert(frame->frame_type == FRAME_TYPE_RTN);
-    struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
-    if(rtn_frame->rtn_state->is_final &&
-       (s->parse_stack_len == 1 || s->parse_stack[s->parse_stack_len-2].eof_ok))
-        frame->eof_ok = true;
-    else
-        frame->eof_ok = false;
 }
 
 struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_type frame_type,
@@ -86,47 +73,32 @@ struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_typ
 
 struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa, int start_offset)
 {
-    struct parse_stack_frame *old_frame = DYNARRAY_GET_TOP(s->parse_stack);
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_INTFA, start_offset);
     struct intfa_frame *intfa_frame = &frame->f.intfa_frame;
     intfa_frame->intfa        = intfa;
     intfa_frame->intfa_state  = &intfa->states[0];
-
-    /* IntFA frames start out being eof_ok if the parent frame is, but become not ok
-     * when they transition out of the initial state. */
-    frame->eof_ok       = old_frame->eof_ok;
 
     return intfa_frame;
 }
 
 struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla, int start_offset)
 {
-    struct parse_stack_frame *old_frame = DYNARRAY_GET_TOP(s->parse_stack);
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_GLA, start_offset);
     struct gla_frame *gla_frame = &frame->f.gla_frame;
     gla_frame->gla          = gla;
     gla_frame->gla_state    = &gla->states[0];
-
-    /* GLA frames start out being eof_ok if the parent frame is, but become not ok
-     * when they transition out of the initial state. */
-    frame->eof_ok       = old_frame->eof_ok;
 
     return frame;
 }
 
 struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn, int start_offset)
 {
-    struct parse_stack_frame *old_frame = DYNARRAY_GET_TOP(s->parse_stack);
     struct parse_stack_frame *new_frame = push_empty_frame(s, FRAME_TYPE_RTN, start_offset);
     struct rtn_frame *new_rtn_frame = &new_frame->f.rtn_frame;
 
     new_rtn_frame->rtn            = rtn;
     new_rtn_frame->rtn_transition = NULL;
     new_rtn_frame->rtn_state      = &new_rtn_frame->rtn->states[0];
-
-    /* RTN frames start out being eof_ok iff their start state is a final state
-     * *and* their parent is eof_ok. */
-    new_frame->eof_ok             = old_frame->eof_ok && rtn->states[0].is_final;
 
     /* Call start rule callback if set */
     if(s->bound_grammar->start_rule_cb)
@@ -142,13 +114,6 @@ struct parse_stack_frame *push_rtn_frame_for_transition(struct parse_state *s,
                                                         int start_offset)
 {
     struct rtn_frame *old_rtn_frame = &DYNARRAY_GET_TOP(s->parse_stack)->f.rtn_frame;
-
-    /* Hack. */
-    struct rtn_state *state = old_rtn_frame->rtn_state;
-    old_rtn_frame->rtn_state = t->dest_state;
-    set_eof_ok_flag_for_rtn_frame(s);
-    old_rtn_frame->rtn_state = state;
-
     old_rtn_frame->rtn_transition = t;
     return push_rtn_frame(s, t->edge.nonterminal, start_offset);
 }
@@ -180,11 +145,11 @@ struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
     struct parse_stack_frame *frame = pop_frame(s);
     if(frame != NULL)
     {
+        assert(frame->frame_type == FRAME_TYPE_RTN);
         struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
         if(rtn_frame->rtn_transition)
         {
             rtn_frame->rtn_state = rtn_frame->rtn_transition->dest_state;
-            set_eof_ok_flag_for_rtn_frame(s);
         }
         else
         {
@@ -294,7 +259,6 @@ struct parse_stack_frame *do_rtn_terminal_transition(struct parse_state *s,
 
     assert(t->transition_type == TERMINAL_TRANSITION);
     rtn_frame->rtn_state = t->dest_state;
-    set_eof_ok_flag_for_rtn_frame(s);
     return frame;
 }
 
@@ -542,7 +506,6 @@ struct intfa_frame *do_intfa_transition(struct parse_state *s,
      * started processing transitions for the current byte. */
     s->offset++;
     intfa_frame->intfa_state = t->dest_state;
-    frame->eof_ok = false;
 
     /* If the current state is final and there are no outgoing transitions,
      * we *know* we don't have to wait any longer for the longest match.
@@ -558,7 +521,7 @@ struct intfa_frame *do_intfa_transition(struct parse_state *s,
 }
 
 enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
-                        int *out_consumed_buf_len, bool *out_eof_ok)
+                        int *out_consumed_buf_len)
 {
     struct intfa_frame *intfa_frame;
 
@@ -583,32 +546,127 @@ enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
         if(intfa_frame == NULL)
         {
             if(out_consumed_buf_len) *out_consumed_buf_len = i+1;
-            if(out_eof_ok) *out_eof_ok = true;
             assert(s->parse_stack_len == 0);
             return PARSE_STATUS_EOF;
         }
     }
 
-    if(out_eof_ok) *out_eof_ok = DYNARRAY_GET_TOP(s->parse_stack)->eof_ok;
     if(out_consumed_buf_len) *out_consumed_buf_len = buf_len;
 
     return PARSE_STATUS_OK;
 }
 
-void finish_parse(struct parse_state *s)
+bool finish_parse(struct parse_state *s)
 {
+    /* First deal with an open IntFA frame if there is one.  The frame must
+     * be in a start state (in which case we back it out), a final state
+     * (in which case we recognize and process the terminal), or both (in
+     * which case we back out iff. we are in a GLA state with an EOF transition
+     * out).
+     */
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
-    while(s->parse_stack_len > 0)
+    if(frame->frame_type == FRAME_TYPE_INTFA)
     {
-        assert(frame->eof_ok);
-        if(frame->frame_type == FRAME_TYPE_RTN)
-            frame = pop_rtn_frame(s);
+        struct intfa_frame *intfa_frame = &frame->f.intfa_frame;
+        if(intfa_frame->intfa_state->final &&
+           intfa_frame->intfa_state == &intfa_frame->intfa->states[0])
+        {
+            /* the hard case: we don't handle it yet. */
+            assert(false);
+        }
+        else if(intfa_frame->intfa_state->final)
+        {
+            struct intfa_frame *dummy_intfa_frame;
+            dummy_intfa_frame = process_terminal(s, intfa_frame->intfa_state->final,
+                                                 frame->start_offset,
+                                                 s->offset - frame->start_offset);
+            if(dummy_intfa_frame)
+                pop_intfa_frame(s);   // don't need/want it.
+        }
+        else if(intfa_frame->intfa_state == &intfa_frame->intfa->states[0])
+        {
+            /* Pop the frame like it never happened. */
+            pop_intfa_frame(s);
+        }
         else
-            frame = pop_frame(s);
+        {
+            /* IntFA is in neither a start nor a final state.  This cannot be EOF. */
+            return false;
+        }
     }
+
+    /* Next deal with an open GLA frame if there is one.  The frame must be in
+     * a start state or we are not at valid EOF. */
+    frame = DYNARRAY_GET_TOP(s->parse_stack);
+    if(frame->frame_type == FRAME_TYPE_GLA)
+    {
+        struct gla_frame *gla_frame = &frame->f.gla_frame;
+        if(gla_frame->gla_state != &gla_frame->gla->states[0])
+        {
+            /* GLA is not in a start state.  This cannot be EOF. */
+            return false;
+        }
+        pop_gla_frame(s);
+    }
+
+    /* Now we should have only RTN frames open.  Starting from the top, check
+     * that each frame's dest_state is a final state (or the actual current
+     * state in the bottommost frame). */
+    if(s->parse_stack_len > 0)  // will be 0 (no open frames) if we already hit hard EOF.
+    {
+        for(int i = 0; i < s->parse_stack_len - 1; i++)
+        {
+            struct rtn_frame *rtn_frame = &s->parse_stack[i].f.rtn_frame;
+            assert(rtn_frame->rtn_transition);
+            if(!rtn_frame->rtn_transition->dest_state->is_final)
+                return false;
+        }
+
+        struct rtn_frame *rtn_frame = &s->parse_stack[s->parse_stack_len-1].f.rtn_frame;
+        if(!rtn_frame->rtn_state->is_final)
+            return false;
+
+        /* We are truly in a state where EOF is ok.  Pop remaining RTN frames to
+         * call callbacks appropriately. */
+        while(s->parse_stack_len > 0)
+            frame = pop_rtn_frame(s);
+    }
+
+    return true;
 }
 
-void reinit_parse_state(struct parse_state *s, struct bound_grammar *bg)
+struct parse_state *alloc_parse_state()
+{
+    struct parse_state *state = malloc(sizeof(*state));
+    INIT_DYNARRAY(state->parse_stack, 0, 16);
+    INIT_DYNARRAY(state->token_buffer, 0, 2);
+    return state;
+}
+
+struct parse_state *dup_parse_state(struct parse_state *orig)
+{
+    struct parse_state *copy = alloc_parse_state();
+    *copy = *orig;  // erroneously copies pointers to dynarrays, but we'll fix in a sec.
+
+    RESIZE_DYNARRAY(copy->parse_stack, orig->parse_stack_len);
+    for(int i = 0; i < orig->parse_stack_len; i++)
+        copy->parse_stack[i] = orig->parse_stack[i];
+
+    RESIZE_DYNARRAY(copy->token_buffer, orig->token_buffer_len);
+    for(int i = 0; i < orig->token_buffer_len; i++)
+        copy->token_buffer[i] = orig->token_buffer[i];
+
+    return copy;
+}
+
+void free_parse_state(struct parse_state *s)
+{
+    FREE_DYNARRAY(s->parse_stack);
+    FREE_DYNARRAY(s->token_buffer);
+    free(s);
+}
+
+void init_parse_state(struct parse_state *s, struct bound_grammar *bg)
 {
     s->offset = 0;
     s->bound_grammar = bg;
@@ -616,22 +674,6 @@ void reinit_parse_state(struct parse_state *s, struct bound_grammar *bg)
     RESIZE_DYNARRAY(s->token_buffer, 0);
     push_rtn_frame(s, &bg->grammar->rtns[0], 0);
 }
-
-void free_parse_state(struct parse_state *s)
-{
-    FREE_DYNARRAY(s->parse_stack);
-    FREE_DYNARRAY(s->token_buffer);
-}
-
-void init_parse_state(struct parse_state *s, struct bound_grammar *bg)
-{
-    s->offset = 0;
-    s->bound_grammar = bg;
-    INIT_DYNARRAY(s->parse_stack, 0, 16);
-    INIT_DYNARRAY(s->token_buffer, 0, 2);
-    push_rtn_frame(s, &bg->grammar->rtns[0], 0);
-}
-
 
 /*
  * Local Variables:
