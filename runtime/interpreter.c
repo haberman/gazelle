@@ -279,6 +279,19 @@ struct rtn_transition *find_rtn_terminal_transition(struct parse_state *s,
     return NULL;
 }
 
+/* term_name can be NULL if we're looking for EOF. */
+struct gla_transition *find_gla_transition(struct gla_state *gla_state,
+                                           char *term_name)
+{
+    for(int i = 0; i < gla_state->d.nonfinal.num_transitions; i++)
+    {
+        struct gla_transition *t = &gla_state->d.nonfinal.transitions[i];
+        if(t->term == term_name)
+            return t;
+    }
+    return NULL;
+}
+
 /*
  * do_gla_transition(): transitions a GLA frame, performing the appropriate
  * RTN transitions if this puts the GLA in a final state.
@@ -293,7 +306,7 @@ struct rtn_transition *find_rtn_terminal_transition(struct parse_state *s,
  *   an RTN frame (indicating we *have* hit a final state in the GLA)
  */
 struct parse_stack_frame *do_gla_transition(struct parse_state *s,
-                                            struct terminal *gla_term,
+                                            char *term_name,
                                             int *rtn_term_offset)
 {
     struct parse_stack_frame *frame = &s->parse_stack[s->parse_stack_len-1];
@@ -302,15 +315,11 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
     struct gla_state *gla_state = frame->f.gla_frame.gla_state;
     struct gla_state *dest_gla_state = NULL;
 
-    for(int i = 0; i < gla_state->d.nonfinal.num_transitions; i++)
-    {
-        struct gla_transition *t = &gla_state->d.nonfinal.transitions[i];
-        if(t->term == gla_term->name)
-        {
-            frame->f.gla_frame.gla_state = dest_gla_state = t->dest_state;
-        }
-    }
-    assert(dest_gla_state);
+    struct gla_transition *t = find_gla_transition(gla_state, term_name);
+    assert(t);
+    assert(t->dest_state);
+    frame->f.gla_frame.gla_state = t->dest_state;
+    dest_gla_state = t->dest_state;
 
     if(dest_gla_state->is_final)
     {
@@ -338,21 +347,6 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
                 frame = push_rtn_frame_for_transition(s, t, next_term->offset+next_term->len);
             }
         }
-    }
-    else
-    {
-        /* This will be appropriate when we properly handle EOF in GLAs. */
-        //for(int i = 0; i < dest_gla_state->d.nonfinal.num_transitions; i++)
-        //{
-        //    fprintf(stderr, "Looking at GLA state.\n");
-        //    struct gla_transition *t = &dest_gla_state->d.nonfinal.transitions[i];
-        //    if(t->term == NULL)  /* EOF */
-        //    {
-        //        fprintf(stderr, "EOF is ok.\n");
-        //        frame->eof_ok = true;
-        //        break;
-        //    }
-        //}
     }
     return frame;
 }
@@ -398,6 +392,12 @@ struct intfa_frame *process_terminal(struct parse_state *s,
         {
             struct rtn_transition *t;
             rtn_term_offset++;
+
+            if(rtn_term->name == NULL)
+            {
+                /* Skip: RTNs don't process EOF as a terminal, only GLAs do. */
+                continue;
+            }
             t = find_rtn_terminal_transition(s, rtn_term);
             if(!t)
             {
@@ -411,7 +411,7 @@ struct intfa_frame *process_terminal(struct parse_state *s,
         else
         {
             struct terminal *gla_term = &s->token_buffer[gla_term_offset++];
-            frame = do_gla_transition(s, gla_term, &rtn_term_offset);
+            frame = do_gla_transition(s, gla_term->name, &rtn_term_offset);
         }
         bool entered_gla;
         frame = descend_to_gla(s, &entered_gla, rtn_term->offset+rtn_term->len);
@@ -420,6 +420,13 @@ struct intfa_frame *process_terminal(struct parse_state *s,
             gla_term_offset = rtn_term_offset;
         }
     }
+
+    /* We can have an EOF left over in the token buffer if the EOF token led us
+     * to a hard EOF, thus terminating the above loop before our "skip" above could
+     * cover this EOF special case. */
+    if(rtn_term_offset < s->token_buffer_len &&
+       s->token_buffer[rtn_term_offset].name == NULL)
+        rtn_term_offset++;
 
     /* Remove consumed terminals from token_buffer */
     int remaining_terminals = s->token_buffer_len - rtn_term_offset;
@@ -596,17 +603,35 @@ bool finish_parse(struct parse_state *s)
     }
 
     /* Next deal with an open GLA frame if there is one.  The frame must be in
-     * a start state or we are not at valid EOF. */
+     * a start state or have an outgoing EOF transition, else we are not at
+     * valid EOF. */
     frame = DYNARRAY_GET_TOP(s->parse_stack);
     if(frame->frame_type == FRAME_TYPE_GLA)
     {
         struct gla_frame *gla_frame = &frame->f.gla_frame;
-        if(gla_frame->gla_state != &gla_frame->gla->states[0])
+        if(gla_frame->gla_state == &gla_frame->gla->states[0])
         {
-            /* GLA is not in a start state.  This cannot be EOF. */
-            return false;
+            /* GLA is in a start state -- fine, we can just pop it as
+             * if it never happened. */
+            pop_gla_frame(s);
         }
-        pop_gla_frame(s);
+        else
+        {
+            /* For this to still be valid EOF, this GLA state must have an
+             * outgoing EOF transition, and we must take it now. */
+            struct gla_transition *t = find_gla_transition(gla_frame->gla_state, NULL);
+            if(!t)
+                return false;
+
+            /* process_terminal wants an IntFA frame to pop. */
+            push_empty_frame(s, FRAME_TYPE_INTFA, s->offset);
+            process_terminal(s, NULL, s->offset, 0);
+
+            /* Pop any GLA or IntFA states that the previous may have pushed. */
+            while(s->parse_stack_len > 0 &&
+                  DYNARRAY_GET_TOP(s->parse_stack)->frame_type != FRAME_TYPE_RTN)
+                pop_frame(s);
+        }
     }
 
     /* Now we should have only RTN frames open.  Starting from the top, check
