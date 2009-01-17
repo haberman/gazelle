@@ -151,7 +151,7 @@ void end_rule_callback(struct parse_state *parse_state)
 
 int main(int argc, char *argv[])
 {
-    if(strcmp(argv[1], "--help") == 0)
+    if(argc > 1 && strcmp(argv[1], "--help") == 0)
     {
         usage();
         exit(0);
