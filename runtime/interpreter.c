@@ -27,6 +27,7 @@
 /*
  * A diagnostic function for dumping the current state of the stack.
  */
+static
 void dump_stack(struct parse_state *s, FILE *output)
 {
     fprintf(output, "Stack dump:\n");
@@ -61,6 +62,7 @@ void dump_stack(struct parse_state *s, FILE *output)
     fprintf(output, "\n");
 }
 
+static
 struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_type frame_type,
                                            int start_offset)
 {
@@ -71,6 +73,7 @@ struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_typ
     return frame;
 }
 
+static
 struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa, int start_offset)
 {
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_INTFA, start_offset);
@@ -81,6 +84,7 @@ struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa,
     return intfa_frame;
 }
 
+static
 struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla, int start_offset)
 {
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_GLA, start_offset);
@@ -91,6 +95,7 @@ struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla,
     return frame;
 }
 
+static
 enum parse_status push_rtn_frame(struct parse_state *s, struct rtn *rtn, int start_offset)
 {
     struct parse_stack_frame *new_frame = push_empty_frame(s, FRAME_TYPE_RTN, start_offset);
@@ -109,6 +114,7 @@ enum parse_status push_rtn_frame(struct parse_state *s, struct rtn *rtn, int sta
     return PARSE_STATUS_OK;
 }
 
+static
 enum parse_status push_rtn_frame_for_transition(struct parse_state *s,
                                                   struct rtn_transition *t,
                                                   int start_offset)
@@ -118,6 +124,7 @@ enum parse_status push_rtn_frame_for_transition(struct parse_state *s,
     return push_rtn_frame(s, t->edge.nonterminal, start_offset);
 }
 
+static
 struct parse_stack_frame *pop_frame(struct parse_state *s)
 {
     assert(s->parse_stack_len > 0);
@@ -132,6 +139,7 @@ struct parse_stack_frame *pop_frame(struct parse_state *s)
     return frame;
 }
 
+static
 enum parse_status pop_rtn_frame(struct parse_state *s)
 {
     assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_RTN);
@@ -164,18 +172,21 @@ enum parse_status pop_rtn_frame(struct parse_state *s)
     }
 }
 
+static
 struct parse_stack_frame *pop_gla_frame(struct parse_state *s)
 {
     assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_GLA);
     return pop_frame(s);
 }
 
+static
 struct parse_stack_frame *pop_intfa_frame(struct parse_state *s)
 {
     assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_INTFA);
     return pop_frame(s);
 }
 
+static
 struct intfa_frame *get_top_intfa_frame(struct parse_state *s)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
@@ -195,6 +206,7 @@ struct intfa_frame *get_top_intfa_frame(struct parse_state *s)
  * - the current frame is an RTN frame or a GLA frame.  If a new GLA frame was
  *   entered, entered_gla is set to true.
  */
+static
 enum parse_status descend_to_gla(struct parse_state *s, bool *entered_gla, int start_offset)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
@@ -239,6 +251,7 @@ enum parse_status descend_to_gla(struct parse_state *s, bool *entered_gla, int s
     return status;
 }
 
+static
 struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
@@ -255,6 +268,7 @@ struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s)
     return NULL;
 }
 
+static
 enum parse_status do_rtn_terminal_transition(struct parse_state *s,
                                              struct rtn_transition *t,
                                              struct terminal *terminal)
@@ -276,6 +290,7 @@ enum parse_status do_rtn_terminal_transition(struct parse_state *s,
     return PARSE_STATUS_OK;
 }
 
+static
 struct rtn_transition *find_rtn_terminal_transition(struct parse_state *s,
                                                     struct terminal *terminal)
 {
@@ -294,6 +309,7 @@ struct rtn_transition *find_rtn_terminal_transition(struct parse_state *s,
 }
 
 /* term_name can be NULL if we're looking for EOF. */
+static
 struct gla_transition *find_gla_transition(struct gla_state *gla_state,
                                            char *term_name)
 {
@@ -319,6 +335,7 @@ struct gla_transition *find_gla_transition(struct gla_state *gla_state,
  *   the GLA hasn't hit a final state yet) or the current stack frame is
  *   an RTN frame (indicating we *have* hit a final state in the GLA)
  */
+static
 enum parse_status do_gla_transition(struct parse_state *s,
                                     char *term_name,
                                     int *rtn_term_offset)
@@ -382,6 +399,7 @@ enum parse_status do_gla_transition(struct parse_state *s,
  *   all available GLA and RTN transitions have been taken.
  */
 
+static
 enum parse_status process_terminal(struct parse_state *s,
                                    char *term_name,
                                    int start_offset,
@@ -475,6 +493,7 @@ enum parse_status process_terminal(struct parse_state *s,
  * find_intfa_transition(): get the transition (if any) out of this state
  * on this character.
  */
+static
 struct intfa_transition *find_intfa_transition(struct intfa_frame *frame, char ch)
 {
     for(int i = 0; i < frame->intfa_state->num_transitions; i++)
@@ -505,6 +524,7 @@ struct intfa_transition *find_intfa_transition(struct intfa_frame *frame, char c
  * Note: we currently implement longest-match, assuming that the first
  * non-matching character is only one longer than the longest match.
  */
+static
 enum parse_status do_intfa_transition(struct parse_state *s,
                                       char ch)
 {
@@ -561,6 +581,10 @@ enum parse_status do_intfa_transition(struct parse_state *s,
 
     return PARSE_STATUS_OK;
 }
+
+/*
+ * The rest of this file is the publicly-exposed API
+ */
 
 enum parse_status parse(struct parse_state *s, char *buf, int buf_len)
 {

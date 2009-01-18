@@ -43,6 +43,7 @@
 #define BC_GLA_FINAL_STATE 1
 #define BC_GLA_TRANSITION 2
 
+static
 void check_error(struct bc_read_stream *s)
 {
     if(bc_rs_get_error(s))
@@ -62,6 +63,7 @@ void check_error(struct bc_read_stream *s)
     }
 }
 
+static
 void unexpected(struct bc_read_stream *s, struct record_info ri)
 {
     printf("Unexpected.  Record is: ");
@@ -87,6 +89,7 @@ void unexpected(struct bc_read_stream *s, struct record_info ri)
     exit(1);
 }
 
+static
 char **load_strings(struct bc_read_stream *s)
 {
     /* first get a count of the strings */
@@ -135,6 +138,7 @@ char **load_strings(struct bc_read_stream *s)
     return strings;
 }
 
+static
 void load_intfa(struct bc_read_stream *s, struct intfa *intfa, char **strings)
 {
     /* first get a count of the states and transitions */
@@ -206,6 +210,7 @@ void load_intfa(struct bc_read_stream *s, struct intfa *intfa, char **strings)
     }
 }
 
+static
 void load_intfas(struct bc_read_stream *s, struct grammar *g)
 {
     /* first get a count of the intfas */
@@ -242,6 +247,7 @@ void load_intfas(struct bc_read_stream *s, struct grammar *g)
     }
 }
 
+static
 void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
 {
     /* first get a count of the states and transitions */
@@ -315,6 +321,7 @@ void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
     }
 }
 
+static
 void load_glas(struct bc_read_stream *s, struct grammar *g)
 {
     /* first get a count of the glas */
@@ -351,6 +358,7 @@ void load_glas(struct bc_read_stream *s, struct grammar *g)
     }
 }
 
+static
 void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
 {
     /* first get a count of the states and transitions */
@@ -452,6 +460,7 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
     }
 }
 
+static
 void load_rtns(struct bc_read_stream *s, struct grammar *g)
 {
     /* first get a count of the rtns */
@@ -487,6 +496,10 @@ void load_rtns(struct bc_read_stream *s, struct grammar *g)
             unexpected(s, ri);
     }
 }
+
+/*
+ * The rest of this file is the publicly-exposed API
+ */
 
 struct grammar *load_grammar(struct bc_read_stream *s)
 {
