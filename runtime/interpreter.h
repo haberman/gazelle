@@ -250,12 +250,18 @@ struct parse_state;
 typedef void (*rule_callback_t)(struct parse_state *state);
 typedef void (*terminal_callback_t)(struct parse_state *state,
                                     struct terminal *terminal);
+typedef void (*error_char_callback_t)(struct parse_state *state,
+                                      int ch);
+typedef void (*error_terminal_callback_t)(struct parse_state *state,
+                                          struct terminal *terminal);
 struct bound_grammar
 {
     struct grammar *grammar;
     terminal_callback_t terminal_cb;
     rule_callback_t start_rule_cb;
     rule_callback_t end_rule_cb;
+    error_char_callback_t error_char_cb;
+    error_terminal_callback_t error_terminal_cb;
 };
 
 /* This structure defines the core state of a parsing stream.  By saving this
@@ -273,9 +279,17 @@ struct parse_state
     /* A pointer that the client can use for their own purposes. */
     void *user_data;
 
-    /* Our current offset in the stream.  We use this to mark the offsets
-     * of all the tokens we lex. */
+    /* The offset of the next byte in the stream we will process. */
     int offset;
+
+    /* The offset of the beginning of the first terminal that has not yet been
+     * yielded to the terminal callback.  This includes all terminals that are
+     * currently being used for an as-yet-unresolved lookahead.
+     *
+     * Put another way, if a client wants to be able to go back to its input
+     * buffer and look at the input data for a terminal that was just parsed,
+     * it must not throw away any of the data before open_terminal_offset. */
+    int open_terminal_offset;
 
     /* The parse stack is the main piece of state that the parser keeps.
      * There is a stack frame for every RTN, GLA, and IntFA state we are
@@ -307,22 +321,32 @@ struct parse_state
  *    s represents the state of the parse as of the last byte of the buffer.
  *    You may continue parsing this file by calling parse() again with more
  *    data.
+ *  - PARSE_STATUS_ERROR: there was a parse error in the input.  The parse
+ *    state is as it immediately before the erroneous character or token was
+ *    encountered, and can therefore be used again if desired to continue the
+ *    parse from that point.  state->offset will reflect how far the parse
+ *    proceeded before encountering the error.
  *  - PARSE_STATUS_CANCELLED: a callback that was called inside of parse()
- *    requested that parsing halt.  s is now invalid (I may try to accommodate
- *    this case better in the future).
+ *    requested that parsing halt.  state is now invalid (this may change
+ *    for the better in the future).
  *  - PARSE_STATUS_EOF: all or part of the buffer was parsed successfully,
  *    but a state was reached where no more characters could be accepted
- *    according to the grammar.  out_consumed_buf_len reflects how many
- *    characters were read before parsing reached this state.
- *
+ *    according to the grammar.  state->offset reflects how many characters
+ *    were read before parsing reached this state.  The client should call
+ *    finish_parse if it wants to receive final callbacks.
  */
 enum parse_status {
   PARSE_STATUS_OK,
+  PARSE_STATUS_ERROR,
   PARSE_STATUS_CANCELLED,
   PARSE_STATUS_EOF,
+
+  /* The following errors are Only returned by clients using the parse_file
+   * interface: */
+  PARSE_STATUS_IO_ERROR,  /* Error reading the file, check errno. */
+  PARSE_STATUS_PREMATURE_EOF_ERROR,  /* File hit EOF but the grammar wasn't EOF */
 };
-enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
-                        int *out_consumed_buf_len);
+enum parse_status parse(struct parse_state *state, char *buf, int buf_len);
 
 /* Call this function to complete the parse.  This primarily involves
  * calling all the final callbacks.  Will return false if the parse
@@ -333,6 +357,26 @@ struct parse_state *alloc_parse_state();
 struct parse_state *dup_parse_state(struct parse_state *state);
 void free_parse_state(struct parse_state *state);
 void init_parse_state(struct parse_state *state, struct bound_grammar *bg);
+
+/* A buffering layer provides the most common use case of parsing a whole file
+ * by streaming from a FILE*.  This "struct buffer" will be the parse state's
+ * user_data, the client's user_data is inside "struct buffer". */
+struct buffer
+{
+    /* The buffer itself. */
+    DEFINE_DYNARRAY(buf, char);
+
+    /* The file offset of the first byte currently in the buffer. */
+    int buf_offset;
+
+    /* The number of bytes that have been successfully parsed. */
+    int bytes_parsed;
+
+    /* The user_data you passed to parse_file. */
+    void *user_data;
+};
+
+enum parse_status parse_file(struct parse_state *state, FILE *file, void *user_data);
 
 /*
  * Local Variables:

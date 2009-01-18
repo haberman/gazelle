@@ -91,7 +91,7 @@ struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla,
     return frame;
 }
 
-struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn, int start_offset)
+enum parse_status push_rtn_frame(struct parse_state *s, struct rtn *rtn, int start_offset)
 {
     struct parse_stack_frame *new_frame = push_empty_frame(s, FRAME_TYPE_RTN, start_offset);
     struct rtn_frame *new_rtn_frame = &new_frame->f.rtn_frame;
@@ -106,12 +106,12 @@ struct parse_stack_frame *push_rtn_frame(struct parse_state *s, struct rtn *rtn,
         s->bound_grammar->start_rule_cb(s);
     }
 
-    return new_frame;
+    return PARSE_STATUS_OK;
 }
 
-struct parse_stack_frame *push_rtn_frame_for_transition(struct parse_state *s,
-                                                        struct rtn_transition *t,
-                                                        int start_offset)
+enum parse_status push_rtn_frame_for_transition(struct parse_state *s,
+                                                  struct rtn_transition *t,
+                                                  int start_offset)
 {
     struct rtn_frame *old_rtn_frame = &DYNARRAY_GET_TOP(s->parse_stack)->f.rtn_frame;
     old_rtn_frame->rtn_transition = t;
@@ -132,7 +132,7 @@ struct parse_stack_frame *pop_frame(struct parse_state *s)
     return frame;
 }
 
-struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
+enum parse_status pop_rtn_frame(struct parse_state *s)
 {
     assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == FRAME_TYPE_RTN);
 
@@ -143,7 +143,11 @@ struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
     }
 
     struct parse_stack_frame *frame = pop_frame(s);
-    if(frame != NULL)
+    if(frame == NULL)
+    {
+        return PARSE_STATUS_EOF;
+    }
+    else
     {
         assert(frame->frame_type == FRAME_TYPE_RTN);
         struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
@@ -156,8 +160,8 @@ struct parse_stack_frame *pop_rtn_frame(struct parse_state *s)
           // Should only happen at the top level.
           assert(s->parse_stack_len == 1);
         }
+        return PARSE_STATUS_OK;
     }
-    return frame;
 }
 
 struct parse_stack_frame *pop_gla_frame(struct parse_state *s)
@@ -172,6 +176,13 @@ struct parse_stack_frame *pop_intfa_frame(struct parse_state *s)
     return pop_frame(s);
 }
 
+struct intfa_frame *get_top_intfa_frame(struct parse_state *s)
+{
+    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
+    assert(frame->frame_type == FRAME_TYPE_INTFA);
+    return &frame->f.intfa_frame;
+}
+
 /*
  * descend_to_gla(): given the current parse stack, pushes any RTN or GLA
  * stack frames representing transitions that can be taken without consuming
@@ -184,24 +195,25 @@ struct parse_stack_frame *pop_intfa_frame(struct parse_state *s)
  * - the current frame is an RTN frame or a GLA frame.  If a new GLA frame was
  *   entered, entered_gla is set to true.
  */
-struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gla, int start_offset)
+enum parse_status descend_to_gla(struct parse_state *s, bool *entered_gla, int start_offset)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     *entered_gla = false;
 
-    while(frame->frame_type == FRAME_TYPE_RTN)
+    enum parse_status status = PARSE_STATUS_OK;
+
+    while(status == PARSE_STATUS_OK && frame->frame_type == FRAME_TYPE_RTN)
     {
         struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
         switch(rtn_frame->rtn_state->lookahead_type)
         {
           case STATE_HAS_INTFA:
-            return frame;
-            break;
+            return PARSE_STATUS_OK;
 
           case STATE_HAS_GLA:
             *entered_gla = true;
-            return push_gla_frame(s, rtn_frame->rtn_state->d.state_gla, start_offset);
-            break;
+            push_gla_frame(s, rtn_frame->rtn_state->d.state_gla, start_offset);
+            return PARSE_STATUS_OK;
 
           case STATE_HAS_NEITHER:
             /* An RTN state has neither an IntFA or a GLA in only two cases:
@@ -211,40 +223,41 @@ struct parse_stack_frame *descend_to_gla(struct parse_state *s, bool *entered_gl
             if(rtn_frame->rtn_state->num_transitions == 0)
             {
                 /* Final state */
-                frame = pop_rtn_frame(s);
-                if(frame == NULL) return NULL;
+                status = pop_rtn_frame(s);
             }
             else if(rtn_frame->rtn_state->num_transitions == 1)
             {
                 assert(rtn_frame->rtn_state->transitions[0].transition_type == NONTERM_TRANSITION);
-                frame = push_rtn_frame_for_transition(s, &rtn_frame->rtn_state->transitions[0],
-                                                      start_offset);
+                status = push_rtn_frame_for_transition(s, &rtn_frame->rtn_state->transitions[0],
+                                                       start_offset);
             }
             break;
         }
+        frame = DYNARRAY_GET_TOP(s->parse_stack);
     }
-    return frame;
+
+    return status;
 }
 
-struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s, int start_offset)
+struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     if(frame->frame_type == FRAME_TYPE_GLA)
     {
         assert(frame->f.gla_frame.gla_state->is_final == false);
-        return push_intfa_frame(s, frame->f.gla_frame.gla_state->d.nonfinal.intfa, start_offset);
+        return push_intfa_frame(s, frame->f.gla_frame.gla_state->d.nonfinal.intfa, s->offset);
     }
     else if(frame->frame_type == FRAME_TYPE_RTN)
     {
-        return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa, start_offset);
+        return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa, s->offset);
     }
     assert(false);
     return NULL;
 }
 
-struct parse_stack_frame *do_rtn_terminal_transition(struct parse_state *s,
-                                                     struct rtn_transition *t,
-                                                     struct terminal *terminal)
+enum parse_status do_rtn_terminal_transition(struct parse_state *s,
+                                             struct rtn_transition *t,
+                                             struct terminal *terminal)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
@@ -259,7 +272,8 @@ struct parse_stack_frame *do_rtn_terminal_transition(struct parse_state *s,
 
     assert(t->transition_type == TERMINAL_TRANSITION);
     rtn_frame->rtn_state = t->dest_state;
-    return frame;
+    s->open_terminal_offset = terminal->offset + terminal->len;
+    return PARSE_STATUS_OK;
 }
 
 struct rtn_transition *find_rtn_terminal_transition(struct parse_state *s,
@@ -305,9 +319,9 @@ struct gla_transition *find_gla_transition(struct gla_state *gla_state,
  *   the GLA hasn't hit a final state yet) or the current stack frame is
  *   an RTN frame (indicating we *have* hit a final state in the GLA)
  */
-struct parse_stack_frame *do_gla_transition(struct parse_state *s,
-                                            char *term_name,
-                                            int *rtn_term_offset)
+enum parse_status do_gla_transition(struct parse_state *s,
+                                    char *term_name,
+                                    int *rtn_term_offset)
 {
     struct parse_stack_frame *frame = &s->parse_stack[s->parse_stack_len-1];
     assert(frame->frame_type == FRAME_TYPE_GLA);
@@ -321,6 +335,8 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
     frame->f.gla_frame.gla_state = t->dest_state;
     dest_gla_state = t->dest_state;
 
+    enum parse_status status = PARSE_STATUS_OK;
+
     if(dest_gla_state->is_final)
     {
         /* pop the GLA frame (since now we know what RTN transition to take)
@@ -329,7 +345,7 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
         frame = pop_gla_frame(s);
         if(offset == 0)
         {
-            frame = pop_rtn_frame(s);
+            status = pop_rtn_frame(s);
         }
         else
         {
@@ -340,15 +356,16 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
                 /* The transition must match what we have in the token buffer */
                 (*rtn_term_offset)++;
                 assert(next_term->name == t->edge.terminal_name);
-                frame = do_rtn_terminal_transition(s, t, next_term);
+                status = do_rtn_terminal_transition(s, t, next_term);
             }
             else
             {
-                frame = push_rtn_frame_for_transition(s, t, next_term->offset+next_term->len);
+                status = push_rtn_frame_for_transition(s, t, next_term->offset+next_term->len);
             }
         }
     }
-    return frame;
+
+    return status;
 }
 
 /*
@@ -361,14 +378,14 @@ struct parse_stack_frame *do_gla_transition(struct parse_state *s,
  * - the given terminal can be recognized by the current GLA or RTN state
  *
  * Postconditions:
- * - the current stack frame is an intfa frame representing the state after
+ * - the current stack frame is an GLA or RTN frame representing the state after
  *   all available GLA and RTN transitions have been taken.
  */
 
-struct intfa_frame *process_terminal(struct parse_state *s,
-                                     char *term_name,
-                                     int start_offset,
-                                     int len)
+enum parse_status process_terminal(struct parse_state *s,
+                                   char *term_name,
+                                   int start_offset,
+                                   int len)
 {
     pop_intfa_frame(s);
 
@@ -383,12 +400,12 @@ struct intfa_frame *process_terminal(struct parse_state *s,
     term->len = len;
 
     /* Feed tokens to RTNs and GLAs until we have processed all the tokens we have */
-    while(frame != NULL &&
-          ((frame->frame_type == FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
-          (frame->frame_type == FRAME_TYPE_GLA && gla_term_offset < s->token_buffer_len)))
+    enum parse_status status = PARSE_STATUS_OK;
+    enum frame_type frame_type = frame->frame_type;
+    do
     {
         struct terminal *rtn_term = &s->token_buffer[rtn_term_offset];
-        if(frame->frame_type == FRAME_TYPE_RTN)
+        if(frame_type == FRAME_TYPE_RTN)
         {
             struct rtn_transition *t;
             rtn_term_offset++;
@@ -401,25 +418,39 @@ struct intfa_frame *process_terminal(struct parse_state *s,
             t = find_rtn_terminal_transition(s, rtn_term);
             if(!t)
             {
-                fprintf(stderr, "Parse error: unexpected terminal %s at offset %d\n",
-                        rtn_term->name, rtn_term->offset);
-                exit(1);
+                if(s->bound_grammar->error_terminal_cb)
+                    s->bound_grammar->error_terminal_cb(s, term);
+
+                return PARSE_STATUS_ERROR;
             }
 
-            frame = do_rtn_terminal_transition(s, t, rtn_term);
+            status = do_rtn_terminal_transition(s, t, rtn_term);
         }
         else
         {
             struct terminal *gla_term = &s->token_buffer[gla_term_offset++];
-            frame = do_gla_transition(s, gla_term->name, &rtn_term_offset);
+            status = do_gla_transition(s, gla_term->name, &rtn_term_offset);
         }
-        bool entered_gla;
-        frame = descend_to_gla(s, &entered_gla, rtn_term->offset+rtn_term->len);
-        if(entered_gla)
+
+        if(status == PARSE_STATUS_OK)
         {
-            gla_term_offset = rtn_term_offset;
+            bool entered_gla;
+            status = descend_to_gla(s, &entered_gla, rtn_term->offset+rtn_term->len);
+            if(entered_gla)
+            {
+                gla_term_offset = rtn_term_offset;
+            }
+        }
+
+        if(status == PARSE_STATUS_OK)
+        {
+            assert(s->parse_stack_len > 0);
+            frame_type = DYNARRAY_GET_TOP(s->parse_stack)->frame_type;
         }
     }
+    while(status == PARSE_STATUS_OK &&
+          ((frame->frame_type == FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
+           (frame->frame_type == FRAME_TYPE_GLA && gla_term_offset < s->token_buffer_len)));
 
     /* We can have an EOF left over in the token buffer if the EOF token led us
      * to a hard EOF, thus terminating the above loop before our "skip" above could
@@ -430,14 +461,6 @@ struct intfa_frame *process_terminal(struct parse_state *s,
 
     /* Remove consumed terminals from token_buffer */
     int remaining_terminals = s->token_buffer_len - rtn_term_offset;
-
-    if(frame == NULL)
-    {
-        /* EOF (as far as the parser is concerned */
-        assert(remaining_terminals == 0);
-        return NULL;
-    }
-
     if(remaining_terminals > 0)
     {
         memmove(s->token_buffer, s->token_buffer + rtn_term_offset,
@@ -445,9 +468,7 @@ struct intfa_frame *process_terminal(struct parse_state *s,
     }
     RESIZE_DYNARRAY(s->token_buffer, remaining_terminals);
 
-    /* Now that we have processed all terminals that we currently can, push
-     * an intfa frame to handle the next bytes */
-    return push_intfa_frame_for_gla_or_rtn(s, start_offset+len);
+    return status;
 }
 
 /*
@@ -484,12 +505,13 @@ struct intfa_transition *find_intfa_transition(struct intfa_frame *frame, char c
  * Note: we currently implement longest-match, assuming that the first
  * non-matching character is only one longer than the longest match.
  */
-struct intfa_frame *do_intfa_transition(struct parse_state *s,
-                                        struct intfa_frame *intfa_frame,
-                                        char ch)
+enum parse_status do_intfa_transition(struct parse_state *s,
+                                      char ch)
 {
+    struct intfa_frame *intfa_frame = get_top_intfa_frame(s);
     struct intfa_transition *t = find_intfa_transition(intfa_frame, ch);
     struct parse_stack_frame *frame = GET_PARSE_STACK_FRAME(intfa_frame);
+    enum parse_status status;
 
     /* If this character did not have any transition, but the state we're coming
      * from is final, then longest-match semantics say that we should return
@@ -499,13 +521,22 @@ struct intfa_frame *do_intfa_transition(struct parse_state *s,
     {
         char *terminal = intfa_frame->intfa_state->final;
         assert(terminal);
-        intfa_frame = process_terminal(s, terminal, frame->start_offset,
-                                       s->offset - frame->start_offset);
-        assert(intfa_frame);  // if this fails, it means that we hit a hard EOF
+        status = process_terminal(s, terminal, frame->start_offset,
+                                  s->offset - frame->start_offset);
+        if(status != PARSE_STATUS_OK)
+            return status;
 
-        /* This must succeed this time or it is a parse error */
+        intfa_frame = push_intfa_frame_for_gla_or_rtn(s);
         t = find_intfa_transition(intfa_frame, ch);
-        assert(t);
+
+        if(!t)
+        {
+            /* Parse error: we encountered a character for which we have no
+             * transition. */
+            if(s->bound_grammar->error_char_cb)
+                s->bound_grammar->error_char_cb(s, ch);
+            return PARSE_STATUS_ERROR;
+        }
     }
 
     /* We increment the offset here because we have just crossed the threshold
@@ -519,48 +550,42 @@ struct intfa_frame *do_intfa_transition(struct parse_state *s,
      * Transition the RTN or GLA now, for more on-line behavior. */
     if(intfa_frame->intfa_state->final && (intfa_frame->intfa_state->num_transitions == 0))
     {
-        intfa_frame = process_terminal(s, intfa_frame->intfa_state->final,
-                                       frame->start_offset,
-                                       s->offset - frame->start_offset);
+        status = process_terminal(s, intfa_frame->intfa_state->final,
+                                  frame->start_offset,
+                                  s->offset - frame->start_offset);
+        if(status != PARSE_STATUS_OK)
+            return status;
+
+        push_intfa_frame_for_gla_or_rtn(s);
     }
-
-    return intfa_frame;
-}
-
-enum parse_status parse(struct parse_state *s, char *buf, int buf_len,
-                        int *out_consumed_buf_len)
-{
-    struct intfa_frame *intfa_frame;
-
-    /* For the first parse, we need to descend from the starting frame
-     * until we hit an IntFA frame. */
-    if(s->offset == 0)
-    {
-        bool entered_gla;
-        descend_to_gla(s, &entered_gla, 0);
-        intfa_frame = push_intfa_frame_for_gla_or_rtn(s, 0);
-    }
-    else
-    {
-        struct parse_stack_frame *frame = &s->parse_stack[s->parse_stack_len-1];
-        assert(frame->frame_type == FRAME_TYPE_INTFA);
-        intfa_frame = &frame->f.intfa_frame;
-    }
-
-    for(int i = 0; i < buf_len; i++)
-    {
-        intfa_frame = do_intfa_transition(s, intfa_frame, buf[i]);
-        if(intfa_frame == NULL)
-        {
-            if(out_consumed_buf_len) *out_consumed_buf_len = i+1;
-            assert(s->parse_stack_len == 0);
-            return PARSE_STATUS_EOF;
-        }
-    }
-
-    if(out_consumed_buf_len) *out_consumed_buf_len = buf_len;
 
     return PARSE_STATUS_OK;
+}
+
+enum parse_status parse(struct parse_state *s, char *buf, int buf_len)
+{
+    enum parse_status status = PARSE_STATUS_OK;
+
+    /* For the first call, we need to push the initial frame and
+     * descend from the starting frame until we hit an IntFA frame. */
+    if(s->offset == 0 && s->parse_stack_len == 0)
+    {
+        push_rtn_frame(s, &s->bound_grammar->grammar->rtns[0], 0);
+        bool entered_gla;
+        status = descend_to_gla(s, &entered_gla, 0);
+        if(status == PARSE_STATUS_OK)
+            push_intfa_frame_for_gla_or_rtn(s);
+    }
+    if(s->parse_stack_len == 0)
+    {
+        /* This parse_state has already hit hard EOF previously. */
+        return PARSE_STATUS_EOF;
+    }
+
+    for(int i = 0; i < buf_len && status == PARSE_STATUS_OK; i++)
+        status = do_intfa_transition(s, buf[i]);
+
+    return status;
 }
 
 bool finish_parse(struct parse_state *s)
@@ -583,12 +608,9 @@ bool finish_parse(struct parse_state *s)
         }
         else if(intfa_frame->intfa_state->final)
         {
-            struct intfa_frame *dummy_intfa_frame;
-            dummy_intfa_frame = process_terminal(s, intfa_frame->intfa_state->final,
-                                                 frame->start_offset,
-                                                 s->offset - frame->start_offset);
-            if(dummy_intfa_frame)
-                pop_intfa_frame(s);   // don't need/want it.
+            process_terminal(s, intfa_frame->intfa_state->final,
+                             frame->start_offset,
+                             s->offset - frame->start_offset);
         }
         else if(intfa_frame->intfa_state == &intfa_frame->intfa->states[0])
         {
@@ -627,7 +649,7 @@ bool finish_parse(struct parse_state *s)
             push_empty_frame(s, FRAME_TYPE_INTFA, s->offset);
             process_terminal(s, NULL, s->offset, 0);
 
-            /* Pop any GLA or IntFA states that the previous may have pushed. */
+            /* Pop any GLA states that the previous may have pushed. */
             while(s->parse_stack_len > 0 &&
                   DYNARRAY_GET_TOP(s->parse_stack)->frame_type != FRAME_TYPE_RTN)
                 pop_frame(s);
@@ -654,7 +676,13 @@ bool finish_parse(struct parse_state *s)
         /* We are truly in a state where EOF is ok.  Pop remaining RTN frames to
          * call callbacks appropriately. */
         while(s->parse_stack_len > 0)
-            frame = pop_rtn_frame(s);
+        {
+            /* What should we do if the user cancels while the final RTN frames
+             * are being popped?  It's kind of a weird thing to do.  Options
+             * are to ignore it (we're finishing the parse anyway) or to stop.
+             * For now we ignore. */
+            pop_rtn_frame(s);
+        }
     }
 
     return true;
@@ -694,10 +722,107 @@ void free_parse_state(struct parse_state *s)
 void init_parse_state(struct parse_state *s, struct bound_grammar *bg)
 {
     s->offset = 0;
+    s->open_terminal_offset = 0;
     s->bound_grammar = bg;
     RESIZE_DYNARRAY(s->parse_stack, 0);
     RESIZE_DYNARRAY(s->token_buffer, 0);
-    push_rtn_frame(s, &bg->grammar->rtns[0], 0);
+}
+
+enum parse_status parse_file(struct parse_state *state, FILE *file, void *user_data)
+{
+    struct buffer *buffer = malloc(sizeof(*buffer));
+    INIT_DYNARRAY(buffer->buf, 0, 4096);
+    buffer->buf_offset = 0;
+    buffer->bytes_parsed = 0;
+    buffer->user_data = user_data;
+    state->user_data = buffer;
+
+    /* The minimum amount of the data in the buffer that we want to be new data
+     * each time.  This number shrinks as the amount of data we're preserving
+     * from open tokens grows.  If the number is below this number we increase
+     * our buffer size. */
+    const int min_new_data = 4000;
+
+    enum parse_status status;
+    bool is_eof = false;
+    do
+    {
+        /* Make sure we have space for at least min_new_data new data.
+         * RESIZE_DYNARRAY() will round up to a power of two. */
+        RESIZE_DYNARRAY(buffer->buf, buffer->buf_len + min_new_data);
+        size_t bytes_to_read = buffer->buf_size - buffer->buf_len;
+
+        /* Do the I/O and check for errors. */
+        size_t bytes_read = fread(buffer->buf + buffer->buf_len, 1, bytes_to_read, file);
+        if(bytes_read < bytes_to_read)
+        {
+            if(ferror(file))
+            {
+                status = PARSE_STATUS_IO_ERROR;
+                break;
+            }
+            else if(feof(file))
+            {
+                is_eof = true;
+            }
+        }
+
+        /* Do the parse.  Start past whatever bytes we previously saved. */
+        char *parse_start = buffer->buf + buffer->buf_len;
+        buffer->buf_len += bytes_read;
+        status = parse(state, parse_start, bytes_read);
+
+        /* Preserve all data from tokens that haven't been returned yet:
+         *
+         *         buf                                                 size len
+         *         |                                                     |   |
+         *         v                                                     v   v
+         * Buffer: -----------------------------------------------------------
+         *         ^    ^                                   ^         ^
+         *         |    |                                   |         |
+         *  buf_offset  |                                   |  state->offset
+         *              |                                   |
+         *       previous value of                  current value of
+         *   state->open_terminal_offset       state->open_terminal_offset
+         *
+         *         |----| <-- Data we were previously saving.
+         *
+         *                 Data we should now be saving --> |------------|
+         */
+
+        size_t bytes_to_discard = state->open_terminal_offset - buffer->buf_offset;
+        size_t bytes_to_save = buffer->buf_size - bytes_to_discard;
+        char *buf_to_save_from = buffer->buf + bytes_to_discard;
+        assert(bytes_to_discard < buffer->buf_size);  /* hasn't overflowed. */
+
+        memmove(buffer->buf, buf_to_save_from, bytes_to_save);
+        buffer->buf_offset += bytes_to_discard;
+        buffer->buf_len = bytes_to_save;
+    } while(status == PARSE_STATUS_OK && !is_eof);
+
+    if(status == PARSE_STATUS_EOF || (status == PARSE_STATUS_OK && is_eof))
+    {
+        if(finish_parse(state))
+        {
+            if(!feof(file) || buffer->buf_len > 0)
+            {
+                /* There was data left over -- we hit grammar EOF before
+                 * file EOF. */
+                status = PARSE_STATUS_OK;
+            }
+            else
+            {
+                status = PARSE_STATUS_PREMATURE_EOF_ERROR;
+            }
+        }
+        else
+            status = PARSE_STATUS_PREMATURE_EOF_ERROR;
+    }
+
+    FREE_DYNARRAY(buffer->buf);
+    free(buffer);
+
+    return status;
 }
 
 /*
