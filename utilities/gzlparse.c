@@ -295,6 +295,7 @@ int main(int argc, char *argv[])
 
     free_parse_state(state);
     free_grammar(g);
+    FREE_DYNARRAY(user_state.first_child);
     fclose(file);
 }
 
