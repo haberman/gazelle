@@ -173,11 +173,18 @@ struct grammar
  * runtime state
  */
 
+struct offset
+{
+    size_t byte;    /* 0-based. */
+    size_t line;    /* 1-based. */
+    size_t column;  /* 1-based. */
+};
+
 struct terminal
 {
     char *name;
-    int offset;
-    int len;
+    struct offset offset;
+    size_t len;
 };
 
 struct parse_val;
@@ -226,7 +233,7 @@ struct parse_stack_frame
       } intfa_frame;
     } f;
 
-    int start_offset;
+    struct offset start_offset;
 
     enum frame_type {
       FRAME_TYPE_RTN,
@@ -280,7 +287,7 @@ struct parse_state
     void *user_data;
 
     /* The offset of the next byte in the stream we will process. */
-    int offset;
+    struct offset offset;
 
     /* The offset of the beginning of the first terminal that has not yet been
      * yielded to the terminal callback.  This includes all terminals that are
@@ -289,7 +296,13 @@ struct parse_state
      * Put another way, if a client wants to be able to go back to its input
      * buffer and look at the input data for a terminal that was just parsed,
      * it must not throw away any of the data before open_terminal_offset. */
-    int open_terminal_offset;
+    struct offset open_terminal_offset;
+
+    /* We want to count newlines.  However, logical newlines can span more than
+     * one byte.  So we track whether the last character was a newline so that
+     * consecutive newline sequences (like CR/LF) are only counted as one
+     * newline. */
+    bool last_char_was_newline;
 
     /* The parse stack is the main piece of state that the parser keeps.
      * There is a stack frame for every RTN, GLA, and IntFA state we are
@@ -346,7 +359,7 @@ enum parse_status {
   PARSE_STATUS_IO_ERROR,  /* Error reading the file, check errno. */
   PARSE_STATUS_PREMATURE_EOF_ERROR,  /* File hit EOF but the grammar wasn't EOF */
 };
-enum parse_status parse(struct parse_state *state, char *buf, int buf_len);
+enum parse_status parse(struct parse_state *state, char *buf, size_t buf_len);
 
 /* Call this function to complete the parse.  This primarily involves
  * calling all the final callbacks.  Will return false if the parse

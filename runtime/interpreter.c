@@ -64,17 +64,18 @@ void dump_stack(struct parse_state *s, FILE *output)
 
 static
 struct parse_stack_frame *push_empty_frame(struct parse_state *s, enum frame_type frame_type,
-                                           int start_offset)
+                                           struct offset *start_offset)
 {
     RESIZE_DYNARRAY(s->parse_stack, s->parse_stack_len+1);
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     frame->frame_type = frame_type;
-    frame->start_offset = start_offset;
+    frame->start_offset = *start_offset;
     return frame;
 }
 
 static
-struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa, int start_offset)
+struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa,
+                                     struct offset *start_offset)
 {
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_INTFA, start_offset);
     struct intfa_frame *intfa_frame = &frame->f.intfa_frame;
@@ -85,7 +86,8 @@ struct intfa_frame *push_intfa_frame(struct parse_state *s, struct intfa *intfa,
 }
 
 static
-struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla, int start_offset)
+struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla,
+                                         struct offset *start_offset)
 {
     struct parse_stack_frame *frame = push_empty_frame(s, FRAME_TYPE_GLA, start_offset);
     struct gla_frame *gla_frame = &frame->f.gla_frame;
@@ -96,7 +98,8 @@ struct parse_stack_frame *push_gla_frame(struct parse_state *s, struct gla *gla,
 }
 
 static
-enum parse_status push_rtn_frame(struct parse_state *s, struct rtn *rtn, int start_offset)
+enum parse_status push_rtn_frame(struct parse_state *s, struct rtn *rtn,
+                                 struct offset *start_offset)
 {
     struct parse_stack_frame *new_frame = push_empty_frame(s, FRAME_TYPE_RTN, start_offset);
     struct rtn_frame *new_rtn_frame = &new_frame->f.rtn_frame;
@@ -116,8 +119,8 @@ enum parse_status push_rtn_frame(struct parse_state *s, struct rtn *rtn, int sta
 
 static
 enum parse_status push_rtn_frame_for_transition(struct parse_state *s,
-                                                  struct rtn_transition *t,
-                                                  int start_offset)
+                                                struct rtn_transition *t,
+                                                struct offset *start_offset)
 {
     struct rtn_frame *old_rtn_frame = &DYNARRAY_GET_TOP(s->parse_stack)->f.rtn_frame;
     old_rtn_frame->rtn_transition = t;
@@ -207,7 +210,8 @@ struct intfa_frame *get_top_intfa_frame(struct parse_state *s)
  *   entered, entered_gla is set to true.
  */
 static
-enum parse_status descend_to_gla(struct parse_state *s, bool *entered_gla, int start_offset)
+enum parse_status descend_to_gla(struct parse_state *s, bool *entered_gla,
+                                 struct offset *start_offset)
 {
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     *entered_gla = false;
@@ -258,11 +262,11 @@ struct intfa_frame *push_intfa_frame_for_gla_or_rtn(struct parse_state *s)
     if(frame->frame_type == FRAME_TYPE_GLA)
     {
         assert(frame->f.gla_frame.gla_state->is_final == false);
-        return push_intfa_frame(s, frame->f.gla_frame.gla_state->d.nonfinal.intfa, s->offset);
+        return push_intfa_frame(s, frame->f.gla_frame.gla_state->d.nonfinal.intfa, &s->offset);
     }
     else if(frame->frame_type == FRAME_TYPE_RTN)
     {
-        return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa, s->offset);
+        return push_intfa_frame(s, frame->f.rtn_frame.rtn_state->d.state_intfa, &s->offset);
     }
     assert(false);
     return NULL;
@@ -286,7 +290,6 @@ enum parse_status do_rtn_terminal_transition(struct parse_state *s,
 
     assert(t->transition_type == TERMINAL_TRANSITION);
     rtn_frame->rtn_state = t->dest_state;
-    s->open_terminal_offset = terminal->offset + terminal->len;
     return PARSE_STATUS_OK;
 }
 
@@ -377,7 +380,7 @@ enum parse_status do_gla_transition(struct parse_state *s,
             }
             else
             {
-                status = push_rtn_frame_for_transition(s, t, next_term->offset+next_term->len);
+                status = push_rtn_frame_for_transition(s, t, &next_term->offset);
             }
         }
     }
@@ -402,7 +405,7 @@ enum parse_status do_gla_transition(struct parse_state *s,
 static
 enum parse_status process_terminal(struct parse_state *s,
                                    char *term_name,
-                                   int start_offset,
+                                   struct offset *start_offset,
                                    int len)
 {
     pop_intfa_frame(s);
@@ -414,7 +417,7 @@ enum parse_status process_terminal(struct parse_state *s,
     RESIZE_DYNARRAY(s->token_buffer, s->token_buffer_len+1);
     struct terminal *term = DYNARRAY_GET_TOP(s->token_buffer);
     term->name = term_name;
-    term->offset = start_offset;
+    term->offset = *start_offset;
     term->len = len;
 
     /* Feed tokens to RTNs and GLAs until we have processed all the tokens we have */
@@ -453,7 +456,11 @@ enum parse_status process_terminal(struct parse_state *s,
         if(status == PARSE_STATUS_OK)
         {
             bool entered_gla;
-            status = descend_to_gla(s, &entered_gla, rtn_term->offset+rtn_term->len);
+            if(rtn_term_offset < s->token_buffer_len)
+              status = descend_to_gla(s, &entered_gla, &s->token_buffer[rtn_term_offset].offset);
+            else
+              status = descend_to_gla(s, &entered_gla, &s->offset);
+
             if(entered_gla)
             {
                 gla_term_offset = rtn_term_offset;
@@ -467,8 +474,8 @@ enum parse_status process_terminal(struct parse_state *s,
         }
     }
     while(status == PARSE_STATUS_OK &&
-          ((frame->frame_type == FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
-           (frame->frame_type == FRAME_TYPE_GLA && gla_term_offset < s->token_buffer_len)));
+          ((frame_type == FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
+           (frame_type == FRAME_TYPE_GLA && gla_term_offset < s->token_buffer_len)));
 
     /* We can have an EOF left over in the token buffer if the EOF token led us
      * to a hard EOF, thus terminating the above loop before our "skip" above could
@@ -485,6 +492,12 @@ enum parse_status process_terminal(struct parse_state *s,
                 remaining_terminals * sizeof(*s->token_buffer));
     }
     RESIZE_DYNARRAY(s->token_buffer, remaining_terminals);
+
+    /* Update open_terminal_offset. */
+    if(remaining_terminals > 0)
+        s->open_terminal_offset = s->token_buffer[0].offset;
+    else
+        s->open_terminal_offset = s->offset;
 
     return status;
 }
@@ -541,8 +554,8 @@ enum parse_status do_intfa_transition(struct parse_state *s,
     {
         char *terminal = intfa_frame->intfa_state->final;
         assert(terminal);
-        status = process_terminal(s, terminal, frame->start_offset,
-                                  s->offset - frame->start_offset);
+        status = process_terminal(s, terminal, &frame->start_offset,
+                                  s->offset.byte - frame->start_offset.byte);
         if(status != PARSE_STATUS_OK)
             return status;
 
@@ -562,7 +575,24 @@ enum parse_status do_intfa_transition(struct parse_state *s,
     /* We increment the offset here because we have just crossed the threshold
      * where we have finished processing all terminals for the previous byte and
      * started processing transitions for the current byte. */
-    s->offset++;
+    s->offset.byte++;
+
+    /* Deal with newlines.  This is all very single-byte-encoding specific for
+     * the moment. */
+    bool is_newline_char = (ch == 0x0A || ch == 0x0D);  /* LF and CR */
+    if(is_newline_char)
+    {
+        if(!s->last_char_was_newline)
+        {
+            s->offset.line++;
+            s->offset.column = 1;
+        }
+    }
+    else
+        s->offset.column++;
+
+    s->last_char_was_newline = is_newline_char;
+
     intfa_frame->intfa_state = t->dest_state;
 
     /* If the current state is final and there are no outgoing transitions,
@@ -571,8 +601,8 @@ enum parse_status do_intfa_transition(struct parse_state *s,
     if(intfa_frame->intfa_state->final && (intfa_frame->intfa_state->num_transitions == 0))
     {
         status = process_terminal(s, intfa_frame->intfa_state->final,
-                                  frame->start_offset,
-                                  s->offset - frame->start_offset);
+                                  &frame->start_offset,
+                                  s->offset.byte - frame->start_offset.byte);
         if(status != PARSE_STATUS_OK)
             return status;
 
@@ -586,17 +616,17 @@ enum parse_status do_intfa_transition(struct parse_state *s,
  * The rest of this file is the publicly-exposed API
  */
 
-enum parse_status parse(struct parse_state *s, char *buf, int buf_len)
+enum parse_status parse(struct parse_state *s, char *buf, size_t buf_len)
 {
     enum parse_status status = PARSE_STATUS_OK;
 
     /* For the first call, we need to push the initial frame and
      * descend from the starting frame until we hit an IntFA frame. */
-    if(s->offset == 0 && s->parse_stack_len == 0)
+    if(s->offset.byte == 0 && s->parse_stack_len == 0)
     {
-        push_rtn_frame(s, &s->bound_grammar->grammar->rtns[0], 0);
+        push_rtn_frame(s, &s->bound_grammar->grammar->rtns[0], &s->offset);
         bool entered_gla;
-        status = descend_to_gla(s, &entered_gla, 0);
+        status = descend_to_gla(s, &entered_gla, &s->offset);
         if(status == PARSE_STATUS_OK)
             push_intfa_frame_for_gla_or_rtn(s);
     }
@@ -633,8 +663,8 @@ bool finish_parse(struct parse_state *s)
         else if(intfa_frame->intfa_state->final)
         {
             process_terminal(s, intfa_frame->intfa_state->final,
-                             frame->start_offset,
-                             s->offset - frame->start_offset);
+                             &frame->start_offset,
+                             s->offset.byte - frame->start_offset.byte);
         }
         else if(intfa_frame->intfa_state == &intfa_frame->intfa->states[0])
         {
@@ -670,8 +700,8 @@ bool finish_parse(struct parse_state *s)
                 return false;
 
             /* process_terminal wants an IntFA frame to pop. */
-            push_empty_frame(s, FRAME_TYPE_INTFA, s->offset);
-            process_terminal(s, NULL, s->offset, 0);
+            push_empty_frame(s, FRAME_TYPE_INTFA, &s->offset);
+            process_terminal(s, NULL, &s->offset, 0);
 
             /* Pop any GLA states that the previous may have pushed. */
             while(s->parse_stack_len > 0 &&
@@ -745,8 +775,11 @@ void free_parse_state(struct parse_state *s)
 
 void init_parse_state(struct parse_state *s, struct bound_grammar *bg)
 {
-    s->offset = 0;
-    s->open_terminal_offset = 0;
+    s->offset.byte = 0;
+    s->offset.line = 1;
+    s->offset.column = 1;
+    s->open_terminal_offset = s->offset;
+    s->last_char_was_newline = false;
     s->bound_grammar = bg;
     RESIZE_DYNARRAY(s->parse_stack, 0);
     RESIZE_DYNARRAY(s->token_buffer, 0);
@@ -820,7 +853,8 @@ enum parse_status parse_file(struct parse_state *state, FILE *file, void *user_d
          *                 Data we should now be saving --> |------------|
          */
 
-        size_t bytes_to_discard = state->open_terminal_offset - buffer->buf_offset;
+        size_t bytes_to_discard = state->open_terminal_offset.byte -
+                                  buffer->buf_offset;
         size_t bytes_to_save = buffer->buf_size - bytes_to_discard;
         char *buf_to_save_from = buffer->buf + bytes_to_discard;
         assert(bytes_to_discard <= buffer->buf_len);  /* hasn't overflowed. */

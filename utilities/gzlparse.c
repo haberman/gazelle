@@ -124,17 +124,18 @@ void terminal_callback(struct parse_state *parse_state,
     print_indent(user_state);
 
     char *terminal_name = get_json_escaped_string(terminal->name, 0);
-    int start = terminal->offset - buffer->buf_offset;
+    int start = terminal->offset.byte - buffer->buf_offset;
     assert(start >= 0);
     assert(start+terminal->len <= buffer->buf_len);
     char *terminal_text = get_json_escaped_string(buffer->buf+
-                                                  (terminal->offset - buffer->buf_offset),
+                                                  (terminal->offset.byte - buffer->buf_offset),
                                                   terminal->len);
     char *slotname = get_json_escaped_string(rtn_frame->rtn_transition->slotname, 0);
-    printf("{\"terminal\": %s, \"slotname\": %s, \"slotnum\": %d, \"offset\": %d, "
-           "\"len\": %d, \"text\": %s}",
+    printf("{\"terminal\": %s, \"slotname\": %s, \"slotnum\": %d, \"byte_offset\": %d, "
+           "\"line\": %d, \"column\": %d, \"len\": %d, \"text\": %s}",
            terminal_name, slotname, rtn_frame->rtn_transition->slotnum,
-           terminal->offset, terminal->len, terminal_text);
+           terminal->offset.byte, terminal->offset.line, terminal->offset.column,
+           terminal->len, terminal_text);
     free(terminal_name);
     free(terminal_text);
     free(slotname);
@@ -151,7 +152,9 @@ void start_rule_callback(struct parse_state *parse_state)
     print_newline(user_state, false);
     print_indent(user_state);
     char *rule = get_json_escaped_string(rtn_frame->rtn->name, 0);
-    printf("{\"rule\":%s, \"start\": %d, ", rule, frame->start_offset);
+    printf("{\"rule\":%s, \"start\": %d, \"line\": %d, \"column\": %d, ",
+           rule, frame->start_offset.byte,
+           frame->start_offset.line, frame->start_offset.column);
     free(rule);
 
     if(parse_state->parse_stack_len > 1)
@@ -171,18 +174,22 @@ void start_rule_callback(struct parse_state *parse_state)
 
 void error_char_callback(struct parse_state *parse_state, int ch)
 {
-    fprintf(stderr, "gzlparse: unexpected character '%c' (%02x) at offset %d, aborting.\n",
-                    ch, ch, parse_state->offset);
+    fprintf(stderr, "gzlparse: unexpected character '%c' (%02x) at "
+                    "line %d, column %d (byte offset %d), aborting.\n",
+                    ch, ch, parse_state->offset.line, parse_state->offset.column,
+                    parse_state->offset.byte);
 }
 
 void error_terminal_callback(struct parse_state *parse_state, struct terminal *terminal)
 {
     struct buffer *buffer = (struct buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
-    fprintf(stderr, "gzlparse: unexpected terminal '%s' at offset %d, aborting.\n",
-                    terminal->name, terminal->offset);
+    fprintf(stderr, "gzlparse: unexpected terminal '%s' at line %d, column %d "
+                    "(byte offset %d), aborting.\n",
+                    terminal->name, terminal->offset.line, terminal->offset.column,
+                    terminal->offset.byte);
     char *terminal_text = get_json_escaped_string(buffer->buf+
-                                                  (terminal->offset - buffer->buf_offset),
+                                                  (terminal->offset.byte - buffer->buf_offset),
                                                   terminal->len);
     fprintf(stderr, "gzlparse: terminal text is: %s.\n", terminal_text);
     free(terminal_text);
@@ -198,7 +205,7 @@ void end_rule_callback(struct parse_state *parse_state)
     RESIZE_DYNARRAY(user_state->first_child, user_state->first_child_len-1);
     print_newline(user_state, true);
     print_indent(user_state);
-    printf("], \"len\": %d}", parse_state->offset - frame->start_offset);
+    printf("], \"len\": %d}", parse_state->offset.byte - frame->start_offset.byte);
 }
 
 int main(int argc, char *argv[])
@@ -297,7 +304,7 @@ int main(int argc, char *argv[])
 
             if(dump_total)
             {
-                fprintf(stderr, "gzlparse: %d bytes parsed", state->offset);
+                fprintf(stderr, "gzlparse: %d bytes parsed", state->offset.byte);
                 if(status == PARSE_STATUS_EOF)
                     fprintf(stderr, "(hit grammar EOF before file EOF)");
                 fprintf(stderr, ".\n");
