@@ -42,12 +42,12 @@ char *get_json_escaped_string(char *str, size_t size)
 {
     // The longest possible escaped string of this length has every character
     // escaped and a quote on each end, plus a NULL.
-    char *return_str = malloc(strlen(str)*2 + 3);
+    if(size == 0) size = strlen(str);  /* wait for NULL-termination */
+    char *return_str = malloc(size*6 + 3);
     char *source = str;
     char *dest = return_str;
-    if(size == 0) size = SIZE_MAX;  /* wait for NULL-termination */
     *dest++ = '"';
-    while(*source && (source-str) < size)
+    while((source-str) < size)
     {
         if(*source == '"' || *source == '\\')
         {
@@ -57,9 +57,28 @@ char *get_json_escaped_string(char *str, size_t size)
         }
         else if(*source < 32)
         {
-            // Escape control characters.
-            sprintf(dest, "\\u%04x", *source++);
-            dest += 6;
+            if(*source == '\n')
+            {
+              sprintf(dest, "\\n");
+              dest += 2;
+            }
+            else if(*source == '\t')
+            {
+              sprintf(dest, "\\t");
+              dest += 2;
+            }
+            else if(*source == '\r')
+            {
+              sprintf(dest, "\\r");
+              dest += 2;
+            }
+            else
+            {
+              // Escape control characters.
+              sprintf(dest, "\\u%04x", *source);
+              dest += 6;
+            }
+            source++;
         }
         else
             *dest++ = *source++;
@@ -71,9 +90,10 @@ char *get_json_escaped_string(char *str, size_t size)
 
 void print_newline(struct gzlparse_state *user_state, bool suppress_comma)
 {
-    if(user_state->first_child_len > 0 || suppress_comma == true)
+    if(user_state->first_child_len > 0 || suppress_comma)
     {
-        if(*DYNARRAY_GET_TOP(user_state->first_child) || suppress_comma)
+        if(user_state->first_child_len > 0 &&
+           (*DYNARRAY_GET_TOP(user_state->first_child) || suppress_comma))
         {
             *DYNARRAY_GET_TOP(user_state->first_child) = false;
             fputs("\n", stdout);
@@ -104,12 +124,15 @@ void terminal_callback(struct parse_state *parse_state,
     print_indent(user_state);
 
     char *terminal_name = get_json_escaped_string(terminal->name, 0);
+    int start = terminal->offset - buffer->buf_offset;
+    assert(start >= 0);
+    assert(start+terminal->len <= buffer->buf_len);
     char *terminal_text = get_json_escaped_string(buffer->buf+
                                                   (terminal->offset - buffer->buf_offset),
                                                   terminal->len);
     char *slotname = get_json_escaped_string(rtn_frame->rtn_transition->slotname, 0);
-    printf("{\"terminal\": %s, \"slotname\": %s, \"slotnum\": %d, \"offset\": %d "
-           "len\": %d, \"text\": %s}",
+    printf("{\"terminal\": %s, \"slotname\": %s, \"slotnum\": %d, \"offset\": %d, "
+           "\"len\": %d, \"text\": %s}",
            terminal_name, slotname, rtn_frame->rtn_transition->slotnum,
            terminal->offset, terminal->len, terminal_text);
     free(terminal_name);
@@ -138,6 +161,7 @@ void start_rule_callback(struct parse_state *parse_state)
         char *slotname = get_json_escaped_string(prev_rtn_frame->rtn_transition->slotname, 0);
         printf("\"slotname\":%s, \"slotnum\":%d, ",
                slotname, prev_rtn_frame->rtn_transition->slotnum);
+        free(slotname);
     }
 
     printf("\"children\": [");
@@ -147,8 +171,8 @@ void start_rule_callback(struct parse_state *parse_state)
 
 void error_char_callback(struct parse_state *parse_state, int ch)
 {
-    fprintf(stderr, "gzlparse: unexpected character '%c' at offset %d, aborting.\n",
-                    ch, parse_state->offset);
+    fprintf(stderr, "gzlparse: unexpected character '%c' (%02x) at offset %d, aborting.\n",
+                    ch, ch, parse_state->offset);
 }
 
 void error_terminal_callback(struct parse_state *parse_state, struct terminal *terminal)
@@ -166,7 +190,8 @@ void error_terminal_callback(struct parse_state *parse_state, struct terminal *t
 
 void end_rule_callback(struct parse_state *parse_state)
 {
-    struct gzlparse_state *user_state = (struct gzlparse_state*)parse_state->user_data;
+    struct buffer *buffer = (struct buffer*)parse_state->user_data;
+    struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
     struct parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
 
@@ -245,6 +270,7 @@ int main(int argc, char *argv[])
 
     struct gzlparse_state user_state;
     INIT_DYNARRAY(user_state.first_child, 1, 16);
+    user_state.first_child[0] = true;
 
     struct parse_state *state = alloc_parse_state();
     struct bound_grammar bg = {
@@ -254,6 +280,8 @@ int main(int argc, char *argv[])
         bg.terminal_cb = terminal_callback;
         bg.start_rule_cb = start_rule_callback;
         bg.end_rule_cb = end_rule_callback;
+        bg.error_char_cb = error_char_callback;
+        bg.error_terminal_cb = error_terminal_callback;
         fputs("{\"parse_tree\":", stdout);
     }
     init_parse_state(state, &bg);

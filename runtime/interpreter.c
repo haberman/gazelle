@@ -747,9 +747,15 @@ enum parse_status parse_file(struct parse_state *state, FILE *file, void *user_d
     bool is_eof = false;
     do
     {
-        /* Make sure we have space for at least min_new_data new data.
-         * RESIZE_DYNARRAY() will round up to a power of two. */
-        RESIZE_DYNARRAY(buffer->buf, buffer->buf_len + min_new_data);
+        /* Make sure we have space for at least min_new_data new data. */
+        size_t new_buf_size = buffer->buf_size;
+        while(buffer->buf_len + min_new_data > new_buf_size)
+          buffer->buf_size *= 2;
+        if(new_buf_size != buffer->buf_size)
+        {
+          buffer->buf_size = new_buf_size;
+          buffer->buf = realloc(buffer->buf, new_buf_size);
+        }
         size_t bytes_to_read = buffer->buf_size - buffer->buf_len;
 
         /* Do the I/O and check for errors. */
@@ -793,7 +799,7 @@ enum parse_status parse_file(struct parse_state *state, FILE *file, void *user_d
         size_t bytes_to_discard = state->open_terminal_offset - buffer->buf_offset;
         size_t bytes_to_save = buffer->buf_size - bytes_to_discard;
         char *buf_to_save_from = buffer->buf + bytes_to_discard;
-        assert(bytes_to_discard < buffer->buf_size);  /* hasn't overflowed. */
+        assert(bytes_to_discard <= buffer->buf_len);  /* hasn't overflowed. */
 
         memmove(buffer->buf, buf_to_save_from, bytes_to_save);
         buffer->buf_offset += bytes_to_discard;
