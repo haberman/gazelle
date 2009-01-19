@@ -139,7 +139,7 @@ char **load_strings(struct bc_read_stream *s)
 }
 
 static
-void load_intfa(struct bc_read_stream *s, struct intfa *intfa, char **strings)
+void load_intfa(struct bc_read_stream *s, struct gzl_intfa *intfa, char **strings)
 {
     /* first get a count of the states and transitions */
     intfa->num_states = 0;
@@ -175,7 +175,7 @@ void load_intfa(struct bc_read_stream *s, struct intfa *intfa, char **strings)
         {
             if(ri.id == BC_INTFA_STATE || ri.id == BC_INTFA_FINAL_STATE)
             {
-                struct intfa_state *state = &intfa->states[state_offset++];
+                struct gzl_intfa_state *state = &intfa->states[state_offset++];
 
                 state->num_transitions = bc_rs_read_next_32(s);
                 state->transitions = &intfa->transitions[state_transition_offset];
@@ -188,7 +188,7 @@ void load_intfa(struct bc_read_stream *s, struct intfa *intfa, char **strings)
             }
             else if(ri.id == BC_INTFA_TRANSITION || ri.id == BC_INTFA_TRANSITION_RANGE)
             {
-                struct intfa_transition *transition = &intfa->transitions[transition_offset++];
+                struct gzl_intfa_transition *transition = &intfa->transitions[transition_offset++];
 
                 if(ri.id == BC_INTFA_TRANSITION)
                 {
@@ -211,7 +211,7 @@ void load_intfa(struct bc_read_stream *s, struct intfa *intfa, char **strings)
 }
 
 static
-void load_intfas(struct bc_read_stream *s, struct grammar *g)
+void load_intfas(struct bc_read_stream *s, struct gzl_grammar *g)
 {
     /* first get a count of the intfas */
     g->num_intfas = 0;
@@ -248,7 +248,7 @@ void load_intfas(struct bc_read_stream *s, struct grammar *g)
 }
 
 static
-void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
+void load_gla(struct bc_read_stream *s, struct gzl_gla *gla, struct gzl_grammar *g)
 {
     /* first get a count of the states and transitions */
     gla->num_states = 0;
@@ -286,7 +286,7 @@ void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
         {
             if(ri.id == BC_GLA_STATE || ri.id == BC_GLA_FINAL_STATE)
             {
-                struct gla_state *state = &gla->states[state_offset++];
+                struct gzl_gla_state *state = &gla->states[state_offset++];
 
                 if(ri.id == BC_GLA_STATE)
                 {
@@ -304,7 +304,7 @@ void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
             }
             else if(ri.id == BC_GLA_TRANSITION)
             {
-                struct gla_transition *transition = &gla->transitions[transition_offset++];
+                struct gzl_gla_transition *transition = &gla->transitions[transition_offset++];
                 int term = bc_rs_read_next_32(s);
                 int dest_state_offset = bc_rs_read_next_32(s);
                 transition->dest_state = &gla->states[dest_state_offset];
@@ -322,7 +322,7 @@ void load_gla(struct bc_read_stream *s, struct gla *gla, struct grammar *g)
 }
 
 static
-void load_glas(struct bc_read_stream *s, struct grammar *g)
+void load_glas(struct bc_read_stream *s, struct gzl_grammar *g)
 {
     /* first get a count of the glas */
     g->num_glas = 0;
@@ -359,7 +359,7 @@ void load_glas(struct bc_read_stream *s, struct grammar *g)
 }
 
 static
-void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
+void load_rtn(struct bc_read_stream *s, struct gzl_rtn *rtn, struct gzl_grammar *g)
 {
     /* first get a count of the states and transitions */
     rtn->num_states = 0;
@@ -406,7 +406,7 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
                     ri.id == BC_RTN_STATE_WITH_GLA ||
                     ri.id == BC_RTN_TRIVIAL_STATE)
             {
-                struct rtn_state *state = &rtn->states[state_offset++];
+                struct gzl_rtn_state *state = &rtn->states[state_offset++];
 
                 state->num_transitions = bc_rs_read_next_32(s);
                 state->transitions = &rtn->transitions[state_transition_offset];
@@ -419,32 +419,32 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
 
                 if(ri.id == BC_RTN_STATE_WITH_INTFA)
                 {
-                    state->lookahead_type = STATE_HAS_INTFA;
+                    state->lookahead_type = GZL_STATE_HAS_INTFA;
                     state->d.state_intfa = &g->intfas[bc_rs_read_next_32(s)];
                 }
                 else if(ri.id == BC_RTN_STATE_WITH_GLA)
                 {
-                    state->lookahead_type = STATE_HAS_GLA;
+                    state->lookahead_type = GZL_STATE_HAS_GLA;
                     state->d.state_gla = &g->glas[bc_rs_read_next_32(s)];
                 }
                 else
                 {
-                    state->lookahead_type = STATE_HAS_NEITHER;
+                    state->lookahead_type = GZL_STATE_HAS_NEITHER;
                 }
             }
             else if(ri.id == BC_RTN_TRANSITION_TERMINAL ||
                     ri.id == BC_RTN_TRANSITION_NONTERM)
             {
-                struct rtn_transition *transition = &rtn->transitions[transition_offset++];
+                struct gzl_rtn_transition *transition = &rtn->transitions[transition_offset++];
 
                 if(ri.id == BC_RTN_TRANSITION_TERMINAL)
                 {
-                    transition->transition_type = TERMINAL_TRANSITION;
+                    transition->transition_type = GZL_TERMINAL_TRANSITION;
                     transition->edge.terminal_name = g->strings[bc_rs_read_next_32(s)];
                 }
                 else if(ri.id == BC_RTN_TRANSITION_NONTERM)
                 {
-                    transition->transition_type = NONTERM_TRANSITION;
+                    transition->transition_type = GZL_NONTERM_TRANSITION;
                     transition->edge.nonterminal = &g->rtns[bc_rs_read_next_32(s)];
                 }
 
@@ -461,7 +461,7 @@ void load_rtn(struct bc_read_stream *s, struct rtn *rtn, struct grammar *g)
 }
 
 static
-void load_rtns(struct bc_read_stream *s, struct grammar *g)
+void load_rtns(struct bc_read_stream *s, struct gzl_grammar *g)
 {
     /* first get a count of the rtns */
     g->num_rtns = 0;
@@ -501,9 +501,9 @@ void load_rtns(struct bc_read_stream *s, struct grammar *g)
  * The rest of this file is the publicly-exposed API
  */
 
-struct grammar *load_grammar(struct bc_read_stream *s)
+struct gzl_grammar *gzl_load_grammar(struct bc_read_stream *s)
 {
-    struct grammar *g = malloc(sizeof(*g));
+    struct gzl_grammar *g = malloc(sizeof(*g));
 
     while(1)
     {
@@ -539,7 +539,7 @@ struct grammar *load_grammar(struct bc_read_stream *s)
     return g;
 }
 
-void free_grammar(struct grammar *g)
+void gzl_free_grammar(struct gzl_grammar *g)
 {
     for(int i = 0; g->strings[i] != NULL; i++)
         free(g->strings[i]);
@@ -547,7 +547,7 @@ void free_grammar(struct grammar *g)
 
     for(int i = 0; i < g->num_rtns; i++)
     {
-        struct rtn *rtn = &g->rtns[i];
+        struct gzl_rtn *rtn = &g->rtns[i];
         free(rtn->states);
         free(rtn->transitions);
     }
@@ -555,7 +555,7 @@ void free_grammar(struct grammar *g)
 
     for(int i = 0; i < g->num_glas; i++)
     {
-        struct gla *gla = &g->glas[i];
+        struct gzl_gla *gla = &g->glas[i];
         free(gla->states);
         free(gla->transitions);
     }
@@ -563,7 +563,7 @@ void free_grammar(struct grammar *g)
 
     for(int i = 0; i < g->num_intfas; i++)
     {
-        struct intfa *intfa = &g->intfas[i];
+        struct gzl_intfa *intfa = &g->intfas[i];
         free(intfa->states);
         free(intfa->transitions);
     }

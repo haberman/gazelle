@@ -111,14 +111,14 @@ void print_indent(struct gzlparse_state *user_state)
         fputs("  ", stdout);
 }
 
-void terminal_callback(struct parse_state *parse_state,
-                       struct terminal *terminal)
+void terminal_callback(struct gzl_parse_state *parse_state,
+                       struct gzl_terminal *terminal)
 {
-    struct buffer *buffer = (struct buffer*)parse_state->user_data;
+    struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
-    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
+    struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
-    struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
+    struct gzl_rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
     print_newline(user_state, false);
     print_indent(user_state);
@@ -141,13 +141,13 @@ void terminal_callback(struct parse_state *parse_state,
     free(slotname);
 }
 
-void start_rule_callback(struct parse_state *parse_state)
+void start_rule_callback(struct gzl_parse_state *parse_state)
 {
-    struct buffer *buffer = (struct buffer*)parse_state->user_data;
+    struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
-    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
+    struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
-    struct rtn_frame *rtn_frame = &frame->f.rtn_frame;
+    struct gzl_rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
     print_newline(user_state, false);
     print_indent(user_state);
@@ -160,7 +160,7 @@ void start_rule_callback(struct parse_state *parse_state)
     if(parse_state->parse_stack_len > 1)
     {
         frame--;
-        struct rtn_frame *prev_rtn_frame = &frame->f.rtn_frame;
+        struct gzl_rtn_frame *prev_rtn_frame = &frame->f.rtn_frame;
         char *slotname = get_json_escaped_string(prev_rtn_frame->rtn_transition->slotname, 0);
         printf("\"slotname\":%s, \"slotnum\":%d, ",
                slotname, prev_rtn_frame->rtn_transition->slotnum);
@@ -172,7 +172,7 @@ void start_rule_callback(struct parse_state *parse_state)
     *DYNARRAY_GET_TOP(user_state->first_child) = true;
 }
 
-void error_char_callback(struct parse_state *parse_state, int ch)
+void error_char_callback(struct gzl_parse_state *parse_state, int ch)
 {
     fprintf(stderr, "gzlparse: unexpected character '%c' (%02x) at "
                     "line %zu, column %zu (byte offset %zu), aborting.\n",
@@ -180,9 +180,9 @@ void error_char_callback(struct parse_state *parse_state, int ch)
                     parse_state->offset.byte);
 }
 
-void error_terminal_callback(struct parse_state *parse_state, struct terminal *terminal)
+void error_terminal_callback(struct gzl_parse_state *parse_state, struct gzl_terminal *terminal)
 {
-    struct buffer *buffer = (struct buffer*)parse_state->user_data;
+    struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
     fprintf(stderr, "gzlparse: unexpected terminal '%s' at line %zu, column %zu "
                     "(byte offset %zu), aborting.\n",
@@ -195,11 +195,11 @@ void error_terminal_callback(struct parse_state *parse_state, struct terminal *t
     free(terminal_text);
 }
 
-void end_rule_callback(struct parse_state *parse_state)
+void end_rule_callback(struct gzl_parse_state *parse_state)
 {
-    struct buffer *buffer = (struct buffer*)parse_state->user_data;
+    struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
-    struct parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
+    struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
     assert(frame->frame_type == FRAME_TYPE_RTN);
 
     RESIZE_DYNARRAY(user_state->first_child, user_state->first_child_len-1);
@@ -255,7 +255,7 @@ int main(int argc, char *argv[])
         usage();
         return 1;
     }
-    struct grammar *g = load_grammar(s);
+    struct gzl_grammar *g = gzl_load_grammar(s);
     bc_rs_close_stream(s);
 
     /* Open the input file. */
@@ -279,8 +279,8 @@ int main(int argc, char *argv[])
     INIT_DYNARRAY(user_state.first_child, 1, 16);
     user_state.first_child[0] = true;
 
-    struct parse_state *state = alloc_parse_state();
-    struct bound_grammar bg = {
+    struct gzl_parse_state *state = gzl_alloc_parse_state();
+    struct gzl_bound_grammar bg = {
         .grammar = g,
     };
     if(dump_json) {
@@ -291,13 +291,13 @@ int main(int argc, char *argv[])
         bg.error_terminal_cb = error_terminal_callback;
         fputs("{\"parse_tree\":", stdout);
     }
-    init_parse_state(state, &bg);
-    enum parse_status status = parse_file(state, file, &user_state);
+    gzl_init_parse_state(state, &bg);
+    enum gzl_parse_status status = gzl_parse_file(state, file, &user_state);
 
     switch(status)
     {
-        case PARSE_STATUS_OK:
-        case PARSE_STATUS_EOF:
+        case GZL_PARSE_STATUS_OK:
+        case GZL_PARSE_STATUS_EOF:
         {
             if(dump_json)
                 fputs("\n}\n", stdout);
@@ -305,31 +305,31 @@ int main(int argc, char *argv[])
             if(dump_total)
             {
                 fprintf(stderr, "gzlparse: %zu bytes parsed", state->offset.byte);
-                if(status == PARSE_STATUS_EOF)
+                if(status == GZL_PARSE_STATUS_EOF)
                     fprintf(stderr, "(hit grammar EOF before file EOF)");
                 fprintf(stderr, ".\n");
             }
             break;
         }
 
-        case PARSE_STATUS_ERROR:
+        case GZL_PARSE_STATUS_ERROR:
             fprintf(stderr, "gzlparse: parse error, aborting.\n");
 
-        case PARSE_STATUS_CANCELLED:
+        case GZL_PARSE_STATUS_CANCELLED:
             /* TODO: when we support length caps. */
             break;
 
-        case PARSE_STATUS_IO_ERROR:
+        case GZL_PARSE_STATUS_IO_ERROR:
             perror("gzlparse");
             break;
 
-        case PARSE_STATUS_PREMATURE_EOF_ERROR:
+        case GZL_PARSE_STATUS_PREMATURE_EOF_ERROR:
             fprintf(stderr, "gzlparse: premature eof.\n");
             break;
     }
 
-    free_parse_state(state);
-    free_grammar(g);
+    gzl_free_parse_state(state);
+    gzl_free_grammar(g);
     FREE_DYNARRAY(user_state.first_child);
     fclose(file);
 }

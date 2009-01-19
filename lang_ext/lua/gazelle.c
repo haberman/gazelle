@@ -21,22 +21,22 @@
 
 struct gazelle_grammar_lua
 {
-  struct grammar *g;
+  struct gzl_grammar *g;
 };
 
 struct gazelle_rtn_lua
 {
-  struct rtn *rtn;
+  struct gzl_rtn *rtn;
 };
 
 struct gazelle_rtn_state_lua
 {
-  struct rtn_state *rtn_state;
+  struct gzl_rtn_state *rtn_state;
 };
 
 struct gazelle_rtn_transition_lua
 {
-  struct rtn_transition *rtn_transition;
+  struct gzl_rtn_transition *rtn_transition;
 };
 
 static void *newobj(lua_State *L, char *type, int size)
@@ -92,7 +92,7 @@ static void put_in_cache(lua_State *L, void *ptr)
   lua_pop(L, 1); /* pop the mod table */
 }
 
-static void get_rtn(lua_State *L, struct rtn *rtn)
+static void get_rtn(lua_State *L, struct gzl_rtn *rtn)
 {
   if(!get_from_cache(L, rtn))
   {
@@ -102,7 +102,7 @@ static void get_rtn(lua_State *L, struct rtn *rtn)
   }
 }
 
-static void get_rtn_state(lua_State *L, struct rtn_state *rtn_state)
+static void get_rtn_state(lua_State *L, struct gzl_rtn_state *rtn_state)
 {
   if(!get_from_cache(L, rtn_state))
   {
@@ -121,7 +121,7 @@ static int gazelle_load_grammar(lua_State *L)
 {
   struct bc_read_stream_lua *s = luaL_checkudata(L, 1, "bc_read_stream");
   struct gazelle_grammar_lua *g = newobj(L, "gazelle.grammar", sizeof(*g));
-  g->g = load_grammar(s->s);
+  g->g = gzl_load_grammar(s->s);
   if(!g->g)
     return luaL_error(L, "Couldn't load grammar!");
   else
@@ -240,18 +240,18 @@ static int gazelle_rtn_state_transitions(lua_State *L)
   lua_newtable(L);
   for(int i = 0; i < rtn_state->rtn_state->num_transitions; i++)
   {
-    struct rtn_transition *t = &rtn_state->rtn_state->transitions[i];
+    struct gzl_rtn_transition *t = &rtn_state->rtn_state->transitions[i];
     lua_newtable(L);
-    if(t->transition_type == TERMINAL_TRANSITION || t->transition_type == NONTERM_TRANSITION)
+    if(t->transition_type == GZL_TERMINAL_TRANSITION || t->transition_type == GZL_NONTERM_TRANSITION)
     {
-      if(t->transition_type == TERMINAL_TRANSITION)
+      if(t->transition_type == GZL_TERMINAL_TRANSITION)
       {
         lua_pushstring(L, "terminal");
         lua_rawseti(L, -2, 1);
         lua_pushstring(L, t->edge.terminal_name);
         lua_rawseti(L, -2, 2);
       }
-      else if(t->transition_type == NONTERM_TRANSITION)
+      else if(t->transition_type == GZL_NONTERM_TRANSITION)
       {
         lua_pushstring(L, "nonterm");
         lua_rawseti(L, -2, 1);
