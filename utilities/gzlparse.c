@@ -117,7 +117,7 @@ void terminal_callback(struct gzl_parse_state *parse_state,
     struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
     struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
-    assert(frame->frame_type == FRAME_TYPE_RTN);
+    assert(frame->frame_type == GZL_FRAME_TYPE_RTN);
     struct gzl_rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
     print_newline(user_state, false);
@@ -146,7 +146,7 @@ void start_rule_callback(struct gzl_parse_state *parse_state)
     struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
     struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
-    assert(frame->frame_type == FRAME_TYPE_RTN);
+    assert(frame->frame_type == GZL_FRAME_TYPE_RTN);
     struct gzl_rtn_frame *rtn_frame = &frame->f.rtn_frame;
 
     print_newline(user_state, false);
@@ -174,7 +174,7 @@ void start_rule_callback(struct gzl_parse_state *parse_state)
 
 void error_char_callback(struct gzl_parse_state *parse_state, int ch)
 {
-    fprintf(stderr, "gzlparse: unexpected character '%c' (%02x) at "
+    fprintf(stderr, "gzlparse: unexpected character '%c' (0x%02x) at "
                     "line %zu, column %zu (byte offset %zu), aborting.\n",
                     ch, ch, parse_state->offset.line, parse_state->offset.column,
                     parse_state->offset.byte);
@@ -200,7 +200,7 @@ void end_rule_callback(struct gzl_parse_state *parse_state)
     struct gzl_buffer *buffer = (struct gzl_buffer*)parse_state->user_data;
     struct gzlparse_state *user_state = (struct gzlparse_state*)buffer->user_data;
     struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(parse_state->parse_stack);
-    assert(frame->frame_type == FRAME_TYPE_RTN);
+    assert(frame->frame_type == GZL_FRAME_TYPE_RTN);
 
     RESIZE_DYNARRAY(user_state->first_child, user_state->first_child_len-1);
     print_newline(user_state, true);
@@ -282,13 +282,13 @@ int main(int argc, char *argv[])
     struct gzl_parse_state *state = gzl_alloc_parse_state();
     struct gzl_bound_grammar bg = {
         .grammar = g,
+        .error_char_cb = error_char_callback,
+        .error_terminal_cb = error_terminal_callback,
     };
     if(dump_json) {
         bg.terminal_cb = terminal_callback;
         bg.start_rule_cb = start_rule_callback;
         bg.end_rule_cb = end_rule_callback;
-        bg.error_char_cb = error_char_callback;
-        bg.error_terminal_cb = error_terminal_callback;
         fputs("{\"parse_tree\":", stdout);
     }
     gzl_init_parse_state(state, &bg);

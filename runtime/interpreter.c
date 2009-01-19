@@ -341,7 +341,7 @@ struct gzl_gla_transition *find_gla_transition(struct gzl_gla_state *gla_state,
  */
 static
 enum gzl_parse_status do_gla_transition(struct gzl_parse_state *s,
-                                        char *term_name,
+                                        struct gzl_terminal *term,
                                         int *rtn_term_offset)
 {
     struct gzl_parse_stack_frame *frame = &s->parse_stack[s->parse_stack_len-1];
@@ -350,8 +350,13 @@ enum gzl_parse_status do_gla_transition(struct gzl_parse_state *s,
     struct gzl_gla_state *gla_state = frame->f.gla_frame.gla_state;
     struct gzl_gla_state *dest_gla_state = NULL;
 
-    struct gzl_gla_transition *t = find_gla_transition(gla_state, term_name);
-    assert(t);
+    struct gzl_gla_transition *t = find_gla_transition(gla_state, term->name);
+    if(!t)
+    {
+        if(s->bound_grammar->error_terminal_cb)
+            s->bound_grammar->error_terminal_cb(s, term);
+        return GZL_PARSE_STATUS_ERROR;
+    }
     assert(t->dest_state);
     frame->f.gla_frame.gla_state = t->dest_state;
     dest_gla_state = t->dest_state;
@@ -451,7 +456,7 @@ enum gzl_parse_status process_terminal(struct gzl_parse_state *s,
         else
         {
             struct gzl_terminal *gla_term = &s->token_buffer[gla_term_offset++];
-            status = do_gla_transition(s, gla_term->name, &rtn_term_offset);
+            status = do_gla_transition(s, gla_term, &rtn_term_offset);
         }
 
         if(status == GZL_PARSE_STATUS_OK)
