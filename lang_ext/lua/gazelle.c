@@ -10,8 +10,9 @@
 
 *********************************************************************/
 
+#include <gazelle/parse.h>
+
 #include "bc_read_stream_lua.h"
-#include "interpreter.h"
 
 #include "lua.h"
 #include "lualib.h"

@@ -2,172 +2,31 @@
 
   Gazelle: a system for building fast, reusable parsers
 
-  interpreter.h
+  parse.h
 
-  This file presents the public API for loading compiled grammars and
-  parsing text using Gazelle.  There are a lot of structures, but they
-  should all be considered read-only.
+  This file presents the public API for parsing text using Gazelle.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2009 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
+
+#ifndef GAZELLE_PARSE
+#define GAZELLE_PARSE
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <stddef.h>
-#include "bc_read_stream.h"
-#include "dynarray.h"
+
+#include <gazelle/bc_read_stream.h>
+#include <gazelle/dynarray.h>
+#include <gazelle/grammar.h>
 
 #define GAZELLE_VERSION "0.3"
 #define GAZELLE_WEBPAGE "http://www.reverberate.org/gazelle/"
 
-/*
- * This group of structures are for storing a complete grammar in the form as
- * it is emitted from the compiler.  There are structures for each RTN, GLA,
- * and IntFA, states and transitions for each.
- */
-
-/* Functions for loading a grammar from a bytecode file. */
-struct gzl_grammar *gzl_load_grammar(struct bc_read_stream *s);
-void gzl_free_grammar(struct gzl_grammar *g);
-
-/*
- * RTN
- */
-
-struct gzl_rtn_state;
-struct gzl_rtn_transition;
-
-struct gzl_rtn
-{
-    char *name;
-    int num_slots;
-
-    int num_states;
-    struct gzl_rtn_state *states;  /* start state is first */
-
-    int num_transitions;
-    struct gzl_rtn_transition *transitions;
-};
-
-struct gzl_rtn_transition
-{
-    enum {
-      GZL_TERMINAL_TRANSITION,
-      GZL_NONTERM_TRANSITION,
-    } transition_type;
-
-    union {
-      char            *terminal_name;
-      struct gzl_rtn  *nonterminal;
-    } edge;
-
-    struct gzl_rtn_state *dest_state;
-    char *slotname;
-    int slotnum;
-};
-
-struct gzl_rtn_state
-{
-    bool is_final;
-
-    enum {
-      GZL_STATE_HAS_INTFA,
-      GZL_STATE_HAS_GLA,
-      GZL_STATE_HAS_NEITHER
-    } lookahead_type;
-
-    union {
-      struct gzl_intfa *state_intfa;
-      struct gzl_gla *state_gla;
-    } d;
-
-    int num_transitions;
-    struct gzl_rtn_transition *transitions;
-};
-
-/*
- * GLA
- */
-
-struct gzl_gla_state;
-struct gzl_gla_transition;
-
-struct gzl_gla
-{
-    int num_states;
-    struct gzl_gla_state *states;   /* start state is first */
-
-    int num_transitions;
-    struct gzl_gla_transition *transitions;
-};
-
-struct gzl_gla_transition
-{
-    char *term;  /* if NULL, then the term is EOF */
-    struct gzl_gla_state *dest_state;
-};
-
-struct gzl_gla_state
-{
-    bool is_final;
-
-    union {
-        struct gzl_nonfinal_info {
-            struct gzl_intfa *intfa;
-            int num_transitions;
-            struct gzl_gla_transition *transitions;
-        } nonfinal;
-
-        struct gzl_final_info {
-            int transition_offset; /* 1-based -- 0 is "return" */
-        } final;
-    } d;
-};
-
-/*
- * IntFA
- */
-
-struct gzl_intfa_state;
-struct gzl_intfa_transition;
-
-struct gzl_intfa
-{
-    int num_states;
-    struct gzl_intfa_state *states;    /* start state is first */
-
-    int num_transitions;
-    struct gzl_intfa_transition *transitions;
-};
-
-struct gzl_intfa_transition
-{
-    int ch_low;
-    int ch_high;
-    struct gzl_intfa_state *dest_state;
-};
-
-struct gzl_intfa_state
-{
-    char *final;  /* NULL if not final */
-    int num_transitions;
-    struct gzl_intfa_transition *transitions;
-};
-
-struct gzl_grammar
-{
-    char         **strings;
-
-    int num_rtns;
-    struct gzl_rtn   *rtns;
-
-    int num_glas;
-    struct gzl_gla   *glas;
-
-    int num_intfas;
-    struct gzl_intfa *intfas;
-};
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * runtime state
@@ -399,6 +258,12 @@ struct gzl_buffer
 enum gzl_status gzl_parse_file(struct gzl_parse_state *state,
                                FILE *file, void *user_data,
                                int max_buffer_size);
+
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
+
+#endif  /* GAZELLE_GRAMMAR */
 
 /*
  * Local Variables:

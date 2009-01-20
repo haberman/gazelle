@@ -13,7 +13,7 @@
 
 *********************************************************************/
 
-#include "bc_read_stream.h"
+#include <gazelle/bc_read_stream.h>
 
 #include <stdio.h>
 #include <string.h>

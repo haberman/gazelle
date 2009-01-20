@@ -14,7 +14,7 @@
   The interpreter primarily consists of maintaining the parse stack
   properly and transitioning the frames in response to the input.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
+  Copyright (c) 2007-2009 Joshua Haberman.  See LICENSE for details.
 
 *********************************************************************/
 
@@ -22,7 +22,8 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include "interpreter.h"
+
+#include <gazelle/parse.h>
 
 /*
  * A diagnostic function for dumping the current state of the stack.

@@ -17,6 +17,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct bc_read_stream;
 
 /**********************************************************
@@ -114,7 +118,11 @@ uint64_t  bc_rs_read_64(struct bc_read_stream *stream, int i);
 
 int bc_rs_get_error(struct bc_read_stream *stream);
 
+#ifdef __cplusplus
+}  /* extern "C" */
 #endif
+
+#endif  /* BITCODE_READ_STREAM */
 
 /*
  * Local Variables:

@@ -13,7 +13,7 @@
 
 *********************************************************************/
 
-#include "bc_read_stream.h"
+#include <gazelle/bc_read_stream.h>
 
 #define OP_ENCODING_FIXED 1
 #define OP_ENCODING_VBR   2

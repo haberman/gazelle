@@ -11,11 +11,11 @@
 
 *********************************************************************/
 
-#include "bc_read_stream.h"
-#include "interpreter.h"
-
 #include <stdlib.h>
 #include <stdio.h>
+
+#include <gazelle/bc_read_stream.h>
+#include <gazelle/grammar.h>
 
 #define BC_INTFAS 8
 #define BC_INTFA 9
