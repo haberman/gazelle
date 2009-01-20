@@ -1,4 +1,39 @@
 
+Gazelle 0.4, released January XX, 2009 =========================================
+
+  Overview: This release addresses all of the most pressing issues that were
+  preventing Gazelle from being usable.  The biggest gap in Gazelle's
+  capabilities was a lack of whitespace handling; this feature has been added
+  in this release.  A number of other capabilities have been added; notably, the
+  API can now return parse errors gracefully to the client application instead
+  of doing assert(false) or exit(1).
+
+  New Features:
+  * Gazelle can now handle languages with whitespace that can appear in many
+    places in the grammar.  You create a terse specification of where the
+    whitespace can appear using the @allow command.  The whitespace becomes
+    part of the parse tree, and therefore a round-trip to and from the parse
+    tree is lossless.
+  * Gazelle can return parse errors to the client application.
+  * Line/column information is now available, in addition to the raw byte
+    offset that was previously available.  This makes it easier to print
+    useful messages for things like parse errors.
+  * There is support for resource limits on the parse stack (memory) and the
+    lookahead buffer (memory).  Input that attempts to exceed these limits
+    will cause Gazelle to report the resource overage to the client.
+  * The runtime properly supports both hard EOF (grammar reaches a state where
+    it cannot accept any more characters) and soft EOF (the input reaches EOF,
+    and the grammar was in a state where EOF was valid).
+  * There is a buffering layer that can read a file sequentially but preserve
+    data for currently unfinished terminals.
+
+  C API packaging:
+  * The header files are now in a gazelle/ directory, so that they can be
+    sanely installed in /usr/include on a UNIX system.
+  * The C API now has its types, functions, and constants prefixed with gzl_
+    or GZL_, to keep from polluting the global namespace with types like
+    "terminal."
+
 Gazelle 0.3, released November 30, 2008  =======================================
 
   Overview: This release represents a lot of work on Gazelle's grammar analysis
