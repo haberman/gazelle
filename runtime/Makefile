@@ -1,10 +1,10 @@
 
 OBJS=bc_read_stream.o parse.o load_grammar.o
 
-default: libparse.a
+default: libgazelle.a
 
 clean:
-	rm -f libparse.a $(OBJS)
+	rm -f libgazelle.a $(OBJS)
 
 .PHONY: all clean
 
@@ -13,5 +13,5 @@ $(OBJS): include/gazelle/parse.h include/gazelle/bc_read_stream.h
 $(OBJS): %.o: %.c include/gazelle/parse.h include/gazelle/bc_read_stream.h
 	$(CC) $(CFLAGS) -Iinclude -o $@ -c $<
 
-libparse.a: $(OBJS)
-	$(AR) rcs libparse.a $(OBJS)
+libgazelle.a: $(OBJS)
+	$(AR) rcs libgazelle.a $(OBJS)

@@ -16,8 +16,8 @@ if [ "$1" = "all" ] ; then
   . ./lua_path
   ./compiler/gzlc sketches/json.gzl
   echo json_gzc_size=`cat sketches/json.gzc | wc -c`
-  strip runtime/libparse.a
-  echo runtime_lib_size_stripped=`cat runtime/libparse.a | wc -c`
+  strip runtime/libgazelle.a
+  echo runtime_lib_size_stripped=`cat runtime/libgazelle.a | wc -c`
 
   rm -rf /tmp/gazelle-size-test*
   mkdir -p /tmp/gazelle-size-test

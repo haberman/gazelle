@@ -14,5 +14,5 @@ bitcode_dump: bitcode_dump.o ../runtime/bc_read_stream.o
 gzlparse.o: gzlparse.c ../runtime/include/gazelle/bc_read_stream.h ../runtime/include/gazelle/parse.h
 	$(CC) $(CFLAGS) -o gzlparse.o -c gzlparse.c -I../runtime/include
 
-gzlparse: gzlparse.o ../runtime/libparse.a
-	$(CC) -o gzlparse gzlparse.o ../runtime/libparse.a
+gzlparse: gzlparse.o ../runtime/libgazelle.a
+	$(CC) -o gzlparse gzlparse.o ../runtime/libgazelle.a
