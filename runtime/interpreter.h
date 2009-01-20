@@ -304,24 +304,29 @@ struct gzl_parse_state
      * newline. */
     bool last_char_was_newline;
 
+    /* Resource limits, which clients can use to prevent degenerate or malicious
+     * input from taking up an arbitrary amount of resources.
+     * gzl_init_parse_state() will set reasonable defaults for these, but the
+     * client can override these defaults by setting these limits manually. */
+
+    /* Gazelle will return an error if the stack attempts to exceed this
+     * depth. */
+    int max_stack_depth;
+
+    /* Gazelle will return an error if the input requires more than this
+     * many terminals of lookahead.  This is only an issue for LL(*)
+     * languages -- for LL(k), this is naturally bounded to k. */
+    int max_lookahead;
+
     /* The parse stack is the main piece of state that the parser keeps.
      * There is a stack frame for every RTN, GLA, and IntFA state we are
-     * currently in.
-     *
-     * TODO: The right input can make this grow arbitrarily, so we'll need
-     * built-in limits to avoid infinite memory consumption. */
+     * currently in. */
     DEFINE_DYNARRAY(parse_stack, struct gzl_parse_stack_frame);
 
     /* The token buffer stores tokens that have already been used to transition
      * the current GLA, but will be used to transition an RTN (and perhaps
      * other GLAs) when the current GLA hits a final state.  Keeping those
-     * terminals here prevents us from having to re-lex them.
-     *
-     * TODO: If the grammar is LL(k) for fixed k, the token buffer will never
-     * need to be longer than k elements long.  If the grammar is LL(*),
-     * this can grow arbitrarily depending on the input, and we'll need
-     * a way to clamp its maximum length to prevent infinite memory
-     * consumption. */
+     * terminals here prevents us from having to re-lex them. */
     DEFINE_DYNARRAY(token_buffer, struct gzl_terminal);
 };
 
@@ -349,19 +354,19 @@ struct gzl_parse_state
  *    were read before parsing reached this state.  The client should call
  *    gzl_finish_parse() if it wants to receive final callbacks.
  */
-enum gzl_parse_status {
-  GZL_PARSE_STATUS_OK,
-  GZL_PARSE_STATUS_ERROR,
-  GZL_PARSE_STATUS_CANCELLED,
-  GZL_PARSE_STATUS_EOF,
+enum gzl_status {
+  GZL_STATUS_OK,
+  GZL_STATUS_ERROR,
+  GZL_STATUS_CANCELLED,
+  GZL_STATUS_HARD_EOF,
+  GZL_STATUS_RESOURCE_LIMIT_EXCEEDED,
 
   /* The following errors are Only returned by clients using the parse_file
    * interface: */
-  GZL_PARSE_STATUS_IO_ERROR,  /* Error reading the file, check errno. */
-  GZL_PARSE_STATUS_PREMATURE_EOF_ERROR,  /* File hit EOF but the grammar wasn't EOF */
+  GZL_STATUS_IO_ERROR,             /* Error reading the file, check errno. */
+  GZL_STATUS_PREMATURE_EOF_ERROR,  /* File hit EOF but the grammar wasn't EOF */
 };
-enum gzl_parse_status gzl_parse(struct gzl_parse_state *state,
-                                char *buf, size_t buf_len);
+enum gzl_status gzl_parse(struct gzl_parse_state *state, char *buf, size_t buf_len);
 
 /* Call this function to complete the parse.  This primarily involves
  * calling all the final callbacks.  Will return false if the parse
@@ -391,8 +396,9 @@ struct gzl_buffer
     void *user_data;
 };
 
-enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state,
-                                     FILE *file, void *user_data);
+enum gzl_status gzl_parse_file(struct gzl_parse_state *state,
+                               FILE *file, void *user_data,
+                               int max_buffer_size);
 
 /*
  * Local Variables:

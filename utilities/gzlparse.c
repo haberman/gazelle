@@ -292,12 +292,12 @@ int main(int argc, char *argv[])
         fputs("{\"parse_tree\":", stdout);
     }
     gzl_init_parse_state(state, &bg);
-    enum gzl_parse_status status = gzl_parse_file(state, file, &user_state);
+    enum gzl_status status = gzl_parse_file(state, file, &user_state, 50 * 1024);
 
     switch(status)
     {
-        case GZL_PARSE_STATUS_OK:
-        case GZL_PARSE_STATUS_EOF:
+        case GZL_STATUS_OK:
+        case GZL_STATUS_HARD_EOF:
         {
             if(dump_json)
                 fputs("\n}\n", stdout);
@@ -305,25 +305,30 @@ int main(int argc, char *argv[])
             if(dump_total)
             {
                 fprintf(stderr, "gzlparse: %zu bytes parsed", state->offset.byte);
-                if(status == GZL_PARSE_STATUS_EOF)
+                if(status == GZL_STATUS_HARD_EOF)
                     fprintf(stderr, "(hit grammar EOF before file EOF)");
                 fprintf(stderr, ".\n");
             }
             break;
         }
 
-        case GZL_PARSE_STATUS_ERROR:
+        case GZL_STATUS_ERROR:
             fprintf(stderr, "gzlparse: parse error, aborting.\n");
 
-        case GZL_PARSE_STATUS_CANCELLED:
+        case GZL_STATUS_CANCELLED:
             /* TODO: when we support length caps. */
             break;
 
-        case GZL_PARSE_STATUS_IO_ERROR:
+        case GZL_STATUS_RESOURCE_LIMIT_EXCEEDED:
+            /* TODO: more informative message about what limit was exceeded. */
+            fprintf(stderr, "gzlparse: resource limit exceeded.\n");
+            break;
+
+        case GZL_STATUS_IO_ERROR:
             perror("gzlparse");
             break;
 
-        case GZL_PARSE_STATUS_PREMATURE_EOF_ERROR:
+        case GZL_STATUS_PREMATURE_EOF_ERROR:
             fprintf(stderr, "gzlparse: premature eof.\n");
             break;
     }

@@ -99,7 +99,7 @@ struct gzl_parse_stack_frame *push_gla_frame(struct gzl_parse_state *s, struct g
 }
 
 static
-enum gzl_parse_status push_rtn_frame(struct gzl_parse_state *s, struct gzl_rtn *rtn,
+enum gzl_status push_rtn_frame(struct gzl_parse_state *s, struct gzl_rtn *rtn,
                                      struct gzl_offset *start_offset)
 {
     struct gzl_parse_stack_frame *new_frame = push_empty_frame(s, GZL_FRAME_TYPE_RTN, start_offset);
@@ -115,11 +115,11 @@ enum gzl_parse_status push_rtn_frame(struct gzl_parse_state *s, struct gzl_rtn *
         s->bound_grammar->start_rule_cb(s);
     }
 
-    return GZL_PARSE_STATUS_OK;
+    return GZL_STATUS_OK;
 }
 
 static
-enum gzl_parse_status push_rtn_frame_for_transition(struct gzl_parse_state *s,
+enum gzl_status push_rtn_frame_for_transition(struct gzl_parse_state *s,
                                                     struct gzl_rtn_transition *t,
                                                     struct gzl_offset *start_offset)
 {
@@ -144,7 +144,7 @@ struct gzl_parse_stack_frame *pop_frame(struct gzl_parse_state *s)
 }
 
 static
-enum gzl_parse_status pop_rtn_frame(struct gzl_parse_state *s)
+enum gzl_status pop_rtn_frame(struct gzl_parse_state *s)
 {
     assert(DYNARRAY_GET_TOP(s->parse_stack)->frame_type == GZL_FRAME_TYPE_RTN);
 
@@ -157,7 +157,7 @@ enum gzl_parse_status pop_rtn_frame(struct gzl_parse_state *s)
     struct gzl_parse_stack_frame *frame = pop_frame(s);
     if(frame == NULL)
     {
-        return GZL_PARSE_STATUS_EOF;
+        return GZL_STATUS_HARD_EOF;
     }
     else
     {
@@ -172,7 +172,7 @@ enum gzl_parse_status pop_rtn_frame(struct gzl_parse_state *s)
           // Should only happen at the top level.
           assert(s->parse_stack_len == 1);
         }
-        return GZL_PARSE_STATUS_OK;
+        return GZL_STATUS_OK;
     }
 }
 
@@ -211,32 +211,39 @@ struct gzl_intfa_frame *get_top_intfa_frame(struct gzl_parse_state *s)
  *   entered, entered_gla is set to true.
  */
 static
-enum gzl_parse_status descend_to_gla(struct gzl_parse_state *s, bool *entered_gla,
+enum gzl_status descend_to_gla(struct gzl_parse_state *s, bool *entered_gla,
                                      struct gzl_offset *start_offset)
 {
-    struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
     *entered_gla = false;
-
-    enum gzl_parse_status status = GZL_PARSE_STATUS_OK;
-
-    while(status == GZL_PARSE_STATUS_OK && frame->frame_type == GZL_FRAME_TYPE_RTN)
+    while(true)
     {
+        struct gzl_parse_stack_frame *frame = DYNARRAY_GET_TOP(s->parse_stack);
+
+        if(frame->frame_type != GZL_FRAME_TYPE_RTN)
+            return GZL_STATUS_OK;
+
+        /* Subtract 1 because there can be one IntFA frame beyond the RTN and
+         * GLA frames this function pushes. */
+        if(s->parse_stack_len >= s->max_stack_depth-1)
+            return GZL_STATUS_RESOURCE_LIMIT_EXCEEDED;
+
         struct gzl_rtn_frame *rtn_frame = &frame->f.rtn_frame;
         switch(rtn_frame->rtn_state->lookahead_type)
         {
           case GZL_STATE_HAS_INTFA:
-            return GZL_PARSE_STATUS_OK;
+            return GZL_STATUS_OK;
 
           case GZL_STATE_HAS_GLA:
             *entered_gla = true;
             push_gla_frame(s, rtn_frame->rtn_state->d.state_gla, start_offset);
-            return GZL_PARSE_STATUS_OK;
+            return GZL_STATUS_OK;
 
           case GZL_STATE_HAS_NEITHER:
             /* An RTN state has neither an IntFA or a GLA in only two cases:
              * - it is a final state with no outgoing transitions
              * - it is a nonfinal state with only one transition (a nonterminal) */
             assert(rtn_frame->rtn_state->num_transitions < 2);
+            enum gzl_status status = GZL_STATUS_OK;
             if(rtn_frame->rtn_state->num_transitions == 0)
             {
                 /* Final state */
@@ -248,12 +255,11 @@ enum gzl_parse_status descend_to_gla(struct gzl_parse_state *s, bool *entered_gl
                 status = push_rtn_frame_for_transition(s, &rtn_frame->rtn_state->transitions[0],
                                                        start_offset);
             }
+            if(status != GZL_STATUS_OK)
+                return status;
             break;
         }
-        frame = DYNARRAY_GET_TOP(s->parse_stack);
     }
-
-    return status;
 }
 
 static
@@ -274,7 +280,7 @@ struct gzl_intfa_frame *push_intfa_frame_for_gla_or_rtn(struct gzl_parse_state *
 }
 
 static
-enum gzl_parse_status do_rtn_terminal_transition(struct gzl_parse_state *s,
+enum gzl_status do_rtn_terminal_transition(struct gzl_parse_state *s,
                                                  struct gzl_rtn_transition *t,
                                                  struct gzl_terminal *terminal)
 {
@@ -291,7 +297,7 @@ enum gzl_parse_status do_rtn_terminal_transition(struct gzl_parse_state *s,
 
     assert(t->transition_type == GZL_TERMINAL_TRANSITION);
     rtn_frame->rtn_state = t->dest_state;
-    return GZL_PARSE_STATUS_OK;
+    return GZL_STATUS_OK;
 }
 
 static
@@ -340,7 +346,7 @@ struct gzl_gla_transition *find_gla_transition(struct gzl_gla_state *gla_state,
  *   an RTN frame (indicating we *have* hit a final state in the GLA)
  */
 static
-enum gzl_parse_status do_gla_transition(struct gzl_parse_state *s,
+enum gzl_status do_gla_transition(struct gzl_parse_state *s,
                                         struct gzl_terminal *term,
                                         int *rtn_term_offset)
 {
@@ -355,13 +361,13 @@ enum gzl_parse_status do_gla_transition(struct gzl_parse_state *s,
     {
         if(s->bound_grammar->error_terminal_cb)
             s->bound_grammar->error_terminal_cb(s, term);
-        return GZL_PARSE_STATUS_ERROR;
+        return GZL_STATUS_ERROR;
     }
     assert(t->dest_state);
     frame->f.gla_frame.gla_state = t->dest_state;
     dest_gla_state = t->dest_state;
 
-    enum gzl_parse_status status = GZL_PARSE_STATUS_OK;
+    enum gzl_status status = GZL_STATUS_OK;
 
     if(dest_gla_state->is_final)
     {
@@ -409,7 +415,7 @@ enum gzl_parse_status do_gla_transition(struct gzl_parse_state *s,
  */
 
 static
-enum gzl_parse_status process_terminal(struct gzl_parse_state *s,
+enum gzl_status process_terminal(struct gzl_parse_state *s,
                                        char *term_name,
                                        struct gzl_offset *start_offset,
                                        int len)
@@ -421,13 +427,16 @@ enum gzl_parse_status process_terminal(struct gzl_parse_state *s,
     int gla_term_offset = s->token_buffer_len;
 
     RESIZE_DYNARRAY(s->token_buffer, s->token_buffer_len+1);
+    if(s->token_buffer_len >= s->max_lookahead)
+        return GZL_STATUS_RESOURCE_LIMIT_EXCEEDED;
+
     struct gzl_terminal *term = DYNARRAY_GET_TOP(s->token_buffer);
     term->name = term_name;
     term->offset = *start_offset;
     term->len = len;
 
     /* Feed tokens to RTNs and GLAs until we have processed all the tokens we have */
-    enum gzl_parse_status status = GZL_PARSE_STATUS_OK;
+    enum gzl_status status = GZL_STATUS_OK;
     enum gzl_frame_type frame_type = frame->frame_type;
     do
     {
@@ -448,7 +457,7 @@ enum gzl_parse_status process_terminal(struct gzl_parse_state *s,
                 if(s->bound_grammar->error_terminal_cb)
                     s->bound_grammar->error_terminal_cb(s, term);
 
-                return GZL_PARSE_STATUS_ERROR;
+                return GZL_STATUS_ERROR;
             }
 
             status = do_rtn_terminal_transition(s, t, rtn_term);
@@ -459,7 +468,7 @@ enum gzl_parse_status process_terminal(struct gzl_parse_state *s,
             status = do_gla_transition(s, gla_term, &rtn_term_offset);
         }
 
-        if(status == GZL_PARSE_STATUS_OK)
+        if(status == GZL_STATUS_OK)
         {
             bool entered_gla;
             if(rtn_term_offset < s->token_buffer_len)
@@ -473,13 +482,13 @@ enum gzl_parse_status process_terminal(struct gzl_parse_state *s,
             }
         }
 
-        if(status == GZL_PARSE_STATUS_OK)
+        if(status == GZL_STATUS_OK)
         {
             assert(s->parse_stack_len > 0);
             frame_type = DYNARRAY_GET_TOP(s->parse_stack)->frame_type;
         }
     }
-    while(status == GZL_PARSE_STATUS_OK &&
+    while(status == GZL_STATUS_OK &&
           ((frame_type == GZL_FRAME_TYPE_RTN && rtn_term_offset < s->token_buffer_len) ||
            (frame_type == GZL_FRAME_TYPE_GLA && gla_term_offset < s->token_buffer_len)));
 
@@ -544,13 +553,13 @@ struct gzl_intfa_transition *find_intfa_transition(struct gzl_intfa_frame *frame
  * non-matching character is only one longer than the longest match.
  */
 static
-enum gzl_parse_status do_intfa_transition(struct gzl_parse_state *s,
+enum gzl_status do_intfa_transition(struct gzl_parse_state *s,
                                           char ch)
 {
     struct gzl_intfa_frame *intfa_frame = get_top_intfa_frame(s);
     struct gzl_intfa_transition *t = find_intfa_transition(intfa_frame, ch);
     struct gzl_parse_stack_frame *frame = GET_PARSE_STACK_FRAME(intfa_frame);
-    enum gzl_parse_status status;
+    enum gzl_status status;
 
     /* If this character did not have any transition, but the state we're coming
      * from is final, then longest-match semantics say that we should return
@@ -562,7 +571,7 @@ enum gzl_parse_status do_intfa_transition(struct gzl_parse_state *s,
         assert(terminal);
         status = process_terminal(s, terminal, &frame->start_offset,
                                   s->offset.byte - frame->start_offset.byte);
-        if(status != GZL_PARSE_STATUS_OK)
+        if(status != GZL_STATUS_OK)
             return status;
 
         intfa_frame = push_intfa_frame_for_gla_or_rtn(s);
@@ -574,7 +583,7 @@ enum gzl_parse_status do_intfa_transition(struct gzl_parse_state *s,
              * transition. */
             if(s->bound_grammar->error_char_cb)
                 s->bound_grammar->error_char_cb(s, ch);
-            return GZL_PARSE_STATUS_ERROR;
+            return GZL_STATUS_ERROR;
         }
     }
 
@@ -609,22 +618,22 @@ enum gzl_parse_status do_intfa_transition(struct gzl_parse_state *s,
         status = process_terminal(s, intfa_frame->intfa_state->final,
                                   &frame->start_offset,
                                   s->offset.byte - frame->start_offset.byte);
-        if(status != GZL_PARSE_STATUS_OK)
+        if(status != GZL_STATUS_OK)
             return status;
 
         push_intfa_frame_for_gla_or_rtn(s);
     }
 
-    return GZL_PARSE_STATUS_OK;
+    return GZL_STATUS_OK;
 }
 
 /*
  * The rest of this file is the publicly-exposed API
  */
 
-enum gzl_parse_status gzl_parse(struct gzl_parse_state *s, char *buf, size_t buf_len)
+enum gzl_status gzl_parse(struct gzl_parse_state *s, char *buf, size_t buf_len)
 {
-    enum gzl_parse_status status = GZL_PARSE_STATUS_OK;
+    enum gzl_status status = GZL_STATUS_OK;
 
     /* For the first call, we need to push the initial frame and
      * descend from the starting frame until we hit an IntFA frame. */
@@ -633,16 +642,16 @@ enum gzl_parse_status gzl_parse(struct gzl_parse_state *s, char *buf, size_t buf
         push_rtn_frame(s, &s->bound_grammar->grammar->rtns[0], &s->offset);
         bool entered_gla;
         status = descend_to_gla(s, &entered_gla, &s->offset);
-        if(status == GZL_PARSE_STATUS_OK)
+        if(status == GZL_STATUS_OK)
             push_intfa_frame_for_gla_or_rtn(s);
     }
     if(s->parse_stack_len == 0)
     {
         /* This gzl_parse_state has already hit hard EOF previously. */
-        return GZL_PARSE_STATUS_EOF;
+        return GZL_STATUS_HARD_EOF;
     }
 
-    for(int i = 0; i < buf_len && status == GZL_PARSE_STATUS_OK; i++)
+    for(int i = 0; i < buf_len && status == GZL_STATUS_OK; i++)
         status = do_intfa_transition(s, buf[i]);
 
     return status;
@@ -789,9 +798,21 @@ void gzl_init_parse_state(struct gzl_parse_state *s, struct gzl_bound_grammar *b
     s->bound_grammar = bg;
     RESIZE_DYNARRAY(s->parse_stack, 0);
     RESIZE_DYNARRAY(s->token_buffer, 0);
+
+    /* Currently each stack frame takes 28 bytes on a 32-bit machine, so a
+     * stack depth of 500 is a modest 14kb of RAM.  500 frames of recursion is
+     * far deeper than we would expect any real text to be */
+    s->max_stack_depth = 500;
+
+    /* Currently each token of lookahead takes 20 bytes on a 32-bit machine, so
+     * a lookahead depth of 500 is 10kb of RAM.  Input text would have to be
+     * truly pathological to require this much lookahead. */
+    s->max_lookahead = 500;
 }
 
-enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state, FILE *file, void *user_data)
+enum gzl_status gzl_parse_file(struct gzl_parse_state *state,
+                                     FILE *file, void *user_data,
+                                     int max_buffer_size)
 {
     struct gzl_buffer *buffer = malloc(sizeof(*buffer));
     INIT_DYNARRAY(buffer->buf, 0, 4096);
@@ -806,7 +827,7 @@ enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state, FILE *file, 
      * our buffer size. */
     const int min_new_data = 4000;
 
-    enum gzl_parse_status status;
+    enum gzl_status status;
     bool is_eof = false;
     do
     {
@@ -814,10 +835,15 @@ enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state, FILE *file, 
         size_t new_buf_size = buffer->buf_size;
         while(buffer->buf_len + min_new_data > new_buf_size)
           buffer->buf_size *= 2;
+        if(new_buf_size > max_buffer_size)
+        {
+            status = GZL_STATUS_RESOURCE_LIMIT_EXCEEDED;
+            break;
+        }
         if(new_buf_size != buffer->buf_size)
         {
-          buffer->buf_size = new_buf_size;
-          buffer->buf = realloc(buffer->buf, new_buf_size);
+            buffer->buf_size = new_buf_size;
+            buffer->buf = realloc(buffer->buf, new_buf_size);
         }
         size_t bytes_to_read = buffer->buf_size - buffer->buf_len;
 
@@ -827,7 +853,7 @@ enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state, FILE *file, 
         {
             if(ferror(file))
             {
-                status = GZL_PARSE_STATUS_IO_ERROR;
+                status = GZL_STATUS_IO_ERROR;
                 break;
             }
             else if(feof(file))
@@ -868,9 +894,9 @@ enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state, FILE *file, 
         memmove(buffer->buf, buf_to_save_from, bytes_to_save);
         buffer->buf_offset += bytes_to_discard;
         buffer->buf_len = bytes_to_save;
-    } while(status == GZL_PARSE_STATUS_OK && !is_eof);
+    } while(status == GZL_STATUS_OK && !is_eof);
 
-    if(status == GZL_PARSE_STATUS_EOF || (status == GZL_PARSE_STATUS_OK && is_eof))
+    if(status == GZL_STATUS_HARD_EOF || (status == GZL_STATUS_OK && is_eof))
     {
         if(gzl_finish_parse(state))
         {
@@ -878,15 +904,15 @@ enum gzl_parse_status gzl_parse_file(struct gzl_parse_state *state, FILE *file, 
             {
                 /* There was data left over -- we hit grammar EOF before
                  * file EOF. */
-                status = GZL_PARSE_STATUS_OK;
+                status = GZL_STATUS_OK;
             }
             else
             {
-                status = GZL_PARSE_STATUS_PREMATURE_EOF_ERROR;
+                status = GZL_STATUS_PREMATURE_EOF_ERROR;
             }
         }
         else
-            status = GZL_PARSE_STATUS_PREMATURE_EOF_ERROR;
+            status = GZL_STATUS_PREMATURE_EOF_ERROR;
     }
 
     FREE_DYNARRAY(buffer->buf);
