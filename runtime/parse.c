@@ -23,7 +23,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include <gazelle/parse.h>
+#include "gazelle/parse.h"
 
 /*
  * A diagnostic function for dumping the current state of the stack.
