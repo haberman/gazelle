@@ -1,5 +1,5 @@
 
-default: bitcode_dump gzlparse
+default: bitcode_dump gzlparse srlua-glue srlua
 all: default
 
 clean:
@@ -16,3 +16,9 @@ gzlparse.o: gzlparse.c ../runtime/include/gazelle/bc_read_stream.h ../runtime/in
 
 gzlparse: gzlparse.o ../runtime/libgazelle.a
 	$(CC) -o gzlparse gzlparse.o ../runtime/libgazelle.a
+
+srlua-glue:
+	$(CC) -o srlua-glue srlua-glue.c $(LUA_INCLUDE) $(LUA_LINK)
+
+srlua:
+	$(CC) -o srlua srlua.c $(LUA_INCLUDE) $(LUA_LINK)
