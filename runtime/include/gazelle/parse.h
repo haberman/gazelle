@@ -17,9 +17,9 @@
 #include <stdio.h>
 #include <stddef.h>
 
-#include <gazelle/bc_read_stream.h>
-#include <gazelle/dynarray.h>
-#include <gazelle/grammar.h>
+#include "gazelle/bc_read_stream.h"
+#include "gazelle/dynarray.h"
+#include "gazelle/grammar.h"
 
 #define GAZELLE_VERSION "0.3"
 #define GAZELLE_WEBPAGE "http://www.reverberate.org/gazelle/"
