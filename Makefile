@@ -32,8 +32,8 @@ lua_path: Makefile
 	echo export LUA_CPATH=`pwd`/lang_ext/lua/?.so >> lua_path
 
 gzlc: utilities
-	luac -o gzlc.out compiler/*.lua compiler/gzlc compiler/bootstrap/* sketches/pp.lua
-	./utilities/srlua-glue ./utilities/srlua gzlc.out gzlc
+	lua utilities/luac.lua compiler/gzlc -L compiler/*.lua compiler/bootstrap/*.lua sketches/pp.lua
+	./utilities/srlua-glue ./utilities/srlua luac.out gzlc
 	chmod a+x gzlc
 
 install: gzlc runtime/libgazelle.a
