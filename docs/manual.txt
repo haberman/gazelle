@@ -1,7 +1,7 @@
 Gazelle Manual
 ==============
 Joshua Haberman <joshua@reverberate.org>
-v0.3, October 2008
+v0.4, January 2009
 :toc:
 
 Gazelle is a system for parsing formal languages.  A formal language is any
@@ -39,8 +39,8 @@ An Introductory Tour
 --------------------
 
 This section offers a quick tour of Gazelle and its capabilities.  It assumes
-you have already compiled Gazelle successfully; the instructions for doing so
-are in the README.
+you have already compiled and instaled Gazelle successfully; the instructions
+for doing so are in the README.
 
 Hello, World
 ~~~~~~~~~~~~
@@ -79,8 +79,7 @@ finite automata (state machines) that can do the real parsing.  It writes
 this compiled version of the grammar to bytecode.
 
 ------------------------------------------------
-$ . lua_path
-$ ./compiler/gzlc --help
+$ gzlc --help
 gzlc -- Gazelle grammar compiler.
 Gazelle v0.3  http://www.reverberate.org/gazelle/
 
@@ -108,7 +107,7 @@ Usage: gzlc [options] input-file
                      output statistics.
 
   --version          dump Gazelle version
-$ ./compiler/gzlc hello.gzl
+$ gzlc hello.gzl
 $
 ------------------------------------------------
 
@@ -125,7 +124,7 @@ Tallis:gazelle joshua$ ls -l hello*
 If you want to see a bit more verbose output, run `gzlc` with `-v`.
 
 ------------------------------------------------
-$ ./compiler/gzlc -v hello.gzl
+$ gzlc -v hello.gzl
 Gazelle v0.3
 Opening input file 'hello.gzl'...
 Parsing grammar...
@@ -147,7 +146,7 @@ valid input text for this language, then use `gzlparse` to actually parse it.
 
 ------------------------------------------------
 $ echo -n '((((500))))' > hello_text
-$ ./utilities/gzlparse --help
+$ gzlparse --help
 gzlparse -- A command-line tool for parsing input text.
 Gazelle 0.3  http://www.reverberate.org/gazelle/.
 
@@ -158,7 +157,7 @@ Input file can be '-' for stdin.
   --dump-total   When parsing finishes, print the number of bytes parsed.
   --help         You're looking at it.
 
-$ ./utilities/gzlparse hello.gzc hello_text
+$ gzlparse hello.gzc hello_text
 $
 ------------------------------------------------
 
@@ -168,7 +167,7 @@ If you want to see more output, the flags `--dump-json` and `--dump-total` will
 print a parse tree in JSON format and a total byte count, respectively.
 
 ------------------------------------------------
-$ ./utilities/gzlparse --dump-json --dump-total hello.gzc hello_text
+$ gzlparse --dump-json --dump-total hello.gzc hello_text
 {"parse_tree":
   {"rule":"hello", "start": 0, "children": [
     {"terminal": "(", "slotname": "(", "slotnum": 0, "offset": 0, "len": 1},
@@ -204,7 +203,7 @@ Doing this HTML dump requires that Graphviz is installed.  If ImageMagick is
 installed, this will also be used to create thumbnails.
 
 ------------------------------------------------
-$ ./compiler/gzlc -d hello.gzl
+$ gzlc -d hello.gzl
 ------------------------------------------------
 
 Now open `html/index.html` in a web browser to view the HTML dump.  You will
@@ -572,6 +571,31 @@ in the grammar is the start symbol.  The syntax of this command is simply:
 
 `@start` is not required, and may not appear more than once per grammar.
 
+`@allow`
+^^^^^^^^
+
+The `@allow` command lets you tell Gazelle about syntax constructs that can
+appear in many different places througout your grammar.  Its primary use case
+is whitespace -- it lets you say that whitespace can appear between any two
+components of certain rules in your grammar.  Its syntax is:
+
+-------------------------------------------
+@allow nonterm_to_allow in start_nonterm...end_nonterm[, other_end_nonterm]*;
+-------------------------------------------
+
+For example:
+
+-------------------------------------------
+@allow whitespace in program...string, number;
+-------------------------------------------
+
+`start_nonterm` is very likely to be the top-level rule in your grammar -- the
+rule you specified to `@start`.  `end_nonterm` specifies what rule or rules
+do 'not' allow whitespace (their child rules are automatically excluded also).
+All rules that are sub-rules `start_nonterm` (either directly or indirectly),
+but are 'not' sub-rules of `end_nonterm`, will allow `nonterm_to_allow` in
+between any two components of the rule.
+
 [[X3]]
 Ambiguity Resolution
 ~~~~~~~~~~~~~~~~~~~~
@@ -895,13 +919,13 @@ them will be in future versions of the manual.
 The C Runtime
 -----------
 
-This section will document the API for the parsing runtime, and explained
-how it can be used for event-based parsing, syntax trees, ASTs, and
-whitespace-preserving transformations.  It will also discuss best
-practices for wrapping the C runtime in other languages.  It will
-'not' offer documentation about each language's wrappers -- I think
-that belongs in separate manuals, but I may change my mind about that.
-
+The C Runtime is documentated in the header files in `runtime/include/gazelle`.
+You can browse them online at GitHub:
+http://github.com/haberman/gazelle/tree/v0.4/runtime/include/gazelle[the
+header files for the latest version of Gazelle].  For an example of
+how to use the runtime, see `utilities/gzlparse.c`,
+http://github.com/haberman/gazelle/tree/v0.4/utilities/gzlparse.c[which
+you can also view online at GitHub].
 
 The Gazelle Algorithm
 ---------------------

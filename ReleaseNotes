@@ -27,7 +27,15 @@ Gazelle 0.4, released January XX, 2009 =========================================
   * There is a buffering layer that can read a file sequentially but preserve
     data for currently unfinished terminals.
 
-  C API packaging:
+  Packaging:
+  * There is now a "make install" target.  This will install:
+    - gzlc (the Gazelle compiler) into $PREFIX/bin, in a standalone binary that
+      has Lua linked and all the Lua source embedded.  This means the binary
+      isn't dependent on being able to find a bunch of Lua source files via
+      LUA_PATH.
+    - gzlparse into $PREFIX/bin
+    - headers into $PREFIX/include
+    - libraries into $PREFIX/lib
   * The header files are now in a gazelle/ directory, so that they can be
     sanely installed in /usr/include on a UNIX system.
   * The C API now has its types, functions, and constants prefixed with gzl_

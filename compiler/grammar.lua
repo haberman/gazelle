@@ -64,7 +64,6 @@ function Grammar:add_allow(what_to_allow, start_nonterm, end_nonterms)
 
   local children_func = function(rule_name)
     if not end_nonterms:contains(rule_name) then
-      print(rule_name)
       local rtn = self.rtns:get(rule_name)
       if not rtn then
         error(string.format("Error computing ignore: rule %s does not exist", rule_name))

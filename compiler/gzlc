@@ -19,7 +19,7 @@ require "ll"
 
 require "pp"
 
-version = "Gazelle v0.3"
+version = "Gazelle v0.4"
 usage = string.format([[
 gzlc -- Gazelle grammar compiler.
 %s  http://www.reverberate.org/gazelle/

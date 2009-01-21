@@ -21,7 +21,7 @@
 #include "gazelle/dynarray.h"
 #include "gazelle/grammar.h"
 
-#define GAZELLE_VERSION "0.3"
+#define GAZELLE_VERSION "0.4"
 #define GAZELLE_WEBPAGE "http://www.reverberate.org/gazelle/"
 
 #ifdef __cplusplus
@@ -194,24 +194,26 @@ struct gzl_parse_state
  * input file or stream at offset s->offset.
  *
  * Return values:
- *  - GZL_PARSE_STATUS_OK: the entire buffer has been consumed successfully,
- *    and "state" represents the state of the parse as of the last byte of the
+ *  - GZL_STATUS_OK: the entire buffer has been consumed successfully, and
+ *    "state" represents the state of the parse as of the last byte of the
  *    buffer.  You may continue parsing this file by calling gzl_parse() again
  *    with more data, or you may call gzl_finish_parse() if the input has
  *    reached EOF.
- *  - GZL_PARSE_STATUS_ERROR: there was a parse error in the input.  The parse
- *    state is as it immediately before the erroneous character or token was
+ *  - GZL_STATUS_ERROR: there was a parse error in the input.  The parse state
+ *    is as it immediately before the erroneous character or token was
  *    encountered, and can therefore be used again if desired to continue the
  *    parse from that point.  state->offset will reflect how far the parse
  *    proceeded before encountering the error.
- *  - GZL_PARSE_STATUS_CANCELLED: a callback that was called inside of
- *    gzl_parse() requested that parsing halt.  state is now invalid (this may
- *    change for the better in the future).
- *  - GZL_PARSE_STATUS_EOF: all or part of the buffer was parsed successfully,
+ *  - GZL_STATUS_CANCELLED: a callback that was called inside of gzl_parse()
+ *    requested that parsing halt.  state is now invalid (this may change for
+ *    the better in the future).
+ *  - GZL_STATUS_HARD_EOF: all or part of the buffer was parsed successfully,
  *    but a state was reached where no more characters could be accepted
  *    according to the grammar.  state->offset reflects how many characters
  *    were read before parsing reached this state.  The client should call
  *    gzl_finish_parse() if it wants to receive final callbacks.
+ *  - GZL_STATUS_RESOURCE_LIMIT_EXCEEDED: a resource limit like maximum stack
+ *    depth or maximum lookahead limit was exceeded.
  */
 enum gzl_status {
   GZL_STATUS_OK,
