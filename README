@@ -6,9 +6,8 @@ Gazelle: a system for building fast, reusable parsers
 PRELIMINARY WARNING
 ===================
 
-This is experimental, immature software.  A few things work, but a lot of
-things don't.  And everything is subject to change: the APIs, the grammar
-language, everything.
+While Gazelle is getting quite usable, the language and the APIs are still quite
+subject to change.
 
 Still with me?  Great. :)
 
@@ -18,14 +17,22 @@ BUILDING
 You need to have Lua installed to do anything interesting.  The C runtime
 doesn't need Lua, but without Lua you can't compile any grammars.
 
-Gazelle should build out-of-the-box on UNIX-like systems if Lua 5.1 is
-installed.  Ubuntu Linux and Mac OS X are tested.  Just type make:
+Gazelle should build mostly out-of-the-box on UNIX-like systems if Lua 5.1 is
+installed, but you may need to tweak the Makefile to point to your local Lua
+installation.  Ubuntu Linux and Mac OS X are tested.  Just type make:
 
 $ make
+$ make install PREFIX=/usr
+
+The PREFIX will default to /usr/local.  "make install" installs binaries like
+the compiler into $PREFIX/bin, headers into $PREFIX/include, and libraries
+into $PREFIX/lib.
 
 To build the documentation, you need to have asciidoc installed, as well
 as graphviz if you want to see the graphics.
 
+$ make
+$ . lua_path (this is needed since the documentation uses .lua files from the compiler)
 $ make doc
 
 Alternatively you can just read the manual on the Gazelle website.
@@ -41,6 +48,8 @@ lang_ext/
   wrappers around the C runtime, for high-level languages (currently only Lua)
 runtime/
   the tiny, fast, small-memory-footprint C runtime that actually does the parsing
+runtime/include
+  public header files for the runtime.
 sketches/
   code that is either half-written or for debugging-only
 tests/
