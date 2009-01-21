@@ -16,7 +16,13 @@ PREFIX=/usr/local
 default: lua_path gzlc
 	@for dir in $(SUBDIRS) ; do $(MAKE) -w -C $$dir $@ || break ; done
 
-all: lua_path doc gzlc
+runtime:
+	$(MAKE) -w -C runtime
+
+utilities: runtime
+	$(MAKE) -w -C utilities
+
+all: lua_path doc
 	@for dir in $(ALLSUBDIRS) ; do $(MAKE) -w -C $$dir $@ || break ; done
 
 doc: docs
@@ -41,7 +47,7 @@ install: gzlc runtime/libgazelle.a
 	cp gzlc $(PREFIX)/bin
 	cp utilities/gzlparse $(PREFIX)/bin
 	mkdir -p $(PREFIX)/include
-	cp -R runtime/include $(PREFIX)/include
+	cp -R runtime/include/gazelle $(PREFIX)/include
 
 test:
 	for test in tests/test*.lua; do lua $$test; done
