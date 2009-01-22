@@ -3,12 +3,17 @@
 export CC=gcc
 export AR=ar
 export CFLAGS=-Wall -g -O6 -std=c99
-export LUA_INCLUDE=-I/usr/include/lua5.1
-export LUA_LINK=-L/usr/local/lib -llua
+ifeq ($(shell uname), Darwin)
+  export LUA_INCLUDE=-I/usr/include/lua5.1
+  export LUA_LINK=-L/usr/local/lib -llua
+else
+  export LUA_INCLUDE=`pkg-config --silence-errors --cflags lua || pkg-config --cflags lua5.1`
+  export LUA_LINK=`pkg-config --silence-errors --libs lua || pkg-config --libs lua5.1`
+endif
 
 SUBDIRS=runtime lang_ext utilities
 ALLSUBDIRS=$(SUBDIRS) docs
-TARGETS=all clean docs doc default
+TARGETS=all clean docs doc default install runtime test utilities
 PREFIX=/usr/local
 
 .PHONY: $(TARGETS)

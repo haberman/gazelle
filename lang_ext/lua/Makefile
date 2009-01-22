@@ -30,7 +30,7 @@ else
 bc_read_stream.so: ../../runtime/bc_read_stream.o bc_read_stream.o
 	gcc -o bc_read_stream.so -shared bc_read_stream.o ../../runtime/bc_read_stream.o
 
-gazelle.so: ../../runtime/interpreter.o ../../runtime/bc_read_stream.o ../../runtime/load_grammar.o gazelle.o
-	gcc -o gazelle.so -shared gazelle.o ../../runtime/bc_read_stream.o ../../runtime/interpreter.o ../../runtime/load_grammar.o
+gazelle.so: ../../runtime/bc_read_stream.o ../../runtime/load_grammar.o gazelle.o
+	gcc -o gazelle.so -shared gazelle.o ../../runtime/bc_read_stream.o ../../runtime/load_grammar.o
 
 endif

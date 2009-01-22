@@ -19,7 +19,12 @@ doesn't need Lua, but without Lua you can't compile any grammars.
 
 Gazelle should build mostly out-of-the-box on UNIX-like systems if Lua 5.1 is
 installed, but you may need to tweak the Makefile to point to your local Lua
-installation.  Ubuntu Linux and Mac OS X are tested.  Just type make:
+installation.  Ubuntu Linux and Mac OS X are tested.  To install dependencies
+on Ubuntu, type:
+
+$ sudo aptitude install lua5.1 liblua5.1-0-dev
+
+To build and install Gazelle, type:
 
 $ make
 $ make install PREFIX=/usr
