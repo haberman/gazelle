@@ -3,4 +3,10 @@
 *.so
 *.a
 *.gzc
+gzlc
 lua_path
+luac.out
+utilities/bitcode_dump
+utilities/gzlparse
+utilities/srlua
+utilities/srlua-glue
