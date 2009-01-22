@@ -6,6 +6,9 @@
 gzlc
 lua_path
 luac.out
+docs/*.png
+docs/images
+docs/manual.html
 utilities/bitcode_dump
 utilities/gzlparse
 utilities/srlua
