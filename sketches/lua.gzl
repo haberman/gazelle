@@ -1,3 +1,12 @@
+// Grammar for Lua 5.1.x, based on the description at
+// http://www.lua.org/manual/5.1/manual.html#8
+//
+// Operator precedence is described at:
+// http://www.lua.org/manual/5.1/manual.html#2.5.6
+//
+// Please note that this grammar does not work with Gazelle yet, since it
+// relies on features of Gazelle that aren't finished yet (most notably
+// operator precedence parsing).
 
 Name: /[:alpha:_][:alnum:_]* ~
        (and|break|do|else|elseif|end|false|for|function|if|in|
@@ -8,16 +17,19 @@ Number: /[0-9]* (\. [0-9]+)? ([Ee] [+-]? [0-9]+)? | 0x[0-9A-Fa-f]+/;
 chunk ->  (stat ";"?) *  (laststat ";"?) ? ;
 block -> chunk;
 
-stat[assign]    -> varlist "=" explist;
-stat[funccall]  -> functioncall;
-stat[do]        -> "do" block "end";
-stat[while]     -> "while" exp "do" block "end";
-stat[repeat]    -> "repeat" block "until" exp;
-stat[if]        -> "if" exp "then" block ("elseif" exp "then" block)* ("else" block)? "end";
-stat[for]       -> "for" Name "=" exp "," exp ("," exp)? "do" block "end";
-stat[funcdef]   -> "function" funcname funcbody;
-stat[localfunc] -> "local" "function" Name funcbody;
-stat[localvars] -> "local" namelist ("=" explist)?
+stat -> assign | funccall | do | while | repeat | if | for | funcdef |
+        localfunc | localvars;
+
+assign    -> varlist "=" explist;
+funccall  -> functioncall;
+do        -> "do" block "end";
+while     -> "while" exp "do" block "end";
+repeat    -> "repeat" block "until" exp;
+if        -> "if" exp "then" block ("elseif" exp "then" block)* ("else" block)? "end";
+for       -> "for" Name "=" exp "," exp ("," exp)? "do" block "end";
+funcdef   -> "function" funcname funcbody;
+localfunc -> "local" "function" Name funcbody;
+localvars -> "local" namelist ("=" explist)?
 
 laststat -> "return" explist? | "break"
 
@@ -30,6 +42,7 @@ namelist -> Name +(,)
 exp -> "nil" | "false" | "true" | Number | string | "..." | function |
        prefixexp | tableconstructor | @expr(ops)
 
+// All of the operators, listed by precedence.
 @oplist ops: 2< "or",
              2< "and",
              2< "<" | 2< ">" | 2< "<=" | 2< ">=" | 2< "~=" | 2< "==",
