@@ -1,9 +1,9 @@
 
 ident: /[b-zA-Z]+/;
-whitespace: /[\r\n\s\t]+/;
+whitespace -> .whitespace=/[\r\n\s\t]+/;
 
 grammar     -> statement*;
-statement   -> .nonterm=ident "->" derivations ";" | "@ignore" ident "in" ident +(,) ";";
+statement   -> .nonterm=ident "->" derivations ";" | "@allow" ident "..." ident +(,) ";";
 derivations -> derivation +("|");
 derivation  -> term+;
 single_term -> regex | string | .nonterm=ident;
@@ -14,6 +14,5 @@ string      -> '"' .dquote_str_body=/([^"\\]|\\.)*/ '"' |
                "'" .squote_str_body=/([^'\\]|\\.)*/ "'";
 regex       -> "/" .regex_body=/([^\/\\]|\\.)*/ "/";
 
-@ignore whitespace in grammar, statement, derivations, derivation, term;
+@allow whitespace grammar ... modifier, string, regex;
 @start grammar;
-
