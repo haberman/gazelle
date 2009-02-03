@@ -871,7 +871,7 @@ function get_dest_states(rtn_paths, edge_val)
       if properties then
         priorities = properties.priorities
       else
-        priorities = {}
+        priorities = get_unique_table_for({})
       end
       dest_states:add(path:enter_state(edge_val, dest_state, priorities))
     end
