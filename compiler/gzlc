@@ -150,6 +150,8 @@ grammar:assign_priorities()
 -- make the RTNs in the grammar determistic and minimal
 print_verbose("Convering RTN NFAs to DFAs...")
 grammar:determinize_rtns()
+grammar:process_allow()
+grammar:canonicalize_properties()
 if minimize_rtns then
   print_verbose("Minimizing RTN DFAs...")
   grammar:minimize_rtns()

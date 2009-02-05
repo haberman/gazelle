@@ -83,6 +83,25 @@ function get_unique_table_for(val)
   return cache[str]
 end
 
+function get_unique_table_for_table(val)
+  local string_table = {}
+  local keys = {}
+  for k,v in pairs(val) do
+    table.insert(keys, k)
+  end
+
+  table.sort(keys)
+  for k in each(keys) do
+    table.insert(string_table, tostring(k))
+    table.insert(string_table, tostring(val[k]))
+   end
+  local str = table.concat(string_table, "\136")
+  if not cache[str] then
+    cache[str] = table_shallow_copy(val)
+  end
+  return cache[str]
+end
+
 function depth_first_traversal(obj, children_func)
   local seen = Set:new{obj}
   local stack = Stack:new()

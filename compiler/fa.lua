@@ -42,7 +42,9 @@ function SingletonEdgeValue:new(name)
   self.singletons = self.singletons or {}
   -- we index each singleton by name, creating new ones lazily.
   self.singletons[name] = self.singletons[name] or newobject(self)
-  return self.singletons[name]
+  local obj = self.singletons[name]
+  obj.name = name
+  return obj
 end
 
 -- This is a special edge value that represents a transition that can be
@@ -160,6 +162,15 @@ function FAState:dest_state_for(val)
   end
 end
 
+function FAState:canonicalize_properties()
+  for i, _ in ipairs(self._transitions) do
+    self._transitions[i][3] = get_unique_table_for_table(self._transitions[i][3])
+  end
+  if type(self.final) == "table" then
+    self.final = get_unique_table_for_table(self.final)
+  end
+end
+
 
 --[[--------------------------------------------------------------------
 
@@ -242,6 +253,7 @@ end
 function IntFA:get_outgoing_edge_values(states)
   local symbol_sets = Set:new()
   local properties_set = Set:new()
+  states = states or self:states()
   for state in each(states) do
     for symbol_set, target_state, properties in state:transitions() do
       if properties ~= nil then
@@ -378,6 +390,7 @@ end
 
 function GLA:get_outgoing_edge_values(states)
   local values = {}
+  states = states or self:states()
   for state in each(states) do
     for edge_val, target_state, properties in state:transitions() do
       if edge_val ~= fa.e then
@@ -462,6 +475,7 @@ end
 
 function RTN:get_outgoing_edge_values(states)
   local values = {}
+  states = states or self:states()
   for state in each(states) do
     for edge_val, target_state, properties in state:transitions() do
       if edge_val ~= fa.e then

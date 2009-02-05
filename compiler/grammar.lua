@@ -37,6 +37,7 @@ function Grammar:new()
   obj.terminals = {}
   obj.master_intfas = OrderedSet:new()
   obj.start = nil  -- what rule the entire grammar starts on
+  obj.allow = {}
   return obj
 end
 
@@ -59,36 +60,48 @@ function Grammar:add_terminal(name, intfa)
 end
 
 function Grammar:add_allow(what_to_allow, start_nonterm, end_nonterms)
-  -- kind of a hack to do this here.
-  self:determinize_rtns()
+  table.insert(self.allow, {what_to_allow, start_nonterm, end_nonterms})
+end
 
-  local children_func = function(rule_name)
-    if not end_nonterms:contains(rule_name) then
-      local rtn = self.rtns:get(rule_name)
-      if not rtn then
-        error(string.format("Error computing ignore: rule %s does not exist", rule_name))
-      end
+function Grammar:process_allow()
+  for allow in each(self.allow) do
+    local what_to_allow, start_nonterm, end_nonterms = unpack(allow)
+    local children_func = function(rule_name)
+      if not end_nonterms:contains(rule_name) then
+        local rtn = self.rtns:get(rule_name)
+        if not rtn then
+          error(string.format("Error computing ignore: rule %s does not exist", rule_name))
+        end
 
-      -- get sub-rules
-      local subrules = Set:new()
-      for state in each(rtn:states()) do
-        for edge_val, dest_state, properties in state:transitions() do
-          if fa.is_nonterm(edge_val) and properties.slotnum ~= -1 then
-            subrules:add(edge_val.name)
+        -- get sub-rules
+        local subrules = Set:new()
+        for state in each(rtn:states()) do
+          for edge_val, dest_state, properties in state:transitions() do
+            if fa.is_nonterm(edge_val) and properties.slotnum ~= -1 then
+              subrules:add(edge_val.name)
+            end
           end
         end
-      end
 
-      -- add self-transitions for every state
-      for state in each(rtn:states()) do
-        state:add_transition(what_to_allow, state, {name=what_to_allow.name, slotnum=-1})
-      end
+        -- add self-transitions for every state
+        for state in each(rtn:states()) do
+          state:add_transition(what_to_allow, state, {name=what_to_allow.name, slotnum=-1})
+        end
 
-      return subrules
+        return subrules
+      end
+    end
+
+    depth_first_traversal(start_nonterm, children_func)
+  end
+end
+
+function Grammar:canonicalize_properties()
+  for name, rtn in each(self.rtns) do
+    for state in each(rtn:states()) do
+      state:canonicalize_properties()
     end
   end
-
-  depth_first_traversal(start_nonterm, children_func)
 end
 
 function Grammar:check_defined()
@@ -180,6 +193,7 @@ function Grammar:assign_priorities()
     for state in each(rtn:states()) do
       priorities = {}
       depth_first_traversal(state, children)
+      priorities = get_unique_table_for_table(priorities)
       for edge_val, dest_state, properties in state:transitions() do
         if edge_val ~= fa.e then
           -- non-epsilon transitions should always have properties assigned,

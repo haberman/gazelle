@@ -143,7 +143,7 @@ end
 
 function hopcroft_minimize(dfa)
   -- First create the alphabet and an inverse transition table.
-  local alphabet = dfa:get_outgoing_edge_values(dfa:states())
+  local alphabet = dfa:get_outgoing_edge_values()
   local inverse_transitions = {}
 
   for state in each(dfa:states()) do

@@ -606,6 +606,8 @@ function get_subparser_redundant_paths(paths)
         table.insert(no_subparser_history, get_unique_table_for(history))
       end
     end
+    -- history_key uniquely identifies a particular path with all subparser
+    -- calls removed.
     local history_key = get_unique_table_for(no_subparser_history)
     no_subparser_paths[history_key] = no_subparser_paths[history_key] or Set:new()
     no_subparser_paths[history_key]:add(path)
@@ -613,27 +615,46 @@ function get_subparser_redundant_paths(paths)
 
   -- Now, for any paths that only differ by placement of the subparser,
   -- create a list of all but the one that puts the subparser the earliest.
+  -- TODO: we don't currently support resolving ambiguity between
+  -- multiple subparsers, or between regular components and subparsers.
+  -- And we probably never will (it's very unlikely to actually be what
+  -- was intended), but the error messages around this could be improved.
   local redundant_paths = {}
   for history_key, paths in pairs(no_subparser_paths) do
     if paths:count() > 1 then
       local offset = 1
+      local has_subparser_paths = Set:new()
       local winning_path = nil
-      while true do
+      local reached_end = false
+      while reached_end == false do
+        reached_end = true
         for path in each(paths) do
-          if path.history[offset][5] == true then
-            -- This path has the subparser first and therefore wins.
-            winning_path = path
+          if path.history[offset] then
+            reached_end = false
+            if path.history[offset][5] == true then
+              -- This path has a subparser call somewhere.
+              has_subparser_paths:add(path)
+              if not winning_path then
+                -- This path has the subparser first and therefore wins.
+                winning_path = path
+              end
+            end
           end
         end
-        if winning_path then
-          break
-        end
+        offset = offset + 1
       end
 
       -- Create a list of all but the winning path.
-      for path in each(paths) do
-        if path ~= winning_path then
-          table.insert(redundant_paths, path)
+      if winning_path then
+        if has_subparser_paths:count() < paths:count() then
+          error("What you have done is weird: you have a subparser (@allow) " ..
+                "competing with a regular rule component.  This is probably not " ..
+                "what you meant to do.")
+        end
+        for path in each(paths) do
+          if path ~= winning_path then
+            table.insert(redundant_paths, path)
+          end
         end
       end
 
