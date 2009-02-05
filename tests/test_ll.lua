@@ -528,6 +528,25 @@ function TestLLStar:test2()
   )
 end
 
+-- A GLA cycle that occurs in a state that is more than 1 transition
+-- away from the start (there used to be a bug that caused an infinite
+-- loop in this case).
+function TestLLStar:test3()
+  assert_lookahead(
+  [[
+    s -> "X" "Y" "Z"* "Q" | "X" "Y" "Z"* "R";
+  ]],
+  "s", 0,
+  [[
+    1 -X-> 2;
+    2 -Y-> 3;
+    3 -Z-> 3;
+    3 -Q-> 4(1);
+    3 -R-> 5(5);
+  ]]
+  )
+end
+
 TestFollow = {}
 function TestFollow:test1()
   assert_lookahead(

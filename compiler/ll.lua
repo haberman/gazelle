@@ -435,10 +435,12 @@ function construct_gla(state, grammar, follow_states, k)
         local paths = get_dest_states(paths, edge_val)
 
         local maybe_new_gla_state
-        if gla_states[paths:hash_key()] then
-          maybe_new_gla_state = gla_states[paths:hash_key()]
+        local hash_key = paths:hash_key()
+        if gla_states[hash_key] then
+          maybe_new_gla_state = gla_states[hash_key]
         else
           maybe_new_gla_state = fa.GLAState:new(paths)
+          gla_states[hash_key] = maybe_new_gla_state
           queue:enqueue(maybe_new_gla_state)
         end
         gla_state:add_transition(edge_val, maybe_new_gla_state)
