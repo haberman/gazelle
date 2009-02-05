@@ -1,19 +1,18 @@
-
-ident: /[b-zA-Z]+/;
-whitespace: /[\r\n\s\t]+/;
-
-grammar     -> statement*;
-statement   -> .nonterm=ident "->" derivations ";" | "@ignore" ident "in" ident +(,) ";";
+ident -> .ident=/[a-zA-Z_]+/;
+whitespace -> .whitespace=/[\r\n\s\t]+/;
+grammar     -> (command | statement | named_regex)*;
+command     -> "@start" ident ";" | "@allow" .allowed=ident .from=ident "..." .until=ident +(",") ";";
+named_regex -> .name=ident ":" regex ";";
+statement   -> .nonterm=ident "->" derivations ";";
 derivations -> derivation +("|");
 derivation  -> term+;
+term        -> (basic_term | group) modifier?;
+basic_term  -> ( "." .name=ident "=" )? (regex | string | .nonterm=ident );
+group       -> "(" derivations ")";
+modifier    -> "?" | "*" | "+" | ("*" | "+") "(" single_term ")";
 single_term -> regex | string | .nonterm=ident;
-term        -> ( "." .name=ident "=" )? (regex | string | .nonterm=ident ) modifier ? ;
-modifier    -> "?" | "*" | "+" |
-                ("*" | "+") "(" single_term ")";
 string      -> '"' .dquote_str_body=/([^"\\]|\\.)*/ '"' |
                "'" .squote_str_body=/([^'\\]|\\.)*/ "'";
 regex       -> "/" .regex_body=/([^\/\\]|\\.)*/ "/";
-
-@ignore whitespace in grammar, statement, derivations, derivation, term;
+@allow whitespace grammar ... modifier, string, regex;
 @start grammar;
-
