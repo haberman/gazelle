@@ -1,3 +1,6 @@
+// The grammar for Gazelle's own input language.  This will (hopefully soon)
+// allow Gazelle to be self-hosting.
+
 ident -> .ident=/[a-zA-Z_]+/;
 whitespace -> .whitespace=/[\r\n\s\t]+/;
 grammar     -> (command | statement | named_regex)*;
