@@ -43,7 +43,7 @@ lua_path: Makefile
 	echo export LUA_CPATH=`pwd`/lang_ext/lua/?.so >> lua_path
 
 gzlc: utilities
-	lua utilities/luac.lua compiler/gzlc -L compiler/*.lua compiler/bootstrap/*.lua sketches/pp.lua
+	lua utilities/luac.lua compiler/gzlc -L compiler/*.lua compiler/bootstrap/*.lua sketches/pp.lua sketches/dump_to_html.lua
 	./utilities/srlua-glue ./utilities/srlua luac.out gzlc
 	chmod a+x gzlc
 
