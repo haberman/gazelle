@@ -55,4 +55,14 @@ install: gzlc runtime/libgazelle.a
 	cp -R runtime/include/gazelle $(PREFIX)/include
 
 test:
-	for test in tests/test*.lua; do lua $$test; done
+	@set -e; \
+	for test in tests/test*.lua; do \
+	  echo; \
+	  echo; \
+	  echo "=============================================="; \
+	  echo "==   TESTING $$test"; \
+	  echo "=============================================="; \
+	  echo; \
+	  lua $$test; \
+	done
+

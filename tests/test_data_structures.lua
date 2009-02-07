@@ -1,3 +1,14 @@
+--[[--------------------------------------------------------------------
+
+  Gazelle: a system for building fast, reusable parsers
+
+  tests/test_data_structures.lua
+
+  Routines that test data structures like stacks, queues, etc.
+
+  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
+
+--------------------------------------------------------------------]]--
 
 require "luaunit"
 require "data_structures"
