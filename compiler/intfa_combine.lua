@@ -32,7 +32,7 @@ function analyze_conflicts(terminals)
 
   local uber_dfa = nfas_to_dfa(nfas, true)
   for state in each(uber_dfa:states()) do
-    if type(state.final) == "table" then  -- more than one terminal ended in this state
+    if type(state:get_final() or nil) == "table" then  -- more than one terminal ended in this state
       for term1 in each(state.final) do
         for term2 in each(state.final) do
           if term1 ~= term2 then
@@ -60,6 +60,7 @@ function has_conflicts(conflicts, term_set1, term_set2)
 end
 
 function create_or_reuse_termset_for(terminals, conflicts, termsets, nonterm)
+  assert(#terminals > 0, "Should have at least one terminal")
   if has_conflicts(conflicts, terminals, terminals) then
     local has_conflict, c1, c2 = has_conflicts(conflicts, terminals, terminals)
     error(string.format("Can't build DFA inside %s, because terminals %s and %s conflict",
@@ -101,16 +102,17 @@ function intfa_combine(all_terminals, state_term_pairs)
   for state_term_pair in each(state_term_pairs) do
     local state, terms = unpack(state_term_pair)
     local nonterm
-    if state.rtn == nil then
-      nonterm = state.gla.rtn_state.rtn.name
+    if state:get_rtn() == nil then
+      nonterm = state:get_gla():get_rtn_state():get_rtn():get_name()
     else
-      nonterm = state.rtn.name
+      nonterm = state:get_rtn():get_name()
     end
     intfa_nums[state] = create_or_reuse_termset_for(terms, conflicts, termsets, nonterm)
   end
 
   local dfas = OrderedSet:new()
   for termset in each(termsets) do
+    assert(#termset > 0, "termset should have at least one term")
     local nfas = {}
     for term in each(termset) do
       local target = all_terminals[term]

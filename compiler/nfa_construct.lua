@@ -31,8 +31,8 @@ module("nfa_construct", package.seeall)
 --------------------------------------------------------------------]]--
 
 function concat(nfa1, nfa2)
-  nfa1.final:add_transition(fa.e, nfa2.start)
-  return nfa1:new_graph{start = nfa1.start, final = nfa2.final}
+  nfa1:get_final():add_transition(fa.e, nfa2:get_start())
+  return nfa1:get_class():new{start = nfa1:get_start(), final = nfa2:get_final()}
 end
 
 
@@ -53,7 +53,7 @@ end
 --------------------------------------------------------------------]]--
 
 function alt(nfas, prioritized)
-  local new_nfa = nfas[1]:new_graph()
+  local new_nfa = nfas[1]:get_class():new()
   local priority_class = {}
 
   for i=1,#nfas do
@@ -65,8 +65,8 @@ function alt(nfas, prioritized)
       }
     end
 
-    new_nfa.start:add_transition(fa.e, nfas[i].start, properties)
-    nfas[i].final:add_transition(fa.e, new_nfa.final)
+    new_nfa:get_start():add_transition(fa.e, nfas[i]:get_start(), properties)
+    nfas[i]:get_final():add_transition(fa.e, new_nfa:get_final())
   end
 
   return new_nfa
@@ -118,11 +118,11 @@ end
 --------------------------------------------------------------------]]--
 
 function rep(nfa, favor_repeat)
-  local new_nfa = nfa:new_graph()
+  local new_nfa = nfa:get_class():new()
   local repeat_properties, finish_properties = get_repeating_properties(favor_repeating)
-  new_nfa.start:add_transition(fa.e, nfa.start)
-  nfa.final:add_transition(fa.e, nfa.start, repeat_properties)
-  nfa.final:add_transition(fa.e, new_nfa.final, finish_properties)
+  new_nfa:get_start():add_transition(fa.e, nfa:get_start())
+  nfa:get_final():add_transition(fa.e, nfa:get_start(), repeat_properties)
+  nfa:get_final():add_transition(fa.e, new_nfa:get_final(), finish_properties)
   return new_nfa
 end
 
@@ -146,10 +146,10 @@ end
 function kleene(nfa, favor_repeat)
   local new_nfa = rep(nfa)
   local repeat_properties, finish_properties = get_repeating_properties(favor_repeat)
-  new_nfa.start:add_transition(fa.e, nfa.start)
-  new_nfa.start:add_transition(fa.e, new_nfa.final, finish_properties)
-  nfa.final:add_transition(fa.e, nfa.start, repeat_properties)
-  nfa.final:add_transition(fa.e, new_nfa.final, finish_properties)
+  new_nfa:get_start():add_transition(fa.e, nfa:get_start())
+  new_nfa:get_start():add_transition(fa.e, new_nfa:get_final(), finish_properties)
+  nfa:get_final():add_transition(fa.e, nfa:get_start(), repeat_properties)
+  nfa:get_final():add_transition(fa.e, new_nfa:get_final(), finish_properties)
   return new_nfa
 end
 

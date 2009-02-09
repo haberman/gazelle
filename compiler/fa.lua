@@ -31,21 +31,16 @@
 
 --------------------------------------------------------------------]]--
 
-require "misc"
+require "object"
 
 module("fa", package.seeall)
 
 -- Class for representing special-case edge values that have only one
 -- instance for the whole program.
-SingletonEdgeValue = {name="SingletonEdgeValue"}
-function SingletonEdgeValue:new(name)
-  self.singletons = self.singletons or {}
-  -- we index each singleton by name, creating new ones lazily.
-  self.singletons[name] = self.singletons[name] or newobject(self)
-  local obj = self.singletons[name]
-  obj.name = name
-  return obj
-end
+Class:new("SingletonEdgeValue")
+  function SingletonEdgeValue:initialize(name)
+    self.name = name
+  end
 
 -- This is a special edge value that represents a transition that can be
 -- taken without consuming any input.
@@ -62,19 +57,19 @@ eof = SingletonEdgeValue:new("EOF")
 
 --------------------------------------------------------------------]]--
 
-FAState = {name="FAState"}
-function FAState:new()
-  local obj = newobject(self)
-  obj._transitions = {}
-  return obj
+Class:new("FAState")
+attr_accessor(FAState, "block")
+attr_accessor(FAState, "final")
+function FAState:initialize()
+  self.transitions = {}
 end
 
 function FAState:tostring()
-  local str = string.format("{%s, %d transitions", self.class.name, self:num_transitions())
+  local str = string.format("{%s, %d transitions", self.class:get_name(), self:num_transitions())
   -- TODO: rename .rtn to .fa, to be more generic
   if self.rtn then
-    str = str .. string.format(", from rule named %s", self.rtn.name)
-    if self.rtn.start == self then
+    str = str .. string.format(", from rule named %s", self.rtn:get_name())
+    if self.rtn:get_start() == self then
       str = str .. ", start"
     else
       str = str .. ", NOT start"
@@ -91,32 +86,32 @@ end
 
 function FAState:child_states()
   local children = Set:new()
-  for edge_value, target_state in self:transitions() do
+  for edge_value, target_state in self:each_transition() do
     children:add(target_state)
   end
   return children
 end
 
 function FAState:add_transition(edge_value, target_state, edge_properties)
-  for e_edge_value, e_target_state, e_edge_properties in self:transitions() do
+  for e_edge_value, e_target_state, e_edge_properties in self:each_transition() do
     if edge_value == e_edge_value and target_state == e_target_state
        and e_edge_properties == edge_properties then
        return
     end
   end
-  table.insert(self._transitions, {edge_value, target_state, edge_properties})
+  table.insert(self.transitions, {edge_value, target_state, edge_properties})
 end
 
 function FAState:num_transitions()
-  return #self._transitions
+  return #self.transitions
 end
 
-function FAState:transitions()
+function FAState:each_transition()
   local i = 0
   return function ()
     i = i + 1
-    if self._transitions[i] then
-      return unpack(self._transitions[i])
+    if self.transitions[i] then
+      return unpack(self.transitions[i])
     else
       return nil
     end
@@ -124,7 +119,7 @@ function FAState:transitions()
 end
 
 function FAState:clear_transitions()
-  self._transitions = {}
+  self.transitions = {}
 end
 
 function FAState:transitions_for(val, prop)
@@ -135,7 +130,7 @@ function FAState:transitions_for(val, prop)
     targets = Set:new()
   end
 
-  for edge_val, target_state, properties in self:transitions() do
+  for edge_val, target_state, properties in self:each_transition() do
     if edge_val == val and ((prop == "ANY") or (prop == "ALL") or (prop == properties)) then
       if prop == "ANY" then
         table.insert(targets, {target_state, properties})
@@ -163,8 +158,8 @@ function FAState:dest_state_for(val)
 end
 
 function FAState:canonicalize_properties()
-  for i, _ in ipairs(self._transitions) do
-    self._transitions[i][3] = get_unique_table_for_table(self._transitions[i][3])
+  for i, _ in ipairs(self.transitions) do
+    self.transitions[i][3] = get_unique_table_for_table(self.transitions[i][3])
   end
   if type(self.final) == "table" then
     self.final = get_unique_table_for_table(self.final)
@@ -178,34 +173,31 @@ end
 
 --------------------------------------------------------------------]]--
 
-FA = {name="FA"}
-function FA:new(init)
-  local obj = newobject(self)
+Class:new("FA")
+attr_accessor(FA, "start")
+attr_accessor(FA, "final")
+function FA:initialize(init)
   init = init or {}
 
-  if obj.new_state then
-    obj.start = init.start or obj:new_state()
-    obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
-    if init.symbol then
-      obj.start:add_transition(init.symbol, obj.final, init.properties)
-    elseif init.string then
-      local int_set = IntSet:new()
-      local char = init.string:sub(1, 1):byte()
+  self.start = init.start or self:new_state()
+  self.final = init.final or self:new_state() -- for all but Thompson NFA fragments we ignore this
+  if init.symbol then
+    self.start:add_transition(init.symbol, self.final, init.properties)
+  elseif init.string then
+    local int_set = IntSet:new()
+    local char = init.string:sub(1, 1):byte()
+    int_set:add(Range:new(char, char))
+    local fa = IntFA:new{symbol=int_set}
+    for i=2,#init.string do
+      int_set = IntSet:new()
+      char = init.string:sub(i, i):byte()
       int_set:add(Range:new(char, char))
-      local fa = IntFA:new{symbol=int_set}
-      for i=2,#init.string do
-        int_set = IntSet:new()
-        char = init.string:sub(i, i):byte()
-        int_set:add(Range:new(char, char))
-        fa = nfa_construct.concat(fa, IntFA:new{symbol=int_set})
-      end
-      return fa
+      fa = nfa_construct.concat(fa, IntFA:new{symbol=int_set})
     end
+    return fa
   end
 
-  obj.properties = {}
-
-  return obj
+  self.properties = {}
 end
 
 function FA:states()
@@ -213,19 +205,19 @@ function FA:states()
 end
 
 function FA:dup()
-  local new_graph = self:new_graph()
+  local new_graph = self.class:new()
   local new_states = {}
 
   -- duplicate states
   for state in each(self:states()) do
     new_states[state] = new_states[state] or self:new_state()
-    if self.start == state then new_graph.start = new_states[state] end
-    if self.final == state then new_graph.final = new_states[state] end
+    if self.start == state then new_graph:set_start(new_states[state]) end
+    if self.final == state then new_graph:set_final(new_states[state]) end
   end
 
   -- duplicate transitions
   for state in each(self:states()) do
-    for edge_val, target_state, properties in state:transitions() do
+    for edge_val, target_state, properties in state:each_transition() do
       new_states[state]:add_transition(edge_val, new_states[target_state], properties)
     end
   end
@@ -240,12 +232,7 @@ end
 
 --------------------------------------------------------------------]]--
 
-IntFA = FA:new()
-IntFA.name = "IntFA"
-function IntFA:new_graph(init)
-  return IntFA:new(init)
-end
-
+Class:new("IntFA", FA)
 function IntFA:new_state()
   return IntFAState:new()
 end
@@ -255,12 +242,12 @@ function IntFA:get_outgoing_edge_values(states)
   local properties_set = Set:new()
   states = states or self:states()
   for state in each(states) do
-    for symbol_set, target_state, properties in state:transitions() do
+    for symbol_set, target_state, properties in state:each_transition() do
       if properties ~= nil then
         properties_set:add(properties)
       end
 
-      if type(symbol_set) == "table" and symbol_set.class == IntSet then
+      if isobject(symbol_set) and symbol_set:get_class() == IntSet then
         symbol_sets:add(symbol_set)
       end
     end
@@ -299,7 +286,7 @@ function IntFA:to_dot()
     label = label:gsub("[\"\\]", "\\%1")
     label = label:gsub("NEWLINE", "\\n")
     str = str .. string.format('  "%s" [label="%s", peripheries=%d];\n', tostring(state), label, peripheries)
-    for char, tostate, attributes in state:transitions() do
+    for char, tostate, attributes in state:each_transition() do
       local print_char
       if char == fa.e then
         print_char = "ep"
@@ -325,26 +312,24 @@ function IntFA:to_dot()
 end
 
 
-IntFAState = FAState:new()
-IntFAState.name = "IntFAState"
-
+Class:new("IntFAState", FAState)
 function IntFAState:add_transition(edge_value, target_state, edge_properties)
   -- as a special case, IntSet edge_values can be combined if two edge_values
   -- have the same target_state and neither has any edge_properties.
-  if edge_value.class == IntSet and edge_properties == nil then
-    for existing_edge_value, existing_target_state, existing_edge_properties in self:transitions() do
+  if edge_value:get_class() == IntSet and edge_properties == nil then
+    for existing_edge_value, existing_target_state, existing_edge_properties in self:each_transition() do
       if existing_edge_value.class == IntSet and target_state == existing_target_state and existing_edge_properties == nil then
         existing_edge_value:add_intset(edge_value)
         return
       end
     end
   end
-  FAState.add_transition(self, edge_value, target_state, edge_properties)
+  self:super(edge_value, target_state, edge_properties)
 end
 
 function IntFAState:transitions_for(val, prop)
   local targets = Set:new()
-  if type(val) == "table" and val.class == IntSet then
+  if isobject(val) and val:get_class() == IntSet then
     val = val:sampleint()
   end
   if prop == nil then
@@ -357,7 +342,7 @@ function IntFAState:transitions_for(val, prop)
     targets = Set:new()
   end
 
-  for edge_val, target_state, properties in self:transitions() do
+  for edge_val, target_state, properties in self:each_transition() do
     if edge_val == val or (val ~= fa.e and edge_val.class == IntSet and edge_val:contains(val)) then
       if (prop == "ALL") or (prop == "ANY") or (prop == properties) then
         if prop == "ANY" then
@@ -378,12 +363,9 @@ end
 
 --------------------------------------------------------------------]]--
 
-GLA = FA:new()
-GLA.name = "GLA"
-function GLA:new_graph(init)
-  return GLA:new(init)
-end
-
+Class:new("GLA", FA)
+attr_accessor(GLA, "rtn_state")
+attr_accessor(GLA, "longest_path")
 function GLA:new_state()
   return GLAState:new()
 end
@@ -392,7 +374,7 @@ function GLA:get_outgoing_edge_values(states)
   local values = {}
   states = states or self:states()
   for state in each(states) do
-    for edge_val, target_state, properties in state:transitions() do
+    for edge_val, target_state, properties in state:each_transition() do
       if edge_val ~= fa.e then
         table.insert(values, {edge_val, properties})
       end
@@ -413,7 +395,7 @@ function GLA:to_dot(indent, suffix)
       if state.final[1] == 0 then   -- the special value that means "return"
         extra_label = "Return"
       else
-        for edge_val, dest_state, properties in self.rtn_state:transitions() do
+        for edge_val, dest_state, properties in self.rtn_state:each_transition() do
           if edge_val == state.final[1] and dest_state == state.final[2] then
             extra_label = tostring(properties.slotnum)
           end
@@ -423,7 +405,7 @@ function GLA:to_dot(indent, suffix)
     if self.start == state then extra_label = "Start" end
     str = str .. string.format('%s"%s" [label="%s" peripheries=%d]\n',
                                 indent, tostring(state) .. suffix, escape(extra_label), peripheries)
-    for edge_val, target_state in state:transitions() do
+    for edge_val, target_state in state:each_transition() do
       if edge_val == fa.eof then
         edge_val = "EOF"
       end
@@ -435,24 +417,25 @@ function GLA:to_dot(indent, suffix)
   return str
 end
 
-
-GLAState = FAState:new()
-GLAState.name = "GLAState"
-function GLAState:new(paths)
-  local obj = FAState:new()
-  obj.rtn_paths = paths
+Class:new("GLAState", FAState)
+attr_accessor(GLAState, "rtn_paths")
+attr_accessor(GLAState, "gla")
+attr_reader(GLAState, "lookahead_k")
+function GLAState:initialize(paths)
+  self:super()
+  self.rtn_paths = paths
 
   if paths then
     for path in each(paths) do
-      if obj.lookahead_k and obj.lookahead_k ~= path.lookahead_k then
+      if self.lookahead_k and self.lookahead_k ~= path.lookahead_k then
         error("Internal error: expected all paths for the GLA state to have the same length")
       end
-      obj.lookahead_k = path.lookahead_k
+      self.lookahead_k = path.lookahead_k
     end
   else
-    obj.lookahead_k = 0
+    self.lookahead_k = 0
   end
-  return obj
+  return self
 end
 
 
@@ -463,12 +446,10 @@ end
 
 --------------------------------------------------------------------]]--
 
-RTN = FA:new()
-RTN.name = "RTN"
-function RTN:new_graph(init)
-  return RTN:new(init)
-end
-
+Class:new("RTN", FA)
+attr_accessor(RTN, "name")
+attr_accessor(RTN, "slot_count")
+attr_accessor(RTN, "text")
 function RTN:new_state()
   return RTNState:new()
 end
@@ -477,7 +458,7 @@ function RTN:get_outgoing_edge_values(states)
   local values = {}
   states = states or self:states()
   for state in each(states) do
-    for edge_val, target_state, properties in state:transitions() do
+    for edge_val, target_state, properties in state:each_transition() do
       if edge_val ~= fa.e then
         table.insert(values, {edge_val, properties})
       end
@@ -487,7 +468,11 @@ function RTN:get_outgoing_edge_values(states)
 end
 
 function escape(str)
-  return str:gsub("[\"\\]", "\\%1")
+  if str and type(str) == "string" then
+    return str:gsub("[\"\\]", "\\%1")
+  else
+    return tostring(serialize(str))
+  end
 end
 
 function RTN:to_dot(indent, suffix, intfas, glas)
@@ -498,37 +483,37 @@ function RTN:to_dot(indent, suffix, intfas, glas)
     peripheries = 1
     extra_label = ""
     color = ""
-    if state.gla then
-      if state.gla.longest_path == 1 then
+    if state:get_gla() then
+      if state:get_gla():get_longest_path() == 1 then
         color = " fillcolor=\"cornflowerblue\""
-      elseif state.gla.longest_path == 2 then
+      elseif state:get_gla():get_longest_path() == 2 then
         color = " fillcolor=\"gold\""
-      elseif state.gla.longest_path > 2 then
+      elseif state:get_gla():get_longest_path() > 2 then
         color = " fillcolor=\"firebrick\""
       end
       color = color .. " style=\"filled\""
     end
-    if state.final then peripheries = 2 end
-    if self.start == state then extra_label = "Start" end
-    if intfas and state.intfa then
+    if state:get_final() then peripheries = 2 end
+    if self:get_start() == state then extra_label = "Start" end
+    if intfas and state:get_intfa() then
       if extra_label ~= "" then
         extra_label = extra_label .. "\\n"
       end
       extra_label = extra_label .. "I: " .. tostring(intfas:offset_of(state.intfa))
     end
-    if glas and state.gla then
+    if glas and state:get_gla() then
       if extra_label ~= "" then
         extra_label = extra_label .. "\\n"
       end
       extra_label = extra_label .. "G: " .. tostring(glas:offset_of(state.gla))
     end
     str = str .. string.format('%s"%s" [label="%s" peripheries=%d%s]\n',
-                                indent, tostring(state) .. suffix, extra_label,
+                                indent, state:object_id() .. suffix, extra_label,
                                 peripheries, color)
-    for edge_val, target_state in state:transitions() do
+    for edge_val, target_state in state:each_transition() do
       if fa.is_nonterm(edge_val) then
         str = str .. string.format('%s"%s" -> "%s" [label="<%s>"]\n',
-                      indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
+                      indent, state:object_id() .. suffix, target_state:object_id() .. suffix,
                       escape(edge_val.name))
       else
         --if attributes.regex_text[edge_val] then
@@ -536,9 +521,11 @@ function RTN:to_dot(indent, suffix, intfas, glas)
         --end
         if edge_val == fa.eof then
           edge_val = "EOF"
+        elseif edge_val == fa.e then
+          edge_val = "e"
         end
         str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
-                      indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
+                      indent, state:object_id() .. suffix, target_state:object_id() .. suffix,
                       escape(edge_val))
       end
     end
@@ -547,9 +534,11 @@ function RTN:to_dot(indent, suffix, intfas, glas)
 end
 
 
-RTNState = FAState:new()
-RTNState.name = "RTNState"
-
+Class:new("RTNState", FAState)
+attr_accessor(RTNState, "rtn")
+attr_accessor(RTNState, "gla")
+attr_accessor(RTNState, "intfa")
+attr_accessor(RTNState, "priorities")
 -- A trivial state is one where you can tell just by looking
 -- at the state's transitions and its final status alone what
 -- transition you should take for a given terminal.
@@ -557,8 +546,10 @@ function RTNState:needs_gla()
   if self.final then
     -- a final state needs a GLA if it has any outgoing transitions
     if self:num_transitions() > 0 then
+      --print("Final and >0 transitions, so yes")
       return true
     else
+      --print("Final and 0 transitions, so no")
       return false
     end
   else
@@ -569,11 +560,16 @@ function RTNState:needs_gla()
     -- TODO: what about states with exactly 1 outgoing nonterminal
     -- transition?  We don't technically need a GLA's help to
     -- figure out the right transition.
+    --print(self)
+    assert(self:num_transitions() > 0)
     if self:num_transitions() == 1 then
+      --print("Exactly one transition, so no")
       return false
     else
       local edge_vals = Set:new()
-      for edge_val in self:transitions() do
+      for edge_val in self:each_transition() do
+        --print("EDGE VAL")
+        --print(edge_val)
         if fa.is_nonterm(edge_val) then
           return true
         else
@@ -598,7 +594,7 @@ function RTNState:needs_intfa()
   else
     if self.final then
       return false
-    elseif self:num_transitions() == 1 and fa.is_nonterm(self._transitions[1][1]) then
+    elseif self:num_transitions() == 1 and fa.is_nonterm(self.transitions[1][1]) then
       return false
     else
       return true
@@ -607,25 +603,25 @@ function RTNState:needs_intfa()
 end
 
 
-NonTerm = {name="NonTerm"}
-function NonTerm:new(name)
+Class:new("NonTerm")
+attr_reader(NonTerm, "name")
+
+function NonTerm:initialize(name)
+  self.name = name
+end
+
+NonTerm:def_class_method("get", function(name)
   -- keep a cache of nonterm objects, so that we always return the same object
   -- for a given name.  This lets us compare nonterms for equality.
   if not self.cache then
     self.cache = {}
   end
-
-  if not self.cache[name] then
-    obj = newobject(self)
-    obj.name = name
-    self.cache[name] = obj
-  end
-
+  self.cache[name] = self.cache[name] or NonTerm:new(name)
   return self.cache[name]
-end
+end)
 
 function is_nonterm(thing)
-  return (type(thing) == "table" and thing.class == NonTerm)
+  return isobject(thing) and thing:get_class() == NonTerm
 end
 
 -- vim:et:sts=2:sw=2

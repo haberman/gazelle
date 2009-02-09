@@ -15,85 +15,90 @@ require "object"
 
 TestObject = {}
 function TestObject:test1()
-  define_class("Greeter", nil, function(obj)
-    function obj:initialize(greeting)
+  Class:new("Greeter")
+    function Greeter:initialize(greeting)
       self.greeting = greeting
     end
 
-    function obj:greeting()
+    function Greeter:greeting()
       return self.greeting
     end
-  end)
+
+    function Greeter:got_arguments(a, b, c)
+      assert_equals("one", a)
+      assert_equals(nil, b)
+      assert_equals(3, c)
+    end
 
   local greeter = Greeter:new("Hello, world!")
-  assert(greeter:greeting() == "Hello, world!")
-end
-
-function TestObject:test_properties()
-  define_class("PropertyObj", nil, function(obj)
-    attr_accessor(obj, "property")
-
-    function obj:verify_five()
-      assert(self.property == 5)
-    end
-
-    function obj:got_arguments(a, b, c)
-      assert(a == "one")
-      assert(b == nil)
-      assert(c == 3)
-    end
-  end)
-
-  local obj = PropertyObj:new()
-  assert(obj.property == nil)
-  obj.property = 5
-  assert(obj.property == 5)
-  obj:verify_five()
-  obj:got_arguments("one", nil, 3)
-end
-
-function TestObject:test_class_methods()
-  define_class("ClassMethodClass", nil, function(obj, class, class_self)
-    class_self.foo = "Foo!"
-
-    function class:get_foo()
-      return self.foo
-    end
-
-    function obj:get_class_foo()
-      return self.class:get_foo()
-    end
-  end)
-
-  assert(ClassMethodClass:get_foo() == "Foo!")
-  local x = ClassMethodClass:new()
-  assert(x:get_class_foo() == "Foo!")
+  assert_equals("Hello, world!", greeter:greeting())
+  assert_equals(true, Greeter == greeter:get_class())
+  greeter:got_arguments("one", nil, 3)
 end
 
 function TestObject:test_inheritance()
-  define_class("BaseClass", nil, function(obj)
-    function obj:method()
+  Class:new("BaseClass")
+    function BaseClass:initialize()
+      self.foo = "Foo"
+    end
+
+    function BaseClass:verify_foo_called()
+      assert_equals("Foo", self.foo)
+    end
+
+    function BaseClass:method()
       return "base"
     end
 
-    function obj:delegate()
+    function BaseClass:delegate()
       return self:method()
     end
-  end)
 
-  define_class("DerivedClass", BaseClass, function(obj)
-    function obj:method()
+    function BaseClass:base_method(foo)
+      return "base " .. foo
+    end
+
+  Class:new("DerivedClass", BaseClass)
+    function DerivedClass:method()
       return "derived"
     end
-  end)
+
+    function DerivedClass:base_method()
+      -- Test that super is preserved across other method calls.
+      self:method()
+      return self:super("derived extra")
+    end
 
   local base = BaseClass:new()
   local derived = DerivedClass:new()
 
-  assert(base:method() == "base")
-  assert(base:delegate() == "base")
-  assert(derived:method() == "derived")
-  assert(derived:delegate() == "derived")
+  assert_equals("base", base:method())
+  assert_equals("base", base:delegate())
+  assert_equals("derived", derived:method())
+  assert_equals("derived", derived:delegate())
+  assert_equals("base derived extra", derived:base_method())
+  derived:verify_foo_called()
 end
 
-LuaUnit:run(unpack(arg))
+function TestObject:test_iterator()
+  Class:new("Iterator")
+    function Iterator:initialize(list)
+      self.list = list
+    end
+
+    function Iterator:each()
+      return ipairs(self.list)
+    end
+
+  local list = {1, 2, 3}
+  local iterator = Iterator:new(list)
+  local duplicate_list = {}
+  for item in iterator:each() do
+    table.insert(duplicate_list, item)
+  end
+  assert_equals(list[1], duplicate_list[1])
+  assert_equals(list[2], duplicate_list[2])
+  assert_equals(list[3], duplicate_list[3])
+end
+
+-- TODO: test that assigning to object properties is prohibited.

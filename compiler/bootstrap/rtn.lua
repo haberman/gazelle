@@ -138,9 +138,9 @@ function parse_grammar(chars)
       if not stmt then
         break
       elseif stmt.nonterm then
-        stmt.derivations.final.final = "Final"
+        stmt.derivations:get_final():set_final("Final")
         local rule_text = chars.string:sub(before_offset, chars.offset-1)
-        grammar:add_nonterm(stmt.nonterm.name, stmt.derivations, stmt.slot_count, rule_text)
+        grammar:add_nonterm(stmt.nonterm:get_name(), stmt.derivations, stmt.slot_count, rule_text)
       elseif stmt.term then
         grammar:add_terminal(stmt.term, stmt.regex)
       end
@@ -247,8 +247,8 @@ function parse_term(chars, attributes)
     chars:consume(")")
   else
     local nonterm = parse_nonterm(chars)
-    name = name or nonterm.name
-    if attributes.grammar.terminals[nonterm.name] then
+    name = name or nonterm:get_name()
+    if attributes.grammar.terminals[nonterm:get_name()] then
       ret = fa.RTN:new{symbol=nonterm.name, properties={name=nonterm.name, slotnum=attributes.slotnum}}
     else
       ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}

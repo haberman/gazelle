@@ -12,9 +12,9 @@
 
 require "luaunit"
 require "bootstrap/rtn"
-require "regex_debug"
 require "grammar"
 require "ll"
+require "pp"
 
 function assert_intfas(grammar_str, ...)
   local grammar = parse_grammar(CharStream:new(grammar_str))
@@ -100,6 +100,4 @@ function TestSimple:test1()
   ]]
   )
 end
-
-LuaUnit:run(unpack(arg))
 

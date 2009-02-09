@@ -11,16 +11,14 @@
 
 --------------------------------------------------------------------]]--
 
+require "object"
 require "misc"
 
--- Queue
-Queue = {name="Queue"}
-  function Queue:new(init)
-    local obj = newobject(self)
-    obj.first = 0
-    obj.last  = -1
-    if init then obj:enqueue(init) end
-    return obj
+Class:new("Queue")
+  function Queue:initialize(initial_element)
+    self.first = 0
+    self.last  = -1
+    if initial_element then self:enqueue(initial_element) end
   end
 
   function Queue:enqueue(val)
@@ -39,15 +37,10 @@ Queue = {name="Queue"}
   function Queue:isempty()
     return self.first > self.last
   end
--- class Queue
 
-
--- Stack
-Stack = {name="Stack"}
-  function Stack:new(init)
-    local obj = newobject(self)
-    obj.stack = {}
-    return obj
+Class:new("Stack")
+  function Stack:initialize()
+    self.stack = {}
   end
 
   function Stack:push(val)
@@ -75,8 +68,10 @@ Stack = {name="Stack"}
   end
 
   function Stack:dup()
-    local new_stack = newobject(Stack)
-    new_stack.stack = table_shallow_copy(self.stack)
+    local new_stack = Stack:new()
+    for val in each(self.stack) do
+      new_stack:push(val)
+    end
     return new_stack
   end
 
@@ -95,7 +90,7 @@ Stack = {name="Stack"}
 
   function Stack:to_array()
     local arr = {}
-    for i, val in ipairs(self.stack) do
+    for val in each(self.stack) do
       table.insert(arr, val)
     end
     return arr
@@ -117,18 +112,13 @@ Stack = {name="Stack"}
     string = string .. indent .. "}"
     return string
   end
--- class Stack
 
-
--- Set
-Set = {name="Set"}
-  function Set:new(init)
-    local obj = newobject(self)
-    obj.elements = {}
+Class:new("Set")
+  function Set:initialize(init)
+    self.elements = {}
     if init then
-      obj:add_collection(init)
+      self:add_collection(init)
     end
-    return obj
   end
 
   function Set:sample()
@@ -138,30 +128,30 @@ Set = {name="Set"}
     return nil
   end
 
-  function Set:contains(x)
-    return self.elements[x] ~= nil
+  function Set:contains(elem)
+    return self.elements[elem] ~= nil
   end
 
-  function Set:add(x)
-    self.elements[x] = true
+  function Set:add(elem)
+    self.elements[elem] = true
   end
 
-  function Set:remove(x)
-    self.elements[x] = nil
+  function Set:remove(elem)
+    self.elements[elem] = nil
   end
 
-  function Set:intersection(x)
+  function Set:intersection(other)
     local new_set = Set:new()
     for element in self:each() do
-      if x:contains(element) then
+      if other:contains(element) then
         new_set:add(element)
       end
     end
     return new_set
   end
 
-  function Set:add_collection(arr)
-    for elem in each(arr) do
+  function Set:add_collection(collection)
+    for elem in each(collection) do
       self:add(elem)
     end
   end
@@ -183,8 +173,8 @@ Set = {name="Set"}
   end
 
   function Set:dup()
-    local new_set = newobject(Set)
-    new_set.elements = table_shallow_copy(self.elements)
+    local new_set = Set:new()
+    new_set:add_collection(self)
     return new_set
   end
 
@@ -199,8 +189,12 @@ Set = {name="Set"}
   function Set:hash_key()
     local arr = self:to_array()
     for i=1,#arr do
-      if type(arr[i]) == "table" and arr[i].signature then
+      -- XXX: will need to be updated when Path (which is what defines
+      -- signature) is ported to the new object.
+      if type(arr[i]) == "table" and not isobject(arr[i]) and arr[i].signature then
         arr[i] = tostring(arr[i]:signature(true))
+      elseif isobject(arr[i]) then
+        arr[i] = arr[i]:object_id()
       else
         arr[i] = tostring(arr[i])
       end
@@ -233,20 +227,17 @@ Set = {name="Set"}
     string = string .. "}"
     return string
   end
--- class Set
 
 -- OrderedSet
-OrderedSet = {name="OrderedSet"}
-  function OrderedSet:new(init)
-    local obj = newobject(self)
-    obj.element_offsets = {}
-    obj.elements = {}
+Class:new("OrderedSet")
+  function OrderedSet:initialize(init)
+    self.element_offsets = {}
+    self.elements = {}
     if init then
       for element in each(init) do
-        obj:add(element)
+        self:add(element)
       end
     end
-    return obj
   end
 
   function OrderedSet:add(elem)
@@ -291,13 +282,10 @@ OrderedSet = {name="OrderedSet"}
     end
   end
 
--- OrderedMap
-OrderedMap = {name="OrderedMap"}
-  function OrderedMap:new()
-    local obj = newobject(self)
-    obj.key_offsets = {}
-    obj.elements = {}
-    return obj
+Class:new("OrderedMap")
+  function OrderedMap:initialize()
+    self.key_offsets = {}
+    self.elements = {}
   end
 
   function OrderedMap:add(key, value)
@@ -352,19 +340,19 @@ OrderedMap = {name="OrderedMap"}
     end
   end
 
--- Range
 -- The Range is *inclusive* at both ends.
-Range = {name="Range"}
-  function Range:new(low, high)
+Class:new("Range")
+  attr_reader(Range, "low")
+  attr_reader(Range, "high")
+  function Range:initialize(low, high)
     assert(low <= high)
-
-    local obj = newobject(self)
-    obj.low = low
-    obj.high = high
-    return obj
+    self.low = low
+    self.high = high
   end
 
-  function Range.union(a, b)
+  function Range:union(other_range)
+    local a = self
+    local b = other_range.__self
     if math.max(a.low, b.low) <= (math.min(a.high, b.high)+1) then
       return Range:new(math.min(a.low, b.low), math.max(a.high, b.high))
     else
@@ -383,17 +371,20 @@ Range = {name="Range"}
       return display_val_func(self.low) .. "-" .. display_val_func(self.high)
     end
   end
--- class Range
 
-
--- IntSet
 -- None of the ranges may overlap.
-IntSet = {name="IntSet"}
-  function IntSet:new()
-    local obj = newobject(self)
-    obj.list = {}
-    obj.negated = false
-    return obj
+Class:new("IntSet")
+  function IntSet:initialize()
+    self.list = {}
+    self.negated = false
+  end
+
+  function IntSet:is_negated()
+    return self.negated
+  end
+
+  function IntSet:set_negated(negated)
+    self.negated = negated
   end
 
   function IntSet:add(new_range)
@@ -415,7 +406,7 @@ IntSet = {name="IntSet"}
     if self.negated then
       return self:invert()
     else
-      return self
+      return self.public_obj
     end
   end
 
@@ -423,41 +414,41 @@ IntSet = {name="IntSet"}
   -- be made O(n lg n) with a little thought, but n's
   -- are so small right now that I won't worry.
   function IntSet:add_intset(intset)
-    for range in each(intset.list) do
+    for range in intset:each_range() do
       self:add(range)
     end
   end
 
   function IntSet:contains(int)
     local obj = self:get_non_negated()
-    for range in each(obj.list) do
+    for range in obj:each_range() do
       if range:contains(int) then return true end
     end
     return false
   end
 
   function IntSet:sampleint()
-    local obj = self:get_non_negated()
+    local obj = self:get_non_negated().__self
 
     if #obj.list == 0 then
       return nil
     else
-      return obj.list[1].low
+      return obj.list[1]:get_low()
     end
   end
 
   function IntSet:invert()
     local new_intset = IntSet:new()
-    new_intset.negated = not self.negated
+    new_intset.__self.negated = not self.negated
 
-    table.sort(self.list, function (a, b) return a.low < b.low end)
+    table.sort(self.list, function (a, b) return a:get_low() < b:get_low() end)
     local offset = 0
 
     for range in each(self.list) do
-      if offset <= range.low-1 then
-        new_intset:add(Range:new(offset, range.low-1))
+      if offset <= range:get_low()-1 then
+        new_intset:add(Range:new(offset, range:get_low()-1))
       end
-      offset = range.high+1
+      offset = range:get_high()+1
     end
 
     if offset ~= math.huge then
@@ -468,7 +459,7 @@ IntSet = {name="IntSet"}
   end
 
   function IntSet:each_range()
-    return each(self:get_non_negated().list)
+    return each(self:get_non_negated().__self.list)
   end
 
   function IntSet:isunbounded()
@@ -484,7 +475,7 @@ IntSet = {name="IntSet"}
     local str = ""
     if self.negated then str = "^" end
 
-    table.sort(self.list, function (a, b) return a.low < b.low end)
+    table.sort(self.list, function (a, b) return a:get_low() < b:get_low() end)
     local first = true
     for range in each(self.list) do
       if first then
@@ -515,6 +506,5 @@ IntSet = {name="IntSet"}
   function IntSet:tointstring()
     return self:tostring(function (x) return tostring(x) end)
   end
--- class IntSet
 
 -- vim:et:sts=2:sw=2

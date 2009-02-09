@@ -21,7 +21,9 @@ end
 -- each(foo): returns an iterator; if the object supports the each method,
 --            call that, otherwise return an iterator for a plain array.
 function each(array_or_eachable_obj)
-  if array_or_eachable_obj.class then
+  if isobject(array_or_eachable_obj) -- new
+     or array_or_eachable_obj.each -- old
+     then
     return array_or_eachable_obj:each()
   else
     local array = array_or_eachable_obj
@@ -75,7 +77,15 @@ end
 cache = {}
 function get_unique_table_for(val)
   local string_table = {}
-  for entry in each(val) do table.insert(string_table, tostring(entry)) end
+  for entry in each(val) do
+    local unique_str
+    if isobject(entry) then
+      unique_str = entry:object_id()
+    else
+      unique_str = tostring(entry)
+    end
+    table.insert(string_table, unique_str)
+  end
   local str = table.concat(string_table, "\136")
   if not cache[str] then
     cache[str] = table_shallow_copy(val)

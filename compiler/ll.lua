@@ -35,8 +35,8 @@ function compute_lookahead(grammar, k)
   check_for_left_recursion(grammar)
 
   for state in each(gla_needing_rtn_states) do
-    state.gla = construct_gla(state, grammar, follow_states, k)
-    state.gla.rtn_state = state
+    state:set_gla(construct_gla(state, grammar, follow_states, k))
+    state:get_gla():set_rtn_state(state)
   end
 end
 
@@ -82,7 +82,7 @@ function check_for_nonrecursive_alt(grammar)
     local found_nonrecursive_alt = false
     local child_states = function(state_tuple)
       local state, seen_nonterms, seen_states = unpack(state_tuple)
-      if state.final then
+      if state:get_final() then
         if all_paths_see then
           all_paths_see = all_paths_see:intersection(seen_nonterms)
         else
@@ -93,21 +93,21 @@ function check_for_nonrecursive_alt(grammar)
         local dest_states = Set:new()
         local new_seen_states = seen_states:dup()
         new_seen_states:add(state)
-        for edge_val, dest_state in state:transitions() do
+        for edge_val, dest_state in state:each_transition() do
           if new_seen_states:contains(dest_state) then
             -- skip
           elseif not fa.is_nonterm(edge_val) then
             dest_states:add({dest_state, seen_nonterms, new_seen_states})
           else
             local new_seen = seen_nonterms:dup()
-            new_seen:add(edge_val.name)
+            new_seen:add(edge_val:get_name())
             dest_states:add({dest_state, new_seen, new_seen_states})
           end
         end
         return dest_states
       end
     end
-    depth_first_traversal({rtn.start, Set:new(), Set:new()}, child_states)
+    depth_first_traversal({rtn:get_start(), Set:new(), Set:new()}, child_states)
     always_recurses[name] = all_paths_see
   end
 
@@ -142,19 +142,18 @@ function check_for_left_recursion(grammar)
 
     local children = function(state, stack)
       local children = {}
-      for edge_val, dest_state in state:transitions() do
+      for edge_val, dest_state in state:each_transition() do
         if fa.is_nonterm(edge_val) then
-          if edge_val.name == name then
+          if edge_val:get_name() == name then
             error(string.format("Grammar is not LL(*): it is left-recursive!  Cycle: %s", stack:tostring()))
           end
-          table.insert(children, grammar.rtns:get(edge_val.name).start)
+          table.insert(children, grammar.rtns:get(edge_val:get_name()):get_start())
         end
       end
       return children
     end
 
-    depth_first_traversal(rtn.start, children)
-
+    depth_first_traversal(rtn:get_start(), children)
   end
 end
 
@@ -178,9 +177,9 @@ function get_follow_states(grammar)
 
   for name, rtn in each(grammar.rtns) do
     for state in each(rtn:states()) do
-      for edge_val, dest_state in state:transitions() do
+      for edge_val, dest_state in state:each_transition() do
         if fa.is_nonterm(edge_val) then
-          local rtn = grammar.rtns:get(edge_val.name)
+          local rtn = grammar.rtns:get(edge_val:get_name())
           follow_states[rtn]:add(dest_state)
         end
       end
@@ -192,8 +191,10 @@ function get_follow_states(grammar)
   -- itself has no transitions out of it.
   local eof_state = fa.RTNState:new()
   eof_state:add_transition(fa.eof, fa.RTNState:new())
-  eof_state.rtn = {name="eof"}  -- Just need a unique value.
-  follow_states[eof_state.rtn] = Set:new()  -- empty, nothing ever follows it.
+  local eof_rtn = fa.RTN:new()
+  eof_rtn:set_name("eof")
+  eof_state:set_rtn(eof_rtn)
+  follow_states[eof_state:get_rtn()] = Set:new()  -- empty, nothing ever follows it.
   follow_states[grammar.rtns:get(grammar.start)]:add(eof_state)
 
   return follow_states
@@ -238,15 +239,16 @@ end
 
 function Path:enter_rule(rtn, return_to_state, priorities, is_subparser)
   local new_path = self:dup()
-  new_path.current_state = rtn.start
-  table.insert(new_path.history, {"enter", rtn.name, new_path.current_state, priorities, is_subparser})
+  new_path.current_state = rtn:get_start()
+  table.insert(new_path.history, {"enter", rtn:get_name(), new_path.current_state,
+                                           priorities, is_subparser})
 
   -- Key point: if return_to_state is final and has no outgoing transitions,
   -- then we need not push anything on the stack.  This is the equivalent of a
   -- tail-recursive optimization, but is significant in that it allows us to
   -- calculate lookahead for languages we could not otherwise calculate
   -- lookahead for.
-  if return_to_state.final and return_to_state:num_transitions() == 0 then
+  if return_to_state:get_final() and return_to_state:num_transitions() == 0 then
     -- do nothing.
   else
     new_path.stack:push(return_to_state)
@@ -263,7 +265,7 @@ function Path:return_from_rule(return_to_state, priorities)
     new_path.current_state = return_to_state
     new_path.epsilon_seen_follow_states:add(return_to_state)
     table.insert(new_path.presumed_stack, return_to_state)
-    table.insert(new_path.history, {"return", return_to_state.rtn.name, new_path.current_state, priorities})
+    table.insert(new_path.history, {"return", return_to_state:get_rtn():get_name(), new_path.current_state, priorities})
   else
     if new_path.stack:isempty() then error("Must specify return_to_state!") end
     new_path.current_state = new_path.stack:pop()
@@ -361,13 +363,13 @@ function construct_gla(state, grammar, follow_states, k)
   -- each path to and past its first terminal.
   local gla = fa.GLA:new()
   local initial_term_transitions = {}
-  local noterm_paths = Set:new()  -- paths that did not consume their first terminal
+  local noterm_paths = Set:new()  -- paths that did not consume a terminal for the first transition
   local prediction_languages = {}
 
-  for edge_val, dest_state, properties in state:transitions() do
+  for edge_val, dest_state, properties in state:each_transition() do
     local path = Path:new(state, edge_val, dest_state)
     if fa.is_nonterm(edge_val) then
-      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val.name), dest_state, properties.priorities, properties.slotnum == -1))
+      noterm_paths:add(path:enter_rule(grammar.rtns:get(edge_val:get_name()), dest_state, properties.priorities, properties.slotnum == -1))
     else
       initial_term_transitions[edge_val] = initial_term_transitions[edge_val] or Set:new()
       initial_term_transitions[edge_val]:add(path:enter_state(edge_val, dest_state, properties.priorities))
@@ -375,10 +377,10 @@ function construct_gla(state, grammar, follow_states, k)
   end
 
   -- For final states we also have to be able to predict when they should return.
-  if state.final then
+  if state:get_final() then
     local path = Path:new(state, 0, 0)
-    for follow_state in each(follow_states[state.rtn]) do
-      noterm_paths:add(path:return_from_rule(follow_state, state.final.priorities))
+    for follow_state in each(follow_states[state:get_rtn()]) do
+      noterm_paths:add(path:return_from_rule(follow_state, state:get_final().priorities))
     end
   end
 
@@ -403,7 +405,7 @@ function construct_gla(state, grammar, follow_states, k)
       -- until demonstrated otherwise).
       prediction_languages[path.prediction] = "fixed"
     end
-    gla.start:add_transition(term, new_gla_state)
+    gla:get_start():add_transition(term, new_gla_state)
     gla_states[paths:hash_key()] = new_gla_state
     queue:enqueue(new_gla_state)
   end
@@ -412,7 +414,7 @@ function construct_gla(state, grammar, follow_states, k)
     local gla_state = queue:dequeue()
 
     if k then
-      if gla_state.lookahead_k > k then
+      if gla_state:get_lookahead_k() > k then
         error("Grammar is not LL(k) for user-specified k=" .. k)
       end
     else
@@ -421,15 +423,15 @@ function construct_gla(state, grammar, follow_states, k)
 
     check_for_ambiguity(gla_state)
 
-    local alt = get_unique_predicted_alternative(gla_state.rtn_paths)
+    local alt = get_unique_predicted_alternative(gla_state:get_rtn_paths())
     if alt then
       -- this DFA path has uniquely predicted an alternative -- set the
       -- state final and stop exploring this path
-      gla_state.final = alt
+      gla_state:set_final(alt)
     else
       -- this path is still ambiguous about what rtn transition to take --
       -- explore it further
-      local paths = get_rtn_state_closure(gla_state.rtn_paths, grammar, follow_states)
+      local paths = get_rtn_state_closure(gla_state:get_rtn_paths(), grammar, follow_states)
 
       for edge_val in each(get_outgoing_term_edges(paths)) do
         local paths = get_dest_states(paths, edge_val)
@@ -450,10 +452,10 @@ function construct_gla(state, grammar, follow_states, k)
 
   gla = hopcroft_minimize(gla)
   for state in each(gla:states()) do
-    state.gla = gla
+    state:set_gla(gla)
   end
   remove_excess_states(gla)
-  gla.longest_path = fa_longest_path(gla)
+  gla:set_longest_path(fa_longest_path(gla))
 
   -- Check for predictions that have no final state indicating them.  These
   -- indicate alternatives that will never be taken.
@@ -462,15 +464,15 @@ function construct_gla(state, grammar, follow_states, k)
     untaken_predictions:add(prediction)
   end
   for state in each(gla:states()) do
-    if state.final then
-      untaken_predictions:remove(state.final)
+    if state:get_final() then
+      untaken_predictions:remove(state:get_final())
     end
   end
 
   if untaken_predictions:count() > 0 then
     -- In the grammar s -> "X" / "X"; the second prioritized choice will never be taken.
     -- This is an error in the grammar, because it means the second option is redundant.
-    error("Error in grammar: transition in " .. state.rtn.name .. " will never be taken.")
+    error("Error in grammar: transition in " .. state:get_rtn():get_name() .. " will never be taken.")
   end
 
   return gla
@@ -493,11 +495,11 @@ function remove_excess_states(gla)
   for state in each(gla:states()) do
     local seen_alts = Set:new()
     local child_states = function(state)
-      if state.final then
-        seen_alts:add(state.final)
+      if state:get_final() then
+        seen_alts:add(state:get_final())
       end
       local dest_states = {}
-      for edge_val, dest_state in state:transitions() do
+      for edge_val, dest_state in state:each_transition() do
         table.insert(dest_states, dest_state)
       end
       return dest_states
@@ -506,7 +508,7 @@ function remove_excess_states(gla)
     if seen_alts:count() == 0 then
       error("Unexpected -- please report this stack trace and the input grammar!")
     elseif seen_alts:count() == 1 then
-      state.final = seen_alts:sample()
+      state:set_final(seen_alts:sample())
       state:clear_transitions()
     end
   end
@@ -570,7 +572,7 @@ function get_lower_priority_paths(paths)
     -- If the only remaining path(s) have presumed stacks, then we can't
     -- build a proper GLA for this RTN state.
     if #paths:sample().presumed_stack > common_prefix_len then
-      error("Gazelle cannot support this resolution of the ambiguity in rule " .. paths:sample().original_state.rtn.name)
+      error("Gazelle cannot support this resolution of the ambiguity in rule " .. paths:sample().original_state:get_rtn():get_name())
     end
   end
 
@@ -687,7 +689,7 @@ end
 function check_for_ambiguity(gla_state)
   local signatures = {}
 
-  for path in each(gla_state.rtn_paths) do
+  for path in each(gla_state:get_rtn_paths()) do
     local signature = path:signature()
     signatures[signature] = signatures[signature] or Set:new()
     signatures[signature]:add(path)
@@ -699,7 +701,7 @@ function check_for_ambiguity(gla_state)
       -- resolution, remove all other (lower-priority) paths.
       local lower_priority_paths = get_lower_priority_paths(paths)
       for path in each(lower_priority_paths) do
-        gla_state.rtn_paths:remove(path)
+        gla_state:get_rtn_paths():remove(path)
       end
 
       -- Subparsers (whitespace ignoring) create real ambiguity because there
@@ -709,7 +711,7 @@ function check_for_ambiguity(gla_state)
       -- processes the whitespace/subparser earliest.
       local subparser_redundant_paths = get_subparser_redundant_paths(paths)
       for path in each(subparser_redundant_paths) do
-        gla_state.rtn_paths:remove(path)
+        gla_state.get_rtn_paths:remove(path)
         paths:remove(path)
       end
     end
@@ -736,7 +738,7 @@ function check_for_ambiguity(gla_state)
             path = p
           end
           local err = "Ambiguous grammar for state starting in rule " ..
-                      path.original_state.rtn.name .. ", paths="
+                      path.original_state:get_rtn():get_name() .. ", paths="
           local first = true
           for path in each(same_stack_paths) do
             if first then
@@ -803,7 +805,7 @@ function check_for_termination_heuristic(gla_state, prediction_languages)
   -- First remove all lower-priority paths in cases where ambiguity resolution
   -- was used, so that we don't trigger the heuristic for paths that are being
   -- explicitly prioritized.
-  local non_prioritized_paths = gla_state.rtn_paths:dup()
+  local non_prioritized_paths = gla_state:get_rtn_paths():dup()
   for path in each(get_lower_priority_paths(non_prioritized_paths)) do
     non_prioritized_paths:remove(path)
   end
@@ -823,7 +825,7 @@ function check_for_termination_heuristic(gla_state, prediction_languages)
       for prediction2, language2 in pairs(prediction_languages) do
         if prediction ~= prediction2 and language2 ~= "fixed" then
           -- TODO: more info about which languages they were.
-          error("Language is probably not LL(k) or LL(*): when calculating lookahead for a state in " .. gla_state.rtn_paths:to_array()[1].prediction[2].rtn.name .. ", one lookahead language was nonregular, others were not all fixed")
+          error("Language is probably not LL(k) or LL(*): when calculating lookahead for a state in " .. gla_state:get_rtn_paths():to_array()[1].prediction[2]:get_rtn():get_name() .. ", one lookahead language was nonregular, others were not all fixed")
         end
       end
     end
@@ -865,7 +867,7 @@ function get_outgoing_term_edges(rtn_paths)
   local edges = Set:new()
 
   for path in each(rtn_paths) do
-    for edge_val in path.current_state:transitions() do
+    for edge_val in path.current_state:each_transition() do
       if not fa.is_nonterm(edge_val) then
         edges:add(edge_val)
       end
@@ -919,12 +921,9 @@ end
 function get_rtn_state_closure_for_path(path, grammar, follow_states)
   local child_epsilon_paths = function(path)
     local child_paths = {}
-    if path.current_state.transitions == nil then
-      print(serialize(path.current_state, 4, "  "))
-    end
-    for edge_val, dest_state, properties in path.current_state:transitions() do
+    for edge_val, dest_state, properties in path.current_state:each_transition() do
       if fa.is_nonterm(edge_val) then
-        local dest_rtn = grammar.rtns:get(edge_val.name)
+        local dest_rtn = grammar.rtns:get(edge_val:get_name())
         local new_path = path:enter_rule(dest_rtn, dest_state, properties.priorities, properties.slotnum==-1)
         if new_path.is_epsilon_cyclic then
           error("Ambiguous grammar -- it has cycles in its epsilon transitions!")
@@ -933,10 +932,10 @@ function get_rtn_state_closure_for_path(path, grammar, follow_states)
       end
     end
 
-    if path.current_state.final then
+    if path.current_state:get_final() then
       if not path.stack:isempty() then
         -- The stack has context that determines what state we should return to.
-        table.insert(child_paths, path:return_from_rule(nil, path.current_state.final.priorities))
+        table.insert(child_paths, path:return_from_rule(nil, path.current_state:get_final().priorities))
       else
         -- There is no context -- we could be in any state that follows this state
         -- anywhere in the grammar.
@@ -946,9 +945,9 @@ function get_rtn_state_closure_for_path(path, grammar, follow_states)
         else
           follow_base = path.original_state
         end
-        for state in each(follow_states[follow_base.rtn]) do
+        for state in each(follow_states[follow_base:get_rtn()]) do
           if not path.epsilon_seen_follow_states:contains(state) then
-            table.insert(child_paths, path:return_from_rule(state, path.current_state.final.priorities))
+            table.insert(child_paths, path:return_from_rule(state, path.current_state:get_final().priorities))
           end
         end
       end

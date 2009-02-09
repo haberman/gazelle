@@ -6,8 +6,8 @@ function dump_to_html(src_file, grammar, dir)
 
   for name, rtn in each(grammar.rtns) do
     for state in each(rtn:states()) do
-      if state.gla then
-        glas:add(state.gla)
+      if state:get_gla() then
+        glas:add(state:get_gla())
       end
     end
   end
@@ -54,7 +54,7 @@ function dump_to_html(src_file, grammar, dir)
     for state in each(rtn:states()) do
       total = total + 1
       local lookahead
-      if state.gla then
+      if state:get_gla() then
         lookahead = state.gla.longest_path
         with_gla_breakdown[lookahead] = with_gla_breakdown[lookahead] or 0
         with_gla_breakdown[lookahead] = with_gla_breakdown[lookahead] + 1
@@ -117,7 +117,7 @@ function dump_to_html(src_file, grammar, dir)
     os.execute(string.format("dot -Tpng -o %s/%s.png %s/%s.dot", dir, name, dir, name))
     index:write("  <tr><td rowspan='2'>")
     index:write(string.format("<a name='rule_%s'>%s</td>", name, name))
-    index:write(string.format("  <td><pre>%s</pre></td></tr>\n", rtn.text))
+    index:write(string.format("  <td><pre>%s</pre></td></tr>\n", rtn:get_text()))
     index:write(string.format("  <tr><td><img src='%s.png'></td></tr>\n", name))
   end
   index:write("</table>\n")

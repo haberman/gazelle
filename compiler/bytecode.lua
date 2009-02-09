@@ -111,7 +111,7 @@ function emit_intfa(intfa, strings, bc_file, abbrevs)
     intfa_state_offsets[state] = i - 1
 
     state_transitions[state] = {}
-    for edge_val, target_state, properties in state:transitions() do
+    for edge_val, target_state, properties in state:each_transition() do
       for range in edge_val:each_range() do
         table.insert(state_transitions[state], {range, target_state})
       end
@@ -199,7 +199,7 @@ function emit_gla(gla, strings, rtns, intfas, bc_file, abbrevs)
 
   -- emit transitions
   for state in each(states) do
-    for edge_val, dest_state in state:transitions() do
+    for edge_val, dest_state in state:each_transition() do
       local edge_num = 0
       if edge_val ~= fa.eof then
         edge_num = strings:offset_of(edge_val) + 1

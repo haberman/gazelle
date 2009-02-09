@@ -20,11 +20,11 @@ require "pp"
 
 function find_state(rule, slotnum)
   if slotnum == 0 then
-    return rule.start
+    return rule:get_start()
   end
 
   for s in each(rule:states()) do
-    for edge_val, dest_state, properties in s:transitions() do
+    for edge_val, dest_state, properties in s:each_transition() do
       if properties.slotnum == slotnum then
         return s
       end
@@ -38,7 +38,7 @@ function get_target_for_slotnum(state, slotnum)
   if slotnum == 0 then
     return {0, 0}
   else
-    for edge_val, dest_state, properties in state:transitions() do
+    for edge_val, dest_state, properties in state:each_transition() do
       if properties.slotnum == slotnum then
         return {edge_val, dest_state}
       end
@@ -51,8 +51,8 @@ function parse_gla(str, rtn_state)
   local stream = CharStream:new(str)
   stream:ignore("whitespace")
   local gla = fa.GLA:new()
-  gla.rtn_state = rtn_state
-  local states = {[1]=gla.start}
+  gla:set_rtn_state(rtn_state)
+  local states = {[1]=gla:get_start()}
   while not stream:eof() do
     local statenum = tonumber(stream:consume_pattern("%d+"))
     local state = states[statenum]
@@ -76,7 +76,7 @@ function parse_gla(str, rtn_state)
         stream:consume("(")
         local final_state_slotnum = tonumber(stream:consume_pattern("%d+"))
         stream:consume(")")
-        dest_state.final = get_target_for_slotnum(rtn_state, final_state_slotnum)
+        dest_state:set_final(get_target_for_slotnum(rtn_state, final_state_slotnum))
       end
       state = dest_state
     end
@@ -98,7 +98,7 @@ function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str, k)
 
   compute_lookahead(grammar, k)
 
-  if not fa_isequal(expected_gla, state.gla) then
+  if not fa_isequal(expected_gla, state:get_gla()) then
     local bad = io.open("bad.dot", "w")
     bad:write("digraph untitled {\n")
     bad:write(state.gla:to_dot())
@@ -583,6 +583,7 @@ function assert_fails_with_error(grammar_str, error_string)
   grammar:determinize_rtns()
   grammar:minimize_rtns()
 
+  --compute_lookahead(grammar)
   local success, message = pcall(compute_lookahead, grammar)
   if success then
     error("Failed to fail!")
@@ -952,7 +953,4 @@ function TestDetectNonLLStar:test_resolution_not_supported2()
   ]]
   )
 end
-
-
-LuaUnit:run(unpack(arg))
 

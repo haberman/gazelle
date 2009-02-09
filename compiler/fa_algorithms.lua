@@ -32,13 +32,14 @@ function nfas_to_dfa(nfa_string_pairs, ambiguous_ok)
   ambiguous_ok = ambiguous_ok or false
   -- First we need to mark all final states and capture groups with the token string
   local nfas = {}
+  assert(#nfa_string_pairs > 0, "Must pass at least one NFA")
 
   for i, nfa_string_pair in ipairs(nfa_string_pairs) do
     local nfa, token_string = unpack(nfa_string_pair)
     table.insert(nfas, nfa)
 
     -- Mark the nfa fragment's final state as the final state for this *token*
-    nfa.final.final = token_string
+    nfa:get_final():set_final(token_string)
   end
 
   -- Now combine all the nfas with alternation
@@ -52,8 +53,8 @@ function new_dfa_state(nfa, nfa_states, ambiguous_ok)
   -- If this is a final state for one or more of the nfas, make it an
   -- (appropriately labeled) final state for the dfa
   for nfa_state in nfa_states:each() do
-    if nfa_state.final then
-      if dfa_state.final and dfa_state.final ~= nfa_state.final then
+    if nfa_state:get_final() then
+      if dfa_state:get_final() and dfa_state:get_final() ~= nfa_state:get_final() then
         if ambiguous_ok then
           if type(dfa_state.final) ~= "table" then dfa_state.final = Set:new({dfa_state.final}) end
           dfa_state.final:add(nfa_state.final)
@@ -61,7 +62,7 @@ function new_dfa_state(nfa, nfa_states, ambiguous_ok)
           error("Ambiguous finality not supported yet!! (" .. tostring(dfa_state.final) .. " and " .. tostring(nfa_state.final .. ")"))
         end
       else
-        dfa_state.final = nfa_state.final
+        dfa_state:set_final(nfa_state:get_final())
       end
     end
   end
@@ -71,12 +72,12 @@ end
 
 function nfa_to_dfa(nfa, ambiguous_ok)
   -- The sets of NFA states we need to process for outgoing transitions
-  local first_nfa_states = epsilon_closure(nfa.start)
+  local first_nfa_states = epsilon_closure(nfa:get_start())
   local queue = Queue:new(first_nfa_states)
 
-  local dfa = nfa:new_graph{start = new_dfa_state(nfa, first_nfa_states, ambiguous_ok)}
+  local dfa = nfa:get_class():new{start = new_dfa_state(nfa, first_nfa_states, ambiguous_ok)}
   -- The DFA states we create from sets of NFA states
-  local dfa_states = {[first_nfa_states:hash_key()] = dfa.start}
+  local dfa_states = {[first_nfa_states:hash_key()] = dfa:get_start()}
 
   while not queue:isempty() do
     local nfa_states = queue:dequeue()
@@ -147,7 +148,7 @@ function hopcroft_minimize(dfa)
   local inverse_transitions = {}
 
   for state in each(dfa:states()) do
-    for symbol, dest_state, properties in state:transitions() do
+    for symbol, dest_state, properties in state:each_transition() do
       inverse_transitions[dest_state] = inverse_transitions[dest_state] or dfa:new_state()
       inverse_transitions[dest_state]:add_transition(symbol, state, properties)
     end
@@ -156,7 +157,7 @@ function hopcroft_minimize(dfa)
   -- Create initial blocks, grouped by finality.
   local initial_blocks = {}
   for state in each(dfa:states()) do
-    local finality = state.final or "NONE"
+    local finality = state:get_final() or "NONE"
     initial_blocks[finality] = initial_blocks[finality] or {}
     table.insert(initial_blocks[finality], state)
   end
@@ -168,7 +169,7 @@ function hopcroft_minimize(dfa)
     local block = Set:new(states)
     blocks:add(block)
     for state in each(states) do
-      state.block = block
+      state:set_block(block)
     end
     for symbol_tuple in each(alphabet) do
       local symbol, properties = unpack(symbol_tuple)
@@ -194,15 +195,15 @@ function hopcroft_minimize(dfa)
     -- split blocks
     local new_twins = {}
     for state_to_split in each(states_to_split) do
-      for state in each(state_to_split.block) do
+      for state in each(state_to_split:get_block()) do
         local dest_state = state:transitions_for(symbol, properties):to_array()[1]
-        if not (dest_state and dest_state.block == block) then
-          if not new_twins[state.block] then
+        if not (dest_state and dest_state:get_block() == block) then
+          if not new_twins[state:get_block()] then
             local new_twin = Set:new()
             blocks:add(new_twin)
-            new_twins[state.block] = new_twin
+            new_twins[state:get_block()] = new_twin
           end
-          new_twins[state.block]:add(state)
+          new_twins[state:get_block()]:add(state)
         end
       end
     end
@@ -210,8 +211,8 @@ function hopcroft_minimize(dfa)
     -- fix work queue according to splits
     for old_block, new_twin in pairs(new_twins) do
       for state in each(new_twin) do
-        state.block:remove(state)
-        state.block = new_twin
+        state:get_block():remove(state)
+        state:set_block(new_twin)
       end
 
       local smaller_block
@@ -239,18 +240,18 @@ function hopcroft_minimize(dfa)
   for block in blocks:each() do
     states[block] = dfa:new_state()
     for state in each(block) do
-      if state.final then
-        states[block].final = state.final
+      if state:get_final() then
+        states[block]:set_final(state:get_final())
       end
     end
   end
 
-  local minimal_dfa = dfa:new_graph()
-  minimal_dfa.start = states[dfa.start.block]
+  local minimal_dfa = dfa:get_class():new()
+  minimal_dfa:set_start(states[dfa:get_start():get_block()])
   for block in blocks:each() do
     for state in each(block) do
-      for symbol, dest_state, properties in state:transitions() do
-        states[block]:add_transition(symbol, states[dest_state.block], properties)
+      for symbol, dest_state, properties in state:each_transition() do
+        states[block]:add_transition(symbol, states[dest_state:get_block()], properties)
       end
     end
   end
@@ -272,10 +273,10 @@ end
 --------------------------------------------------------------------]]--
 
 function fa_isequal(fa1, fa2)
-  local equivalent_states={[fa1.start]=fa2.start}
-  local queue = Queue:new(fa1.start)
+  local equivalent_states={[fa1:get_start()]=fa2:get_start()}
+  local queue = Queue:new(fa1:get_start())
   local fa2_seen_states = Set:new()
-  fa2_seen_states:add(fa2.start)
+  fa2_seen_states:add(fa2:get_start())
 
   while not queue:isempty() do
     local s1 = queue:dequeue()
@@ -285,25 +286,25 @@ function fa_isequal(fa1, fa2)
       return false
     end
 
-    if (s1.final or s2.final) then
-      if not (s1.final and s2.final) then
+    if (s1:get_final() or s2:get_final()) then
+      if not (s1:get_final() and s2:get_final()) then
         return false
       end
 
-      if type(s1.final) ~= type(s2.final) then
+      if type(s1:get_final()) ~= type(s2:get_final()) then
         return false
       end
 
-      if type(s1.final) == "table" then
-        if not table_shallow_eql(s1.final, s2.final) then
+      if type(s1:get_final()) == "table" then
+        if not table_shallow_eql(s1:get_final(), s2:get_final()) then
           return false
         end
-      elseif s1.final ~= s2.final then
+      elseif s1:get_final() ~= s2:get_final() then
         return false
       end
     end
 
-    for edge_val, dest_state in s1:transitions() do
+    for edge_val, dest_state in s1:each_transition() do
       local s2_dest_state = s2:dest_state_for(edge_val)
       if not s2_dest_state then
         return false
@@ -343,11 +344,11 @@ function fa_longest_path(fa)
   local seen = Set:new()
   function dfs_helper(state)
     seen:add(state)
-    if state.final and current_depth > longest then
+    if state:get_final() and current_depth > longest then
       longest = current_depth
     end
 
-    for edge_val, dest_state in state:transitions() do
+    for edge_val, dest_state in state:each_transition() do
       if seen:contains(dest_state) then
         longest = math.huge
       else
@@ -359,7 +360,7 @@ function fa_longest_path(fa)
     seen:remove(state)
   end
 
-  dfs_helper(fa.start)
+  dfs_helper(fa:get_start())
 
   return longest
 end

@@ -18,6 +18,11 @@ TestQueue = {}
     local queue = Queue:new()
     assert_equals(true, queue:isempty())
     assert_error(function() queue:dequeue() end)
+
+    local queue2 = Queue:new("foo")
+    assert_equals(false, queue2:isempty())
+    assert_equals("foo", queue2:dequeue())
+    assert_equals(true, queue2:isempty())
   end
 
   function TestQueue:test_fifo_behavior()
@@ -93,8 +98,8 @@ TestSet = {}
 TestRange = {}
   function TestRange:test_initial_state()
     local range = Range:new(5, 10)
-    assert_equals(5, range.low)
-    assert_equals(10, range.high)
+    assert_equals(5, range:get_low())
+    assert_equals(10, range:get_high())
     assert_equals(true, range:contains(5))
     assert_equals(true, range:contains(7))
     assert_equals(true, range:contains(10))
@@ -116,22 +121,22 @@ TestRange = {}
     assert_equals(nil, Range:new(2, 4):union(Range:new(6, 7)))
 
     local union = Range:new(2, 4):union(Range:new(5, 7))
-    assert_equals(2, union.low)
-    assert_equals(7, union.high)
+    assert_equals(2, union:get_low())
+    assert_equals(7, union:get_high())
 
     union = Range:new(1, 4):union(Range:new(2, 3))
-    assert_equals(1, union.low)
-    assert_equals(4, union.high)
+    assert_equals(1, union:get_low())
+    assert_equals(4, union:get_high())
 
     union = Range:new(1, 5):union(Range:new(3, 7))
-    assert_equals(1, union.low)
-    assert_equals(7, union.high)
+    assert_equals(1, union:get_low())
+    assert_equals(7, union:get_high())
   end
 
 TestIntSet = {}
   function TestIntSet:test_initial_state()
     local int_set = IntSet:new()
-    assert_equals(false, int_set.negated)
+    assert_equals(false, int_set:is_negated())
     assert_equals(false, int_set:contains(0))
     assert_equals(false, int_set:contains(20))
     assert_equals(false, int_set:contains(math.huge))
@@ -142,7 +147,7 @@ TestIntSet = {}
     local int_set = IntSet:new()
     int_set:add(Range:new(3, 6))
 
-    assert_equals(false, int_set.negated)
+    assert_equals(false, int_set:is_negated())
     assert_equals(false, int_set:contains(2))
     assert_equals(false, int_set:contains(7))
     assert_equals(true, int_set:contains(3))
@@ -189,9 +194,7 @@ TestIntSet = {}
     local int_set2 = IntSet:new()
     int_set2:add(Range:new(3, 5))
     int_set2:add(Range:new(10, math.huge))
-    int_set2.negated = true
+    int_set2:set_negated(true)
     assert_equals("0-2,6-9", int_set2:invert():tointstring())
   end
-
-LuaUnit:run()
 

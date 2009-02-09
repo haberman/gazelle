@@ -150,8 +150,8 @@ grammar:assign_priorities()
 -- make the RTNs in the grammar determistic and minimal
 print_verbose("Convering RTN NFAs to DFAs...")
 grammar:determinize_rtns()
-grammar:process_allow()
-grammar:canonicalize_properties()
+--grammar:process_allow()
+--grammar:canonicalize_properties()
 if minimize_rtns then
   print_verbose("Minimizing RTN DFAs...")
   grammar:minimize_rtns()
@@ -160,17 +160,17 @@ end
 -- Generate GLAs by doing lookahead calculations.
 -- This annotates every nontrivial state in the grammar with a GLA.
 print_verbose("Doing LL(*) lookahead calculations...")
-compute_lookahead(grammar, k)
+--compute_lookahead(grammar, k)
 
 -- we now have everything figured out at the RTN and GLA levels.  Now we just
 -- need to figure out how many IntFAs to generate, which terminals each one
 -- should handle, and generate/determinize/minimize those IntFAs.
 
 print_verbose("Generating lexer DFAs...")
-grammar:generate_intfas()
+--grammar:generate_intfas()
 
 print_verbose(string.format("Writing to output file '%s'...", output_filename))
-write_bytecode(grammar, output_filename)
+--write_bytecode(grammar, output_filename)
 
 if dump then
   require "dump_to_html"

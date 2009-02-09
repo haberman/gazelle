@@ -44,13 +44,14 @@ end
 -- Add a nonterminal and its associated RTN to the grammar.
 -- TODO: how should redefinition be caught and warned/errored?
 function Grammar:add_nonterm(name, rtn, slot_count, text)
-  rtn.name = name
-  rtn.slot_count = slot_count
-  rtn.text = text
+  rtn:set_name(name)
+  rtn:set_slot_count(slot_count)
+  rtn:set_text(text)
   for state in each(rtn:states()) do
-    state.rtn = rtn
+    state:set_rtn(rtn)
   end
   self.rtns:add(name, rtn)
+  assert(self.rtns:get(name))
 end
 
 -- Add a terminal and its associated IntFA to the grammar.
@@ -76,7 +77,7 @@ function Grammar:process_allow()
         -- get sub-rules
         local subrules = Set:new()
         for state in each(rtn:states()) do
-          for edge_val, dest_state, properties in state:transitions() do
+          for edge_val, dest_state, properties in state:each_transition() do
             if fa.is_nonterm(edge_val) and properties.slotnum ~= -1 then
               subrules:add(edge_val.name)
             end
@@ -107,7 +108,7 @@ end
 function Grammar:check_defined()
   for name, rtn in each(self.rtns) do
     for rtn_state in each(rtn:states()) do
-      for edge_val in rtn_state:transitions() do
+      for edge_val in rtn_state:each_transition() do
         if fa.is_nonterm(edge_val) and not self.rtns:contains(edge_val.name) then
           error(string.format("Rule '%s' was referred to but never defined.", edge_val.name))
         end
@@ -132,6 +133,7 @@ function Grammar:get_rtn_states_needing_gla()
   local states = Set:new()
   for name, rtn in each(self.rtns) do
     for state in each(rtn:states()) do
+      --print("does state need gla?")
       if state:needs_gla() then
         states:add(state)
       end
@@ -141,11 +143,11 @@ function Grammar:get_rtn_states_needing_gla()
 end
 
 function copy_attributes(rtn, new_rtn)
-  new_rtn.name = rtn.name
-  new_rtn.slot_count = rtn.slot_count
-  new_rtn.text = rtn.text
+  new_rtn:set_name(rtn:get_name())
+  new_rtn:set_slot_count(rtn:get_slot_count())
+  new_rtn:set_text(rtn:get_text())
   for state in each(new_rtn:states()) do
-    state.rtn = new_rtn
+    state:set_rtn(new_rtn)
   end
 end
 
@@ -162,7 +164,7 @@ function Grammar:assign_priorities()
   for name, rtn in each(self.rtns) do
     local reverse_epsilon_transitions = {}
     for state in each(rtn:states()) do
-      for edge_val, dest_state, properties in state:transitions() do
+      for edge_val, dest_state, properties in state:each_transition() do
         if edge_val == fa.e then
           reverse_epsilon_transitions[dest_state] = reverse_epsilon_transitions[dest_state] or {Set:new(), {}}
           reverse_epsilon_transitions[dest_state][1]:add(state)
@@ -194,15 +196,15 @@ function Grammar:assign_priorities()
       priorities = {}
       depth_first_traversal(state, children)
       priorities = get_unique_table_for_table(priorities)
-      for edge_val, dest_state, properties in state:transitions() do
+      for edge_val, dest_state, properties in state:each_transition() do
         if edge_val ~= fa.e then
           -- non-epsilon transitions should always have properties assigned,
           -- because they always have slotnums and slotnames.
           properties.priorities = priorities
         end
       end
-      if state.final then
-        state.final = {priorities = priorities}
+      if state:get_final() then
+        state:set_final({priorities = priorities})
       end
     end
   end
@@ -234,7 +236,7 @@ function Grammar:generate_intfas()
   local states = self:get_rtn_states_needing_intfa()
   for rtn_state in each(self:get_rtn_states_needing_gla()) do
     for gla_state in each(rtn_state.gla:states()) do
-      if not gla_state.final then
+      if not gla_state:get_final() then
         states:add(gla_state)
       end
     end
@@ -247,7 +249,7 @@ function Grammar:generate_intfas()
   local state_term_pairs = {}
   for state in each(states) do
     local terms = Set:new()
-    for edge_val in state:transitions() do
+    for edge_val in state:each_transition() do
       if fa.is_nonterm(edge_val) or terms:contains(edge_val) then
         error(string.format("Internal error with state %s, edge %s", serialize(state, 6, "  "), serialize(edge_val)))
       end
@@ -290,7 +292,7 @@ function Grammar:get_strings()
     strings:add(name)
 
     for rtn_state in each(rtn:states()) do
-      for edge_val, target_state, properties in rtn_state:transitions() do
+      for edge_val, target_state, properties in rtn_state:each_transition() do
         if properties then
           strings:add(properties.name)
         end
@@ -353,7 +355,7 @@ function Grammar:get_flattened_rtn_list()
   for name, rtn in each(rtns) do
     for state in each(rtn.states) do
       transitions = {}
-      for edge_val, target_state, properties in state:transitions() do
+      for edge_val, target_state, properties in state:each_transition() do
         table.insert(transitions, {edge_val, target_state, properties})
       end
 

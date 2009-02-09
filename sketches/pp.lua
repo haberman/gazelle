@@ -28,9 +28,7 @@ function serialize(o, maxdepth, indent, s)
     result = string.format("%q", o)
   elseif t == "boolean" or t == "number" or t == "function" or t == "nil" then
     result = tostring(o)
-  elseif t == "table" and o.__index == o and o.name then
-    result = string.format("Class: %q", o.name)
-  elseif t == "table" and not (o.class and o.class.tostring) then
+  elseif t == "table" and not isobject(o) then
     result = "{"
     if nestedIndent then result = result .. "\n" .. nestedIndent end
     local nextIndex = 1
