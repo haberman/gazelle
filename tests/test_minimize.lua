@@ -36,7 +36,6 @@ function TestProperties:test1()
   expect_start.final = true
   expect_start:add_transition("X", expect_start, properties)
   expect_start:add_transition("Y", expect_start, properties)
-  assert(fa_isequal(minimized_rtn, expect_rtn))
+  assert_equals(true, fa_isequal(minimized_rtn, expect_rtn))
 end
 
-LuaUnit:run(unpack(arg))

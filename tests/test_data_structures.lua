@@ -193,5 +193,3 @@ TestIntSet = {}
     assert_equals("0-2,6-9", int_set2:invert():tointstring())
   end
 
-LuaUnit:run()
-

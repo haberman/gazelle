@@ -101,5 +101,3 @@ function TestSimple:test1()
   )
 end
 
-LuaUnit:run(unpack(arg))
-

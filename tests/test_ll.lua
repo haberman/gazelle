@@ -953,6 +953,3 @@ function TestDetectNonLLStar:test_resolution_not_supported2()
   )
 end
 
-
-LuaUnit:run(unpack(arg))
-
