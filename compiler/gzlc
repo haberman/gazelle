@@ -167,7 +167,7 @@ compute_lookahead(grammar, k)
 -- should handle, and generate/determinize/minimize those IntFAs.
 
 print_verbose("Generating lexer DFAs...")
---grammar:generate_intfas()
+grammar:generate_intfas()
 
 print_verbose(string.format("Writing to output file '%s'...", output_filename))
 write_bytecode(grammar, output_filename)

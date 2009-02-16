@@ -110,11 +110,18 @@ end
 
 define_class("Object")
 
-function newobject(class)
-  local obj = {}
-  setmetatable(obj, class)
-  obj.class = class
-  class.__index = class
+define_class("MemoizedObject")
+function MemoizedObject:initialize(class)
+  self.memoized_class = class
+  self.cache = {}
+end
+
+function MemoizedObject:get(name)
+  local obj = self.cache[name]
+  if not obj then
+    obj = self.memoized_class:new(name)
+    self.cache[name] = obj
+  end
   return obj
 end
 

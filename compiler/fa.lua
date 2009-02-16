@@ -37,14 +37,9 @@ module("fa", package.seeall)
 
 -- Class for representing special-case edge values that have only one
 -- instance for the whole program.
-SingletonEdgeValue = {name="SingletonEdgeValue"}
-function SingletonEdgeValue:new(name)
-  self.singletons = self.singletons or {}
-  -- we index each singleton by name, creating new ones lazily.
-  self.singletons[name] = self.singletons[name] or newobject(self)
-  local obj = self.singletons[name]
-  obj.name = name
-  return obj
+define_class("SingletonEdgeValue")
+function SingletonEdgeValue:initialize(name)
+  self.name = name
 end
 
 -- This is a special edge value that represents a transition that can be
@@ -236,6 +231,11 @@ define_class("FA")
 --------------------------------------------------------------------]]--
 
 define_class("IntFA", FA)
+function IntFA:initialize(init)
+  FA.initialize(self, init)
+  self.termset = nil
+end
+
 function IntFA:new_graph(init)
   return IntFA:new(init)
 end
@@ -619,22 +619,12 @@ function RTNState:needs_intfa()
 end
 
 
-NonTerm = {name="NonTerm"}
-function NonTerm:new(name)
-  -- keep a cache of nonterm objects, so that we always return the same object
-  -- for a given name.  This lets us compare nonterms for equality.
-  if not self.cache then
-    self.cache = {}
-  end
-
-  if not self.cache[name] then
-    obj = newobject(self)
-    obj.name = name
-    self.cache[name] = obj
-  end
-
-  return self.cache[name]
+define_class("NonTerm")
+function NonTerm:initialize(name)
+  self.name = name
 end
+
+nonterms = MemoizedObject:new(NonTerm)
 
 function is_nonterm(thing)
   return (type(thing) == "table" and thing.class == NonTerm)

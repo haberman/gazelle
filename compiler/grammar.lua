@@ -29,16 +29,14 @@ require "data_structures"
 require "fa_algorithms"
 require "intfa_combine"
 
-Grammar = {name="Grammar"}
-
-function Grammar:new()
-  local obj = newobject(self)
-  obj.rtns = OrderedMap:new()
-  obj.terminals = {}
-  obj.master_intfas = OrderedSet:new()
-  obj.start = nil  -- what rule the entire grammar starts on
-  obj.allow = {}
-  return obj
+define_class("Grammar")
+function Grammar:initialize()
+  self.rtns = OrderedMap:new()
+  self.terminals = {}
+  self.master_intfas = OrderedSet:new()
+  self.start = nil  -- what rule the entire grammar starts on
+  self.allow = {}
+  self.attributes = nil
 end
 
 -- Add a nonterminal and its associated RTN to the grammar.

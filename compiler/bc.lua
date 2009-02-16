@@ -26,50 +26,40 @@ BLOCKINFO = 0
 
 SETBID = 1
 
-LiteralOp = {name="LiteralOp"}
-function LiteralOp:new(value)
-  local obj = newobject(self)
-  obj.value = value
-  return obj
+define_class("LiteralOp")
+function LiteralOp:initialize(value)
+  self.value = value
 end
 
-VBROp = {name="VBROp"}
-function VBROp:new(bits)
-  local obj = newobject(self)
-  obj.bits = bits
-  obj.name = name
-  return obj
+define_class("VBROp")
+function VBROp:initialize(bits)
+  self.bits = bits
+  self.name = name
 end
 
-FixedOp = {name="FixedOp"}
-function FixedOp:new(bits)
-  local obj = newobject(self)
-  obj.bits = bits
-  obj.name = name
-  return obj
+define_class("FixedOp")
+function FixedOp:initialize(bits)
+  self.bits = bits
+  self.name = name
 end
 
-ArrayOp = {name="ArrayOp"}
-function ArrayOp:new(elem_type)
-  local obj = newobject(self)
-  obj.elem_type = elem_type
-  obj.name = name
-  return obj
+define_class("ArrayOp")
+function ArrayOp:initialize(elem_type)
+  self.elem_type = elem_type
+  self.name = name
 end
 
-File = {name="File"}
-function File:new(filename, app_magic_number)
-  local obj = newobject(self)
-  obj.name = name
-  obj.file = io.open(filename, "w")
-  obj.current_byte = 0
-  obj.current_bits = 0
-  obj.file:write("BC")
-  obj.file:write(app_magic_number)
-  obj.current_abbrev_width = 2
-  obj.offset = 0
-  obj.stack = {}
-  return obj
+define_class("File")
+function File:initialize(filename, app_magic_number)
+  self.name = name
+  self.file = io.open(filename, "w")
+  self.current_byte = 0
+  self.current_bits = 0
+  self.file:write("BC")
+  self.file:write(app_magic_number)
+  self.current_abbrev_width = 2
+  self.offset = 0
+  self.stack = {}
 end
 
 -- Witness the joy of trying to do bitwise manipulation in a language that

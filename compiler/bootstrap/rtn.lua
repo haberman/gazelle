@@ -18,12 +18,11 @@ require "grammar"
 require "bootstrap/regex_parser"
 
 -- CharStream: a cheesy sort-of lexer-like object for the RTN parser
-CharStream = {}
-  function CharStream:new(string)
-    local obj = newobject(self)
-    obj.string = string
-    obj.offset = 1
-    return obj
+define_class("CharStream")
+  function CharStream:initialize(string)
+    self.string = string
+    self.offset = 1
+    self.ignored = nil
   end
 
   function CharStream:ignore(what)
@@ -336,7 +335,7 @@ end
 
 function parse_nonterm(chars)
   local old_ignore = chars:ignore()
-  local ret = fa.NonTerm:new(chars:consume_pattern("[%w_]+"))
+  local ret = fa.nonterms:get(chars:consume_pattern("[%w_]+"))
   chars:ignore(old_ignore)
   return ret
 end

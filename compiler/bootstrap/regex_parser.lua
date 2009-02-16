@@ -21,11 +21,9 @@ module("regex_parser", package.seeall)
 -- class TokenStream
 -- A simple convenience class for reading characters one at a time and
 -- doing simple lookahead.  It is not especially efficient.
-TokenStream = {}
-  function TokenStream:new(string)
-    local obj = newobject(self)
-    obj.string = string
-    return obj
+define_class("TokenStream")
+  function TokenStream:initialize(string)
+    self.string = string
   end
 
   function TokenStream:lookahead(amount)
