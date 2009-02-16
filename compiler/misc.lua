@@ -10,6 +10,106 @@
 
 --------------------------------------------------------------------]]--
 
+class_mt = {
+  __newindex = function(obj, key, value)
+    if type(value) == "function" then
+      obj.methods[key] = value
+    else
+      rawset(obj, key, value)
+    end
+  end,
+  -- For doing explicit superclass method calls.
+  __index = function(obj, key)
+    return obj.methods[key]
+  end
+}
+
+function isobject(maybe_obj)
+  local mt = getmetatable(maybe_obj)
+  return type(maybe_obj) == "table" and mt and mt.__class
+end
+
+function has_method(obj, method)
+  return getmetatable(obj).__class.methods[method] ~= nil
+end
+
+function assign_and_record(class)
+  local members = class.members
+  return function(obj, key, value)
+    members[key] = true
+    return rawset(obj, key, value)
+  end
+end
+
+function assign_if_member(members)
+  return function(obj, key, value)
+    local member = members[key]
+    if member then
+      return rawset(obj, key, value)
+    else
+      error(string.format("Attempted to assign property '%s' to an object of class '%s', " ..
+                          "but that property was not defined in its initialize() method.",
+                           key, getmetatable(obj).__class.name))
+    end
+    return rawset(obj, key, value)
+  end
+end
+
+function find_or_error(class)
+  local methods = class.methods
+  local members = class.members
+  return function(obj, key)
+    local method = methods[key]
+    if method then
+      return method
+    end
+    local ismember = members[key]
+    if ismember then
+      return nil
+    else
+      error(string.format("Attempted to access non-existent method or member " ..
+                          "'%s' on an object of class '%s'.", key, class.name))
+    end
+  end
+end
+
+function define_class(name, superclass)
+  local class={name=name, methods={}, members={}}
+  if name ~= "Object" then
+    superclass = superclass or Object
+    setmetatable(class.methods, {__index=superclass.methods})
+  end
+  class.superclass = superclass
+  local obj_metatable={__class=class, __index=find_or_error(class)}
+  local members_initialized = false
+  function class:new(...)
+    local obj = class:new_empty()
+    -- This is the first object of the class we have created.
+    -- We rely on its constructor to define its members.
+    obj_metatable.__newindex = assign_and_record(class)
+    obj:initialize(...)
+    obj_metatable.__newindex = assign_if_member(class.members)
+    function class:new(...)
+      local obj = class:new_empty()
+      obj:initialize(...)
+      return obj
+    end
+    return obj
+  end
+  function class:new_empty()
+    local obj = {}
+    obj.class = class
+    setmetatable(obj, obj_metatable)
+    return obj
+  end
+  -- Do this here so that :new above is a class method, but all others become
+  -- object methods.
+  setmetatable(class, class_mt)
+  _G[name] = class
+end
+
+define_class("Object")
+
 function newobject(class)
   local obj = {}
   setmetatable(obj, class)
@@ -21,7 +121,7 @@ end
 -- each(foo): returns an iterator; if the object supports the each method,
 --            call that, otherwise return an iterator for a plain array.
 function each(array_or_eachable_obj)
-  if array_or_eachable_obj.class then
+  if array_or_eachable_obj.each then
     return array_or_eachable_obj:each()
   else
     local array = array_or_eachable_obj

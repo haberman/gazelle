@@ -209,23 +209,21 @@ end
 
 --------------------------------------------------------------------]]--
 
-Path = {name="Path"}
-function Path:new(rtn_state, predicted_edge, predicted_dest_state)
-  local obj = newobject(self)
-  obj.history = {}
-  obj.lookahead_k = 0
-  obj.prediction = {predicted_edge, predicted_dest_state}
-  obj.stack = Stack:new()
+define_class("Path")
+function Path:initialize(rtn_state, predicted_edge, predicted_dest_state)
+  self.history = {}
+  self.lookahead_k = 0
+  self.prediction = {predicted_edge, predicted_dest_state}
+  self.stack = Stack:new()
 
-  obj.original_state = rtn_state
-  obj.current_state = rtn_state
-  obj.presumed_stack = {}
-  obj.seen_sigs = Set:new()
-  obj.is_cyclic = false
-  obj.is_epsilon_cyclic = false
-  obj.epsilon_seen_sigs = Set:new()
-  obj.epsilon_seen_follow_states = Set:new()
-  return obj
+  self.original_state = rtn_state
+  self.current_state = rtn_state
+  self.presumed_stack = {}
+  self.seen_sigs = Set:new()
+  self.is_cyclic = false
+  self.is_epsilon_cyclic = false
+  self.epsilon_seen_sigs = Set:new()
+  self.epsilon_seen_follow_states = Set:new()
 end
 
 function Path:get_abbreviated_history()
@@ -328,7 +326,7 @@ function Path:is_regular()
 end
 
 function Path:dup()
-  local new_path = newobject(Path)
+  local new_path = Path:new_empty()
   new_path.history = table_shallow_copy(self.history)
   new_path.lookahead_k = self.lookahead_k
   new_path.prediction = self.prediction

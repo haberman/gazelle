@@ -12,7 +12,6 @@
 
 require "luaunit"
 require "bootstrap/rtn"
-require "regex_debug"
 require "grammar"
 require "ll"
 

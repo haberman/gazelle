@@ -62,114 +62,114 @@ eof = SingletonEdgeValue:new("EOF")
 
 --------------------------------------------------------------------]]--
 
-FAState = {name="FAState"}
-function FAState:new()
-  local obj = newobject(self)
-  obj._transitions = {}
-  return obj
-end
-
-function FAState:tostring()
-  local str = string.format("{%s, %d transitions", self.class.name, self:num_transitions())
-  -- TODO: rename .rtn to .fa, to be more generic
-  if self.rtn then
-    str = str .. string.format(", from rule named %s", self.rtn.name)
-    if self.rtn.start == self then
-      str = str .. ", start"
-    else
-      str = str .. ", NOT start"
-    end
-  end
-  if self.final then
-    str = str .. ", final"
-  else
-    str = str .. ", NOT final"
-  end
-  str = str .. "}"
-  return str
-end
-
-function FAState:child_states()
-  local children = Set:new()
-  for edge_value, target_state in self:transitions() do
-    children:add(target_state)
-  end
-  return children
-end
-
-function FAState:add_transition(edge_value, target_state, edge_properties)
-  for e_edge_value, e_target_state, e_edge_properties in self:transitions() do
-    if edge_value == e_edge_value and target_state == e_target_state
-       and e_edge_properties == edge_properties then
-       return
-    end
-  end
-  table.insert(self._transitions, {edge_value, target_state, edge_properties})
-end
-
-function FAState:num_transitions()
-  return #self._transitions
-end
-
-function FAState:transitions()
-  local i = 0
-  return function ()
-    i = i + 1
-    if self._transitions[i] then
-      return unpack(self._transitions[i])
-    else
-      return nil
-    end
-  end
-end
-
-function FAState:clear_transitions()
-  self._transitions = {}
-end
-
-function FAState:transitions_for(val, prop)
-  local targets
-  if prop == "ANY" then
-    targets = {}
-  else
-    targets = Set:new()
+define_class("FAState")
+  function FAState:initialize()
+    self._transitions = {}
+    self.final = nil
+    self.block = nil
   end
 
-  for edge_val, target_state, properties in self:transitions() do
-    if edge_val == val and ((prop == "ANY") or (prop == "ALL") or (prop == properties)) then
-      if prop == "ANY" then
-        table.insert(targets, {target_state, properties})
+  function FAState:tostring()
+    local str = string.format("{%s, %d transitions", self.class.name, self:num_transitions())
+    -- TODO: rename .rtn to .fa, to be more generic
+    if self.rtn then
+      str = str .. string.format(", from rule named %s", self.rtn.name)
+      if self.rtn.start == self then
+        str = str .. ", start"
       else
-        targets:add(target_state)
+        str = str .. ", NOT start"
+      end
+    end
+    if self.final then
+      str = str .. ", final"
+    else
+      str = str .. ", NOT final"
+    end
+    str = str .. "}"
+    return str
+  end
+
+  function FAState:child_states()
+    local children = Set:new()
+    for edge_value, target_state in self:transitions() do
+      children:add(target_state)
+    end
+    return children
+  end
+
+  function FAState:add_transition(edge_value, target_state, edge_properties)
+    for e_edge_value, e_target_state, e_edge_properties in self:transitions() do
+      if edge_value == e_edge_value and target_state == e_target_state
+         and e_edge_properties == edge_properties then
+         return
+      end
+    end
+    table.insert(self._transitions, {edge_value, target_state, edge_properties})
+  end
+
+  function FAState:num_transitions()
+    return #self._transitions
+  end
+
+  function FAState:transitions()
+    local i = 0
+    return function ()
+      i = i + 1
+      if self._transitions[i] then
+        return unpack(self._transitions[i])
+      else
+        return nil
       end
     end
   end
-  return targets
-end
 
-function FAState:dest_state_for(val)
-  local states = self:transitions_for(val, "ANY")
-  if #states > 1 then
-    error(">1 transition found")
-  elseif #states == 0 then
-    return nil
-  else
-    local dest_state
-    for dest_state_properties in each(states) do
-      dest_state, properties = unpack(dest_state_properties)
+  function FAState:clear_transitions()
+    self._transitions = {}
+  end
+
+  function FAState:transitions_for(val, prop)
+    local targets
+    if prop == "ANY" then
+      targets = {}
+    else
+      targets = Set:new()
     end
-    return dest_state
-  end
-end
 
-function FAState:canonicalize_properties()
-  for i, _ in ipairs(self._transitions) do
-    self._transitions[i][3] = get_unique_table_for_table(self._transitions[i][3])
+    for edge_val, target_state, properties in self:transitions() do
+      if edge_val == val and ((prop == "ANY") or (prop == "ALL") or (prop == properties)) then
+        if prop == "ANY" then
+          table.insert(targets, {target_state, properties})
+        else
+          targets:add(target_state)
+        end
+      end
+    end
+    return targets
   end
-  if type(self.final) == "table" then
-    self.final = get_unique_table_for_table(self.final)
+
+  function FAState:dest_state_for(val)
+    local states = self:transitions_for(val, "ANY")
+    if #states > 1 then
+      error(">1 transition found")
+    elseif #states == 0 then
+      return nil
+    else
+      local dest_state
+      for dest_state_properties in each(states) do
+        dest_state, properties = unpack(dest_state_properties)
+      end
+      return dest_state
+    end
   end
-end
+
+  function FAState:canonicalize_properties()
+    for i, _ in ipairs(self._transitions) do
+      self._transitions[i][3] = get_unique_table_for_table(self._transitions[i][3])
+    end
+    if type(self.final) == "table" then
+      self.final = get_unique_table_for_table(self.final)
+    end
+  end
 
 
 --[[--------------------------------------------------------------------
@@ -178,16 +178,14 @@ end
 
 --------------------------------------------------------------------]]--
 
-FA = {name="FA"}
-function FA:new(init)
-  local obj = newobject(self)
-  init = init or {}
+define_class("FA")
+  function FA:initialize(init)
+    init = init or {}
 
-  if obj.new_state then
-    obj.start = init.start or obj:new_state()
-    obj.final = init.final or obj:new_state() -- for all but Thompson NFA fragments we ignore this
+    self.start = init.start or self:new_state()
+    self.final = init.final or self:new_state() -- for all but Thompson NFA fragments we ignore this
     if init.symbol then
-      obj.start:add_transition(init.symbol, obj.final, init.properties)
+      self.start:add_transition(init.symbol, self.final, init.properties)
     elseif init.string then
       local int_set = IntSet:new()
       local char = init.string:sub(1, 1):byte()
@@ -201,37 +199,34 @@ function FA:new(init)
       end
       return fa
     end
+
+    self.properties = {}
   end
 
-  obj.properties = {}
-
-  return obj
-end
-
-function FA:states()
-  return depth_first_traversal(self.start, function (s) return s:child_states() end)
-end
-
-function FA:dup()
-  local new_graph = self:new_graph()
-  local new_states = {}
-
-  -- duplicate states
-  for state in each(self:states()) do
-    new_states[state] = new_states[state] or self:new_state()
-    if self.start == state then new_graph.start = new_states[state] end
-    if self.final == state then new_graph.final = new_states[state] end
+  function FA:states()
+    return depth_first_traversal(self.start, function (s) return s:child_states() end)
   end
 
-  -- duplicate transitions
-  for state in each(self:states()) do
-    for edge_val, target_state, properties in state:transitions() do
-      new_states[state]:add_transition(edge_val, new_states[target_state], properties)
+  function FA:dup()
+    local new_graph = self:new_graph()
+    local new_states = {}
+
+    -- duplicate states
+    for state in each(self:states()) do
+      new_states[state] = new_states[state] or self:new_state()
+      if self.start == state then new_graph.start = new_states[state] end
+      if self.final == state then new_graph.final = new_states[state] end
     end
-  end
 
-  return new_graph
-end
+    -- duplicate transitions
+    for state in each(self:states()) do
+      for edge_val, target_state, properties in state:transitions() do
+        new_states[state]:add_transition(edge_val, new_states[target_state], properties)
+      end
+    end
+
+    return new_graph
+  end
 
 --[[--------------------------------------------------------------------
 
@@ -240,8 +235,7 @@ end
 
 --------------------------------------------------------------------]]--
 
-IntFA = FA:new()
-IntFA.name = "IntFA"
+define_class("IntFA", FA)
 function IntFA:new_graph(init)
   return IntFA:new(init)
 end
@@ -325,9 +319,7 @@ function IntFA:to_dot()
 end
 
 
-IntFAState = FAState:new()
-IntFAState.name = "IntFAState"
-
+define_class("IntFAState", FAState)
 function IntFAState:add_transition(edge_value, target_state, edge_properties)
   -- as a special case, IntSet edge_values can be combined if two edge_values
   -- have the same target_state and neither has any edge_properties.
@@ -378,8 +370,13 @@ end
 
 --------------------------------------------------------------------]]--
 
-GLA = FA:new()
-GLA.name = "GLA"
+define_class("GLA", FA)
+function GLA:initialize(init)
+  FA.initialize(self, init)
+  self.rtn_state = nil
+  self.longest_path = nil
+end
+
 function GLA:new_graph(init)
   return GLA:new(init)
 end
@@ -436,23 +433,23 @@ function GLA:to_dot(indent, suffix)
 end
 
 
-GLAState = FAState:new()
-GLAState.name = "GLAState"
-function GLAState:new(paths)
-  local obj = FAState:new()
-  obj.rtn_paths = paths
+define_class("GLAState", FAState)
+function GLAState:initialize(paths)
+  FAState.initialize(self)
+
+  self.rtn_paths = paths
+  self.gla = nil
 
   if paths then
     for path in each(paths) do
-      if obj.lookahead_k and obj.lookahead_k ~= path.lookahead_k then
+      if self.lookahead_k and self.lookahead_k ~= path.lookahead_k then
         error("Internal error: expected all paths for the GLA state to have the same length")
       end
-      obj.lookahead_k = path.lookahead_k
+      self.lookahead_k = path.lookahead_k
     end
   else
-    obj.lookahead_k = 0
+    self.lookahead_k = 0
   end
-  return obj
 end
 
 
@@ -463,8 +460,14 @@ end
 
 --------------------------------------------------------------------]]--
 
-RTN = FA:new()
-RTN.name = "RTN"
+define_class("RTN", FA)
+function RTN:initialize(init)
+  FA.initialize(self, init)
+  self.name = nil
+  self.slot_count = nil
+  self.text = nil
+end
+
 function RTN:new_graph(init)
   return RTN:new(init)
 end
@@ -487,7 +490,11 @@ function RTN:get_outgoing_edge_values(states)
 end
 
 function escape(str)
-  return str:gsub("[\"\\]", "\\%1")
+  if str.gsub then
+    return str:gsub("[\"\\]", "\\%1")
+  else
+    return tostring(str)
+  end
 end
 
 function RTN:to_dot(indent, suffix, intfas, glas)
@@ -546,9 +553,14 @@ function RTN:to_dot(indent, suffix, intfas, glas)
   return str
 end
 
-
-RTNState = FAState:new()
-RTNState.name = "RTNState"
+define_class("RTNState", FAState)
+function RTNState:initialize()
+  FAState.initialize(self)
+  self.rtn = nil
+  self.gla = nil
+  self.intfa = nil
+  self.priorities = nil
+end
 
 -- A trivial state is one where you can tell just by looking
 -- at the state's transitions and its final status alone what

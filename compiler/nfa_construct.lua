@@ -32,7 +32,8 @@ module("nfa_construct", package.seeall)
 
 function concat(nfa1, nfa2)
   nfa1.final:add_transition(fa.e, nfa2.start)
-  return nfa1:new_graph{start = nfa1.start, final = nfa2.final}
+  graph = nfa1:new_graph{start = nfa1.start, final = nfa2.final}
+  return graph
 end
 
 

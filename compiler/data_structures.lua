@@ -14,24 +14,29 @@
 require "misc"
 
 -- Queue
-Queue = {name="Queue"}
-  function Queue:new(init)
-    local obj = newobject(self)
-    obj.first = 0
-    obj.last  = -1
-    if init then obj:enqueue(init) end
-    return obj
+define_class("Queue")
+  function Queue:initialize(init)
+    -- The elements themselves, indexed by numbers.
+    -- The index self.first is the oldest member of the queue, self.last is
+    -- the newest.
+    self.elements = {}
+    self.first = 0
+    self.last  = -1
+
+    if init then
+      self:enqueue(init)
+    end
   end
 
   function Queue:enqueue(val)
     self.last = self.last + 1
-    self[self.last] = val
+    self.elements[self.last] = val
   end
 
   function Queue:dequeue()
     if self:isempty() then error("Tried to dequeue an empty queue") end
-    local val = self[self.first]
-    self[self.first] = nil
+    local val = self.elements[self.first]
+    self.elements[self.first] = nil
     self.first = self.first + 1
     return val
   end
@@ -43,11 +48,11 @@ Queue = {name="Queue"}
 
 
 -- Stack
-Stack = {name="Stack"}
-  function Stack:new(init)
-    local obj = newobject(self)
-    obj.stack = {}
-    return obj
+define_class("Stack")
+  function Stack:initialize(init)
+    -- The elements on the stack, indexed by number.  Index '1' is the bottom
+    -- of the stack (the first element that was pushed).
+    self.stack = {}
   end
 
   function Stack:push(val)
@@ -75,7 +80,7 @@ Stack = {name="Stack"}
   end
 
   function Stack:dup()
-    local new_stack = newobject(Stack)
+    local new_stack = Stack:new_empty()
     new_stack.stack = table_shallow_copy(self.stack)
     return new_stack
   end
@@ -121,14 +126,14 @@ Stack = {name="Stack"}
 
 
 -- Set
-Set = {name="Set"}
-  function Set:new(init)
-    local obj = newobject(self)
-    obj.elements = {}
+define_class("Set")
+  function Set:initialize(init)
+    -- The elements of the set are the keys of self.elements.
+    self.elements = {}
+
     if init then
-      obj:add_collection(init)
+      self:add_collection(init)
     end
-    return obj
   end
 
   function Set:sample()
@@ -183,7 +188,7 @@ Set = {name="Set"}
   end
 
   function Set:dup()
-    local new_set = newobject(Set)
+    local new_set = Set:new_empty()
     new_set.elements = table_shallow_copy(self.elements)
     return new_set
   end
@@ -199,7 +204,7 @@ Set = {name="Set"}
   function Set:hash_key()
     local arr = self:to_array()
     for i=1,#arr do
-      if type(arr[i]) == "table" and arr[i].signature then
+      if isobject(arr[i]) and has_method(arr[i], "signature") then
         arr[i] = tostring(arr[i]:signature(true))
       else
         arr[i] = tostring(arr[i])
@@ -236,17 +241,21 @@ Set = {name="Set"}
 -- class Set
 
 -- OrderedSet
-OrderedSet = {name="OrderedSet"}
-  function OrderedSet:new(init)
-    local obj = newobject(self)
-    obj.element_offsets = {}
-    obj.elements = {}
+define_class("OrderedSet")
+  function OrderedSet:initialize(init)
+    -- An ordered array of the set's elements.  This allows O(1) lookup of a
+    -- given offset.
+    self.elements = {}
+
+    -- A map of {set element -> offset}.  This allows O(1) lookup of an offset
+    -- by element.
+    self.element_offsets = {}
+
     if init then
       for element in each(init) do
-        obj:add(element)
+        self:add(element)
       end
     end
-    return obj
   end
 
   function OrderedSet:add(elem)
@@ -292,12 +301,15 @@ OrderedSet = {name="OrderedSet"}
   end
 
 -- OrderedMap
-OrderedMap = {name="OrderedMap"}
-  function OrderedMap:new()
-    local obj = newobject(self)
-    obj.key_offsets = {}
-    obj.elements = {}
-    return obj
+define_class("OrderedMap")
+  function OrderedMap:initialize()
+    -- An ordered array of {key, value} pairs that are the members of the set.
+    -- This allows O(1) lookup of any element given its offset.
+    self.elements = {}
+
+    -- A map of {key -> element offset}.  This allows O(1) lookup of any
+    -- element given its key.
+    self.key_offsets = {}
   end
 
   function OrderedMap:add(key, value)
@@ -354,14 +366,11 @@ OrderedMap = {name="OrderedMap"}
 
 -- Range
 -- The Range is *inclusive* at both ends.
-Range = {name="Range"}
-  function Range:new(low, high)
+define_class("Range")
+  function Range:initialize(low, high)
     assert(low <= high)
-
-    local obj = newobject(self)
-    obj.low = low
-    obj.high = high
-    return obj
+    self.low = low
+    self.high = high
   end
 
   function Range.union(a, b)
@@ -388,12 +397,10 @@ Range = {name="Range"}
 
 -- IntSet
 -- None of the ranges may overlap.
-IntSet = {name="IntSet"}
-  function IntSet:new()
-    local obj = newobject(self)
-    obj.list = {}
-    obj.negated = false
-    return obj
+define_class("IntSet")
+  function IntSet:initialize()
+    self.list = {}
+    self.negated = false
   end
 
   function IntSet:add(new_range)
