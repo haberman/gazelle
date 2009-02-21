@@ -437,6 +437,8 @@ define_class("GLAState", FAState)
 function GLAState:initialize(paths)
   FAState.initialize(self)
 
+  self.rtn = nil
+  self.intfa = nil
   self.rtn_paths = paths
   self.gla = nil
 
@@ -627,7 +629,7 @@ end
 nonterms = MemoizedObject:new(NonTerm)
 
 function is_nonterm(thing)
-  return (type(thing) == "table" and thing.class == NonTerm)
+  return isobject(thing) and thing.class == NonTerm
 end
 
 -- vim:et:sts=2:sw=2
