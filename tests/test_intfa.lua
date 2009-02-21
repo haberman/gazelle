@@ -87,8 +87,8 @@ function parse_intfa(str)
   return intfa
 end
 
-TestSimple = {}
-function TestSimple:test1()
+TestIntFA = {}
+function TestIntFA:test1()
   assert_intfas(
   [[
     s -> "X" "Y";
@@ -100,3 +100,15 @@ function TestSimple:test1()
   )
 end
 
+function TestIntFA:test2()
+  assert_intfas(
+  [[
+    s -> "X" | a;
+    a -> "Y";
+  ]],
+  [[
+    1 -X-> 2(X);
+    1 -Y-> 3(Y);
+  ]]
+  )
+end

@@ -25,7 +25,7 @@ function analyze_conflicts(terminals)
   local nfas = {}
   for name, terminal in pairs(terminals) do
     if type(terminal) == "string" then
-      terminal = fa.IntFA:new{string=terminal}
+      terminal = fa.intfa_for_string(terminal)
     end
     table.insert(nfas, {terminal, name})
   end
@@ -115,7 +115,7 @@ function intfa_combine(all_terminals, state_term_pairs)
     for term in each(termset) do
       local target = all_terminals[term]
       if type(target) == "string" then
-        target = fa.IntFA:new{string=target}
+        target = fa.intfa_for_string(target)
       end
       table.insert(nfas, {target, term})
     end

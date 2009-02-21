@@ -173,6 +173,7 @@ define_class("FAState")
 
 --------------------------------------------------------------------]]--
 
+
 define_class("FA")
   function FA:initialize(init)
     init = init or {}
@@ -182,17 +183,7 @@ define_class("FA")
     if init.symbol then
       self.start:add_transition(init.symbol, self.final, init.properties)
     elseif init.string then
-      local int_set = IntSet:new()
-      local char = init.string:sub(1, 1):byte()
-      int_set:add(Range:new(char, char))
-      local fa = IntFA:new{symbol=int_set}
-      for i=2,#init.string do
-        int_set = IntSet:new()
-        char = init.string:sub(i, i):byte()
-        int_set:add(Range:new(char, char))
-        fa = nfa_construct.concat(fa, IntFA:new{symbol=int_set})
-      end
-      return fa
+      error("This method of construction FA object is deprecated.")
     end
 
     self.properties = {}
@@ -229,6 +220,20 @@ define_class("FA")
   regular expressions.
 
 --------------------------------------------------------------------]]--
+
+function intfa_for_string(string)
+  local int_set = IntSet:new()
+  local char = string:sub(1, 1):byte()
+  int_set:add(Range:new(char, char))
+  local fa = IntFA:new{symbol=int_set}
+  for i=2,#string do
+    int_set = IntSet:new()
+    char = string:sub(i, i):byte()
+    int_set:add(Range:new(char, char))
+    fa = nfa_construct.concat(fa, IntFA:new{symbol=int_set})
+  end
+  return fa
+end
 
 define_class("IntFA", FA)
 function IntFA:initialize(init)
@@ -492,7 +497,7 @@ function RTN:get_outgoing_edge_values(states)
 end
 
 function escape(str)
-  if str.gsub then
+  if not isobject(str) and str.gsub then
     return str:gsub("[\"\\]", "\\%1")
   else
     return tostring(str)
