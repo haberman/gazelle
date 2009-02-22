@@ -35,7 +35,7 @@ function TestObject:test1()
     self.bar = bar
     self.baz = nil
   end
-  obj = HasInitializer:new(1, 2)
+  local obj = HasInitializer:new(1, 2)
   assert_equals(1, obj.foo)
   assert_equals(2, obj.bar)
   obj.baz = 3

@@ -84,9 +84,11 @@ function create_or_reuse_termset_for(terminals, conflicts, termsets, nonterm)
   end
 
   -- add all the terminals for this phase of lookahead to the termset we found
+  local termset = termsets[found_termset]
   for term in each(terminals) do
-    termsets[found_termset]:add(term)
+    termset:add(term)
   end
+  assert(termset:count() > 0)
 
   return found_termset
 end
@@ -100,6 +102,7 @@ function intfa_combine(all_terminals, state_term_pairs)
   local intfa_nums = {}
   for state_term_pair in each(state_term_pairs) do
     local state, terms = unpack(state_term_pair)
+    assert(terms:count() > 0)
     local nonterm
     if state.rtn == nil then
       nonterm = state.gla.rtn_state.rtn.name
@@ -114,6 +117,7 @@ function intfa_combine(all_terminals, state_term_pairs)
     local nfas = {}
     for term in each(termset) do
       local target = all_terminals[term]
+      assert(target, string.format("No terminal for terminal '%s'", tostring(serialize(term))))
       if type(target) == "string" then
         target = fa.intfa_for_string(target)
       end

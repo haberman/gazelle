@@ -157,8 +157,8 @@ define_class("Set")
 
   function Set:intersection(x)
     local new_set = Set:new()
-    for element in self:each() do
-      if x:contains(element) then
+    for element in each(x) do
+      if self:contains(element) then
         new_set:add(element)
       end
     end
@@ -213,7 +213,7 @@ define_class("Set")
 
     table.sort(arr)
 
-    str = ""
+    local str = ""
     for elem in each(arr) do str = str .. elem end
     return str
   end
@@ -301,6 +301,7 @@ define_class("OrderedSet")
   end
 
 -- OrderedMap
+-- NOTE: the map currently does not support deletion or replacement, only adding.
 define_class("OrderedMap")
   function OrderedMap:initialize()
     -- An ordered array of {key, value} pairs that are the members of the set.
@@ -313,10 +314,18 @@ define_class("OrderedMap")
   end
 
   function OrderedMap:add(key, value)
-    if not self.key_offsets[key] then
-      table.insert(self.elements, {key, value})
-      self.key_offsets[key] = #self.elements
+    if self.key_offsets[key] then
+      error(string.format("Attempted to insert duplicate key '%s'", key))
     end
+    table.insert(self.elements, {key, value})
+    self.key_offsets[key] = #self.elements
+  end
+
+  function OrderedMap:get_or_insert_new(key, creator)
+    if not self:contains(key) then
+      self:add(key, creator())
+    end
+    return self:get(key)
   end
 
   function OrderedMap:insert_front(key, value)
@@ -329,11 +338,22 @@ define_class("OrderedMap")
     table.insert(self.elements, 1, {key, value})
   end
 
+  function OrderedMap:subset(predicate)
+    local new_map = OrderedMap:new()
+    for key, value in self:each() do
+      if predicate(key, value) then
+        new_map:add(key, value)
+      end
+    end
+    return new_map
+  end
+
   function OrderedMap:get(key)
     return self.elements[self.key_offsets[key]][2]
   end
 
   function OrderedMap:get_key_at_offset(offset)
+    assert(offset <= self:count())
     return self.elements[offset][1]
   end
 
@@ -507,7 +527,7 @@ define_class("IntSet")
   end
 
   function IntSet:toasciistring()
-    local convert_func = function (x)
+    local function convert_func(x)
       if x == math.huge then
         return "del"
       elseif x < 33 then

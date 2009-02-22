@@ -105,29 +105,75 @@ function define_class(name, superclass)
   -- Do this here so that :new above is a class method, but all others become
   -- object methods.
   setmetatable(class, class_mt)
-  _G[name] = class
+  rawset(_G, name, class)
 end
 
 define_class("Object")
 
 define_class("MemoizedObject")
-function MemoizedObject:initialize(class)
-  self.memoized_class = class
-  self.cache = {}
+  function MemoizedObject:initialize(class)
+    self.memoized_class = class
+    self.objects = OrderedMap:new()
+  end
+
+  function MemoizedObject:get(name)
+    return self.objects:get_or_insert_new(
+        name, function() return self.memoized_class:new(name) end)
+  end
+
+  function MemoizedObject:get_objects()
+    return self.objects
+  end
+-- class MemoizedObject
+
+--[[--------------------------------------------------------------------
+
+  strict.lua, from the Lua distribution.  Forces all globals to be
+  assigned at global scope before they are referenced.  This prevents:
+  - assigning to a global inside a function, if you have not previously
+    assigned to the global at global scope.
+  - referencing a global before it has been defined.
+
+--------------------------------------------------------------------]]--
+
+local getinfo, error, rawset, rawget = debug.getinfo, error, rawset, rawget
+
+local mt = getmetatable(_G)
+if mt == nil then
+  mt = {}
+  setmetatable(_G, mt)
 end
 
-function MemoizedObject:get(name)
-  local obj = self.cache[name]
-  if not obj then
-    obj = self.memoized_class:new(name)
-    self.cache[name] = obj
-  end
-  return obj
+mt.__declared = {}
+
+local function what ()
+  local d = getinfo(3, "S")
+  return d and d.what or "C"
 end
+
+mt.__newindex = function (t, n, v)
+  if not mt.__declared[n] then
+    local w = what()
+    if w ~= "main" and w ~= "C" then
+      error("assign to undeclared variable '"..n.."'", 2)
+    end
+    mt.__declared[n] = true
+  end
+  rawset(t, n, v)
+end
+  
+mt.__index = function (t, n)
+  if not mt.__declared[n] and what() ~= "C" then
+    error("variable '"..n.."' is not declared", 2)
+  end
+  return rawget(t, n)
+end
+
 
 -- each(foo): returns an iterator; if the object supports the each method,
 --            call that, otherwise return an iterator for a plain array.
 function each(array_or_eachable_obj)
+  assert(type(array_or_eachable_obj) == "table")
   if array_or_eachable_obj.each then
     return array_or_eachable_obj:each()
   else
@@ -245,7 +291,7 @@ function equivalence_classes(int_sets)
     end
   end
 
-  local cmp_events = function(a, b)
+  local function cmp_events(a, b)
     if a[1] == b[1] then
       return b[2] < a[2]   -- END events should go before BEGIN events
     else
@@ -257,7 +303,7 @@ function equivalence_classes(int_sets)
 
   local nested_regions = Set:new()
   local last_offset = nil
-  classes = {}
+  local classes = {}
   for event in each(events) do
     local offset, event_type, int_set = unpack(event)
 

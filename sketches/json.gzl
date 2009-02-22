@@ -18,6 +18,6 @@ number   -> .sign="-"?
 
 value    -> string | number | "true" | "false" | "null" | object | array;
 
-whitespace -> .whitespace=/[\r\n\s\t]+/;
+whitespace -> .whitespace_str=/[\r\n\s\t]+/;
 
 @allow whitespace object ... number, string;

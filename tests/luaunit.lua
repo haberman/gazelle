@@ -106,11 +106,11 @@ function orderedNext(t, state)
     if state == nil then
         -- the first time, generate the index
         t.__orderedIndex = __genOrderedIndex( t )
-        key = t.__orderedIndex[1]
+        local key = t.__orderedIndex[1]
         return key, t[key]
     end
     -- fetch the next value
-    key = nil
+    local key = nil
     for i = 1,table.getn(t.__orderedIndex) do
         if t.__orderedIndex[i] == state then
             key = t.__orderedIndex[i+1]
@@ -170,7 +170,7 @@ UnitResult = { -- class
 	end
 
 	function UnitResult:displayOneFailedTest( failure )
-		testName, errorMsg = unpack( failure )
+		local testName, errorMsg = unpack( failure )
 		print(">>> "..testName.." failed")
 		print( errorMsg )
 	end
@@ -255,8 +255,8 @@ LuaUnit = {
 	end
 
 	function LuaUnit.strip_luaunit_stack(stack_trace)
-		stack_list = LuaUnit.strsplit( "\n", stack_trace )
-		strip_end = #stack_trace
+		local stack_list = LuaUnit.strsplit( "\n", stack_trace )
+		local strip_end = #stack_trace
 		for i = table.getn(stack_list),1,-1 do
 			-- a bit rude but it works !
 			if string.find(stack_list[i],"[C]: in function 'xpcall'",0,true)
@@ -350,7 +350,7 @@ LuaUnit = {
 			-- create the list before. If you do not do it now, you
 			-- get undefined result because you modify _G while iterating
 			-- over it.
-			testClassList = {}
+			local testClassList = {}
 			for key, val in pairs(_G) do
 				if string.sub(key,1,4) == 'Test' then
 					table.insert( testClassList, key )

@@ -16,11 +16,11 @@ require "grammar"
 require "ll"
 
 function assert_intfas(grammar_str, ...)
-  local grammar = parse_grammar(CharStream:new(grammar_str))
-  grammar:assign_priorities()
-  grammar:determinize_rtns()
+  local grammar = Grammar:new()
+  grammar:parse_source_string(grammar_str)
+  grammar:process()
   grammar:minimize_rtns()
-  compute_lookahead(grammar, k)
+  grammar:compute_lookahead()
   grammar:generate_intfas()
 
   local intfa_strings = {...}

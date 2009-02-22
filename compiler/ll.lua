@@ -80,7 +80,7 @@ function check_for_nonrecursive_alt(grammar)
   for name, rtn in each(grammar.rtns) do
     local all_paths_see
     local found_nonrecursive_alt = false
-    local child_states = function(state_tuple)
+    local function child_states(state_tuple)
       local state, seen_nonterms, seen_states = unpack(state_tuple)
       if state.final then
         if all_paths_see then
@@ -115,7 +115,7 @@ function check_for_nonrecursive_alt(grammar)
   -- each other.  Cycles indicate that there is a cycle of rules that
   -- can never be returned from.  This indicates a bug in the grammar.
   for name, all_paths_see in pairs(always_recurses) do
-    local child_recurses = function(rtn_name, stack)
+    local function child_recurses(rtn_name, stack)
       local children = {}
       for child_rtn_name in each(always_recurses[rtn_name]) do
         if stack:contains(child_rtn_name) then
@@ -140,7 +140,7 @@ function check_for_left_recursion(grammar)
   for name, rtn in each(grammar.rtns) do
     local states = Set:new()
 
-    local children = function(state, stack)
+    local function children(state, stack)
       local children = {}
       for edge_val, dest_state in state:transitions() do
         if fa.is_nonterm(edge_val) then
@@ -490,7 +490,7 @@ end
 function remove_excess_states(gla)
   for state in each(gla:states()) do
     local seen_alts = Set:new()
-    local child_states = function(state)
+    local function child_states(state)
       if state.final then
         seen_alts:add(state.final)
       end
@@ -915,7 +915,7 @@ end
 -- This method is a helper method for the depth-first search of
 -- get_rtn_state_closure.
 function get_rtn_state_closure_for_path(path, grammar, follow_states)
-  local child_epsilon_paths = function(path)
+  local function child_epsilon_paths(path)
     local child_paths = {}
     if path.current_state.transitions == nil then
       print(serialize(path.current_state, 4, "  "))

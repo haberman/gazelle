@@ -64,15 +64,23 @@ define_class("CharStream")
     return self.string:sub(self.offset, self.offset+amount-1)
   end
 
+  function CharStream:get_offset()
+    -- Inefficient, but this is only until we are self-hosting.
+    local lineno = 1
+    for nl in self.string:sub(0, self.offset):gmatch("[\n\r]+") do lineno = lineno + 1 end
+    local first, last = self.string:sub(0, self.offset):find(".*[\n\r]")
+    local colno = self.offset - (last or 0)
+    return TextOffset:new(lineno, colno, self.offset)
+  end
+
   function CharStream:consume(str)
     self:skip_ignored()
     local actual_str = self.string:sub(self.offset, self.offset+str:len()-1)
     if actual_str ~= str then
-      local lineno = 1
-      for nl in self.string:sub(0, self.offset):gmatch("[\n\r]") do lineno = lineno + 1 end
-      local first, last = self.string:sub(0, self.offset):find(".*[\n\r]")
-      local colno = self.offset - (last or 0)
-      error(string.format("Error parsing grammar %s:\nat line %s, column %s expected '%s', got '%s'", input_filename, lineno, colno, str, actual_str))
+      local offset = self:get_offset()
+      error(string.format("Error parsing grammar %s:\nat line %s, column %s " ..
+                          "(expected '%s', got '%s')",
+                          input_filename, offset.line, offset.column, str, actual_str))
     end
     self.offset = self.offset + str:len()
     self:skip_ignored()
@@ -109,155 +117,172 @@ define_class("CharStream")
 -- class TokenStream
 
 -- Parse the grammar file given in +chars+ and return a Grammar object.
-function parse_grammar(chars)
+define_class("RTNParser")
+function RTNParser:initialize()
+  self.grammar = nil
+  self.chars = nil
+  self.slotnum = nil
+  self.current_rule_name = nil
+end
+
+function RTNParser:parse(chars, grammar)
+  self.chars = chars
+  self.grammar = grammar
+  self:parse_grammar()
+  return grammar
+end
+
+function RTNParser:get_next_slotnum()
+  local ret = self.slotnum
+  self.slotnum = self.slotnum + 1
+  return ret
+end
+
+function RTNParser:parse_grammar()
+  local chars = self.chars
   chars:ignore("whitespace")
-  local grammar = Grammar:new()
-  local attributes = {ignore={}, slot_counts={}, regex_text={}, grammar=grammar}
   while not chars:eof() do
     if chars:match(" *@start") then
       chars:consume_pattern(" *@start")
-      grammar.start = parse_nonterm(chars).name;
+      self.grammar.start = self:parse_ident()
       chars:consume(";")
     elseif chars:match(" *@allow") then
       chars:consume_pattern(" *@allow")
-      local what_to_allow = parse_nonterm(chars);
-      local start_nonterm = parse_nonterm(chars).name;
+      local what_to_allow = self:parse_ident()
+      local start_ident = self:parse_ident()
       chars:consume_pattern("%.%.%.")
-      local end_nonterms = Set:new()
-      end_nonterms:add(parse_nonterm(chars).name)
+      local end_idents = Set:new()
+      end_idents:add(self:parse_ident())
       while chars:match(" *,") do
         chars:consume(",")
-        end_nonterms:add(parse_nonterm(chars).name)
+        end_idents:add(self:parse_ident())
       end
       chars:consume(";")
-      grammar:add_allow(what_to_allow, start_nonterm, end_nonterms)
+      self.grammar:add_allow(what_to_allow, start_ident, end_idents)
     else
       local before_offset = chars.offset
-      local stmt = parse_statement(chars, attributes)
+      local offset = chars:get_offset()
+      local stmt = self:parse_statement()
       if not stmt then
         break
       elseif stmt.nonterm then
         stmt.derivations.final.final = "Final"
         local rule_text = chars.string:sub(before_offset, chars.offset-1)
-        grammar:add_nonterm(stmt.nonterm.name, stmt.derivations, stmt.slot_count, rule_text)
+        self.grammar:add_nonterm(stmt.nonterm, stmt.derivations, stmt.slot_count, rule_text, offset)
       elseif stmt.term then
-        grammar:add_terminal(stmt.term, stmt.regex)
+        self.grammar:add_terminal(stmt.term, stmt.regex, offset)
       end
     end
   end
-
-  grammar.attributes = attributes
-
-  -- start symbol defaults to the first symbol
-  if not grammar.start then
-    grammar.start = grammar.rtns:get_key_at_offset(1)
-  end
-
-  return grammar
 end
 
-function parse_statement(chars, attributes)
-  local old_ignore = chars:ignore("whitespace")
+function RTNParser:parse_statement()
+  local old_ignore = self.chars:ignore("whitespace")
   local ret = {}
 
-  local ident = parse_nonterm(chars)
+  local ident = self:parse_ident()
 
-  if chars:match("->") then
-    attributes.nonterm = ident
+  if self.chars:match("->") then
+    self.current_rule_name = ident
+    -- Need to register the rule here, so that we catch conflicting references
+    -- *within* the rule, and so that ordering of symbols is right.
+    self.grammar:get_object(ident, {GrammarObj.RULE})
     ret.nonterm = ident
-    chars:consume("->")
-    attributes.slotnum = 1
-    ret.derivations = parse_derivations(chars, attributes)
-    ret.slot_count = attributes.slotnum - 1
+    self.chars:consume("->")
+    self.slotnum = 1
+    ret.derivations = self:parse_derivations()
+    ret.slot_count = self.slotnum - 1
   else
-    ret.term = ident.name
-    chars:consume(":")
-    ret.regex = parse_regex(chars)
+    ret.term = ident
+    self.chars:consume(":")
+    ret.regex = self:parse_regex()
   end
 
-  chars:consume(";")
-  chars:ignore(old_ignore)
+  self.chars:consume(";")
+  self.chars:ignore(old_ignore)
   return ret
 end
 
-function parse_derivations(chars, attributes)
-  local old_ignore = chars:ignore("whitespace")
+function RTNParser:parse_derivations()
+  local old_ignore = self.chars:ignore("whitespace")
   local derivations = {}
 
   repeat
-    local derivation = parse_derivation(chars, attributes)
+    local derivation = self:parse_derivation()
 
     -- Any prioritized derivations we parse together as a group, then build
     -- an NFA of *prioritized* alternation.
-    if chars:lookahead(1) == "/" then
-      chars:consume("/")
+    if self.chars:lookahead(1) == "/" then
+      self.chars:consume("/")
       local prioritized_derivations = {derivation}
       repeat
-        local prioritized_derivation = parse_derivation(chars, attributes)
+        local prioritized_derivation = self:parse_derivation()
         table.insert(prioritized_derivations, prioritized_derivation)
-      until chars:lookahead(1) ~= "/" or not chars:consume("/")
+      until self.chars:lookahead(1) ~= "/" or not self.chars:consume("/")
       derivation = nfa_construct.alt(prioritized_derivations, true)
     end
 
     table.insert(derivations, derivation)
-  until chars:lookahead(1) ~= "|" or not chars:consume("|")
+  until self.chars:lookahead(1) ~= "|" or not self.chars:consume("|")
 
-  chars:ignore(old_ignore)
+  self.chars:ignore(old_ignore)
   return nfa_construct.alt(derivations)
 end
 
-function parse_derivation(chars, attributes)
-  local old_ignore = chars:ignore("whitespace")
-  local ret = parse_term(chars, attributes)
-  while chars:lookahead(1) ~= "|" and chars:lookahead(1) ~= "/" and
-        chars:lookahead(1) ~= ";" and chars:lookahead(1) ~= ")" do
-    ret = nfa_construct.concat(ret, parse_term(chars, attributes))
+function RTNParser:parse_derivation()
+  local old_ignore = self.chars:ignore("whitespace")
+  local ret = self:parse_term()
+  while self.chars:lookahead(1) ~= "|" and self.chars:lookahead(1) ~= "/" and
+        self.chars:lookahead(1) ~= ";" and self.chars:lookahead(1) ~= ")" do
+    ret = nfa_construct.concat(ret, self:parse_term())
   end
-  chars:ignore(old_ignore)
+  self.chars:ignore(old_ignore)
   return ret
 end
 
-function parse_term(chars, attributes)
-  local old_ignore = chars:ignore("whitespace")
+function RTNParser:parse_term()
+  local old_ignore = self.chars:ignore("whitespace")
   local name
   local ret
-  if chars:match(" *%.[%w_]+ *=") then
-    name = parse_name(chars)
-    chars:consume("=")
+  local offset = self.chars:get_offset()
+  if self.chars:match(" *%.[%w_]+ *=") then
+    name = self:parse_name()
+    self.chars:consume("=")
   end
 
   local symbol
-  if chars:lookahead(1) == "/" and name then
-    name = name or attributes.nonterm.name
-    intfa, text = parse_regex(chars)
-    attributes.grammar:add_terminal(name, intfa, text)
-    ret = fa.RTN:new{symbol=name, properties={name=name, slotnum=attributes.slotnum}}
-    attributes.slotnum = attributes.slotnum + 1
-  elseif chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-    local string = parse_string(chars)
-    attributes.grammar:add_terminal(string, string)
+  if self.chars:lookahead(1) == "/" and name then
+    local intfa, text = self:parse_regex()
+    local obj = self.grammar:add_terminal(name, intfa, text, offset)
+    ret = fa.RTN:new{
+      symbol=obj,
+      properties={name=name, slotnum=self:get_next_slotnum()}
+    }
+  elseif self.chars:lookahead(1) == "'" or self.chars:lookahead(1) == '"' then
+    local string = self:parse_string()
     name = name or string
-    ret = fa.RTN:new{symbol=string, properties={name=name, slotnum=attributes.slotnum}}
-    attributes.slotnum = attributes.slotnum + 1
-  elseif chars:lookahead(1) == "(" then
+    local obj = self.grammar:add_implicit_terminal(name, string, offset)
+    ret = fa.RTN:new{
+      symbol=obj,
+      properties={name=name, slotnum=self:get_next_slotnum()}
+    }
+  elseif self.chars:lookahead(1) == "(" then
     if name then error("You cannot name a group") end
-    chars:consume("(")
-    ret = parse_derivations(chars, attributes)
-    chars:consume(")")
+    self.chars:consume("(")
+    ret = self:parse_derivations()
+    self.chars:consume(")")
   else
-    local nonterm = parse_nonterm(chars)
-    name = name or nonterm.name
-    if attributes.grammar.terminals[nonterm.name] then
-      ret = fa.RTN:new{symbol=nonterm.name, properties={name=nonterm.name, slotnum=attributes.slotnum}}
-    else
-      ret = fa.RTN:new{symbol=nonterm, properties={name=name, slotnum=attributes.slotnum}}
-    end
-    attributes.slotnum = attributes.slotnum + 1
+    local ident = self:parse_ident()
+    name = name or ident
+    ret = fa.RTN:new{
+        symbol=self.grammar:get_object(ident, {GrammarObj.RULE, GrammarObj.TERMINAL}),
+        properties={name=ident, slotnum=self:get_next_slotnum()}
+    }
   end
 
-  local one_ahead = chars:lookahead(1)
+  local one_ahead = self.chars:lookahead(1)
   if one_ahead == "?" or one_ahead == "*" or one_ahead == "+" then
-    local modifier, sep, favor_repeat = parse_modifier(chars, attributes)
+    local modifier, sep, favor_repeat = self:parse_modifier()
     -- foo +(bar) == foo (bar foo)*
     -- foo *(bar) == (foo (bar foo)*)?
     if sep then
@@ -292,98 +317,99 @@ function parse_term(chars, attributes)
     end
   end
 
-  chars:ignore(old_ignore)
+  self.chars:ignore(old_ignore)
   return ret
 end
 
-function parse_name(chars)
-  local old_ignore = chars:ignore()
-  chars:consume(".")
-  local ret = chars:consume_pattern("[%w_]+")
-  chars:ignore(old_ignore)
+function RTNParser:parse_name()
+  local old_ignore = self.chars:ignore()
+  self.chars:consume(".")
+  local ret = self.chars:consume_pattern("[%w_]+")
+  self.chars:ignore(old_ignore)
   return ret
 end
 
-function parse_modifier(chars, attributes)
-  local old_ignore = chars:ignore()
+function RTNParser:parse_modifier()
+  local old_ignore = self.chars:ignore()
   local modifier, str, prefer_repeat
-  modifier = chars:consume_pattern("[?*+]")
-  if chars:lookahead(1) == "(" then
-    chars:consume("(")
+  modifier = self.chars:consume_pattern("[?*+]")
+  if self.chars:lookahead(1) == "(" then
+    self.chars:consume("(")
+    local offset = self.chars:get_offset()
     local sep_string
-    if chars:lookahead(1) == "'" or chars:lookahead(1) == '"' then
-      sep_string = parse_string(chars)
+    if self.chars:lookahead(1) == "'" or self.chars:lookahead(1) == '"' then
+      sep_string = self:parse_string()
     else
-      sep_string = chars:consume_pattern("[^)]*")
+      sep_string = self.chars:consume_pattern("[^)]*")
     end
-    str = fa.RTN:new{symbol=sep_string, properties={slotnum=attributes.slotnum, name=sep_string}}
-    attributes.grammar:add_terminal(sep_string, sep_string)
-    attributes.slotnum = attributes.slotnum + 1
-    chars:consume(")")
+    local obj = self.grammar:add_implicit_terminal(sep_string, sep_string, offset)
+    str = fa.RTN:new{symbol=obj, properties={slotnum=self:get_next_slotnum(), name=sep_string}}
+    self.chars:consume(")")
   end
-  if chars:lookahead(1) == "+" or chars:lookahead(1) == "-" then
-    local prefer_repeat_ch = chars:consume_pattern("[+-]")
+  if self.chars:lookahead(1) == "+" or self.chars:lookahead(1) == "-" then
+    local prefer_repeat_ch = self.chars:consume_pattern("[+-]")
     if prefer_repeat_ch == "+" then
       prefer_repeat = true
     else
       prefer_repeat = false
     end
   end
-  chars:ignore(old_ignore)
+  self.chars:ignore(old_ignore)
   return modifier, str, prefer_repeat
 end
 
-function parse_nonterm(chars)
-  local old_ignore = chars:ignore()
-  local ret = fa.nonterms:get(chars:consume_pattern("[%w_]+"))
-  chars:ignore(old_ignore)
+function RTNParser:parse_ident()
+  local old_ignore = self.chars:ignore()
+  local ret = self.chars:consume_pattern("[%w_]+")
+  self.chars:ignore(old_ignore)
   return ret
 end
 
-function parse_string(chars)
-  local old_ignore = chars:ignore()
+function RTNParser:parse_string()
+  local old_ignore = self.chars:ignore()
   local str = ""
-  if chars:lookahead(1) == "'" then
-    chars:consume("'")
-    while chars:lookahead(1) ~= "'" do
-      if chars:lookahead(1) == "\\" then
-        chars:consume("\\")
-        str = str .. chars:consume_pattern(".") -- TODO: other backslash sequences
+  if self.chars:lookahead(1) == "'" then
+    self.chars:consume("'")
+    while self.chars:lookahead(1) ~= "'" do
+      if self.chars:lookahead(1) == "\\" then
+        self.chars:consume("\\")
+        str = str .. self.chars:consume_pattern(".") -- TODO: other backslash sequences
       else
-        str = str .. chars:consume_pattern(".")
+        str = str .. self.chars:consume_pattern(".")
       end
     end
-    chars:consume("'")
+    self.chars:consume("'")
   else
-    chars:consume('"')
-    while chars:lookahead(1) ~= '"' do
-      if chars:lookahead(1) == "\\" then
-        chars:consume("\\")
-        str = str .. chars:consume_pattern(".") -- TODO: other backslash sequences
+    self.chars:consume('"')
+    while self.chars:lookahead(1) ~= '"' do
+      if self.chars:lookahead(1) == "\\" then
+        self.chars:consume("\\")
+        str = str .. self.chars:consume_pattern(".") -- TODO: other backslash sequences
       else
-        str = str .. chars:consume_pattern(".")
+        str = str .. self.chars:consume_pattern(".")
       end
     end
-    chars:consume('"')
+    self.chars:consume('"')
   end
-  chars:ignore(old_ignore)
+  self.chars:ignore(old_ignore)
   return str
 end
 
-function parse_regex(chars)
-  local old_ignore = chars:ignore()
-  chars:consume("/")
+function RTNParser:parse_regex()
+  local old_ignore = self.chars:ignore()
+  self.chars:consume("/")
   local regex_text = ""
-  while chars:lookahead(1) ~= "/" do
-    if chars:lookahead(1) == "\\" then
-      regex_text = regex_text .. chars:consume_pattern("..")
+  while self.chars:lookahead(1) ~= "/" do
+    if self.chars:lookahead(1) == "\\" then
+      regex_text = regex_text .. self.chars:consume_pattern("..")
     else
-      regex_text = regex_text .. chars:consume_pattern(".")
+      regex_text = regex_text .. self.chars:consume_pattern(".")
     end
   end
   local regex = regex_parser.parse_regex(regex_parser.TokenStream:new(regex_text))
-  chars:consume("/")
-  chars:ignore(old_ignore)
+  regex.regex_text = regex_text
+  self.chars:consume("/")
+  self.chars:ignore(old_ignore)
   return regex, regex_text
 end
 

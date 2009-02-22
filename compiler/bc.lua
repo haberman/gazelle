@@ -34,24 +34,20 @@ end
 define_class("VBROp")
 function VBROp:initialize(bits)
   self.bits = bits
-  self.name = name
 end
 
 define_class("FixedOp")
 function FixedOp:initialize(bits)
   self.bits = bits
-  self.name = name
 end
 
 define_class("ArrayOp")
 function ArrayOp:initialize(elem_type)
   self.elem_type = elem_type
-  self.name = name
 end
 
 define_class("File")
 function File:initialize(filename, app_magic_number)
-  self.name = name
   self.file = io.open(filename, "w")
   self.current_byte = 0
   self.current_bits = 0

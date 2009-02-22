@@ -120,7 +120,7 @@ end
 
 function rep(nfa, favor_repeat)
   local new_nfa = nfa:new_graph()
-  local repeat_properties, finish_properties = get_repeating_properties(favor_repeating)
+  local repeat_properties, finish_properties = get_repeating_properties(favor_repeat)
   new_nfa.start:add_transition(fa.e, nfa.start)
   nfa.final:add_transition(fa.e, nfa.start, repeat_properties)
   nfa.final:add_transition(fa.e, new_nfa.final, finish_properties)

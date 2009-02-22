@@ -87,16 +87,15 @@ function parse_gla(str, rtn_state)
 end
 
 function assert_lookahead(grammar_str, rule_str, slotnum, expected_gla_str, k)
-  local grammar = parse_grammar(CharStream:new(grammar_str))
-  grammar:assign_priorities()
-  grammar:determinize_rtns()
-  grammar:minimize_rtns()
+  local grammar = Grammar:new()
+  grammar:parse_source_string(grammar_str)
+  grammar:process()
 
   local rule = grammar.rtns:get(rule_str)
   local state = find_state(rule, slotnum)
   local expected_gla = parse_gla(expected_gla_str, state)
 
-  compute_lookahead(grammar, k)
+  grammar:compute_lookahead(k)
 
   if not fa_isequal(expected_gla, state.gla) then
     local bad = io.open("bad.dot", "w")
@@ -578,12 +577,11 @@ function TestFollow:test2()
 end
 
 function assert_fails_with_error(grammar_str, error_string)
-  local grammar = parse_grammar(CharStream:new(grammar_str))
-  grammar:assign_priorities()
-  grammar:determinize_rtns()
-  grammar:minimize_rtns()
+  local grammar = Grammar:new()
+  grammar:parse_source_string(grammar_str)
+  grammar:process()
 
-  local success, message = pcall(compute_lookahead, grammar)
+  local success, message = pcall(grammar.compute_lookahead, grammar)
   if success then
     error("Failed to fail!")
   elseif not message:find(error_string) then

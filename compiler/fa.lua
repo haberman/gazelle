@@ -67,7 +67,7 @@ define_class("FAState")
   function FAState:tostring()
     local str = string.format("{%s, %d transitions", self.class.name, self:num_transitions())
     -- TODO: rename .rtn to .fa, to be more generic
-    if self.rtn then
+    if self.class == RTN then
       str = str .. string.format(", from rule named %s", self.rtn.name)
       if self.rtn.start == self then
         str = str .. ", start"
@@ -239,6 +239,7 @@ define_class("IntFA", FA)
 function IntFA:initialize(init)
   FA.initialize(self, init)
   self.termset = nil
+  self.regex_text = nil
 end
 
 function IntFA:new_graph(init)
@@ -277,6 +278,10 @@ function IntFA:get_outgoing_edge_values(states)
   end
 
   return values
+end
+
+function IntFA:to_dot_edge_str()
+  return self.regex_text
 end
 
 function IntFA:to_dot()
@@ -496,6 +501,10 @@ function RTN:get_outgoing_edge_values(states)
   return values
 end
 
+function RTN:to_dot_edge_str()
+  return string.format("<%s>", self.name)
+end
+
 function escape(str)
   if not isobject(str) and str.gsub then
     return str:gsub("[\"\\]", "\\%1")
@@ -540,21 +549,12 @@ function RTN:to_dot(indent, suffix, intfas, glas)
                                 indent, tostring(state) .. suffix, extra_label,
                                 peripheries, color)
     for edge_val, target_state in state:transitions() do
-      if fa.is_nonterm(edge_val) then
-        str = str .. string.format('%s"%s" -> "%s" [label="<%s>"]\n',
-                      indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
-                      escape(edge_val.name))
-      else
-        --if attributes.regex_text[edge_val] then
-        --  edge_val = "/" .. attributes.regex_text[edge_val] .. "/"
-        --end
-        if edge_val == fa.eof then
-          edge_val = "EOF"
-        end
-        str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
-                      indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
-                      escape(edge_val))
+      if type(edge_val) == "table" then
+        edge_val = edge_val:to_dot_edge_str()
       end
+      str = str .. string.format('%s"%s" -> "%s" [label="%s"]\n',
+                    indent, tostring(state) .. suffix, tostring(target_state) .. suffix,
+                    escape(edge_val))
     end
   end
   return str
@@ -626,15 +626,8 @@ function RTNState:needs_intfa()
 end
 
 
-define_class("NonTerm")
-function NonTerm:initialize(name)
-  self.name = name
-end
-
-nonterms = MemoizedObject:new(NonTerm)
-
 function is_nonterm(thing)
-  return isobject(thing) and thing.class == NonTerm
+  return isobject(thing) and thing.class == RTN
 end
 
 -- vim:et:sts=2:sw=2

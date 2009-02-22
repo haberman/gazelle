@@ -26,36 +26,261 @@
 --------------------------------------------------------------------]]--
 
 require "data_structures"
+require "misc"
 require "fa_algorithms"
 require "intfa_combine"
 
+define_class("TextOffset")
+  function TextOffset:initialize(line, column, offset)
+    self.line = line
+    self.column = column
+    self.offset = offset
+  end
+
+  function TextOffset:tostring()
+    return string.format("line %d, column %d", self.line, self.column)
+  end
+-- class TextOffset
+
+--[[--------------------------------------------------------------------
+
+  GrammarObj: a class for representing grammar objects (rules,
+  terminals, etc) that are seen or even just referenced in a Gazelle
+  grammar file.  The symbol table maps key (names) to objects of this
+  type.
+
+--------------------------------------------------------------------]]--
+
+define_class("GrammarObj")
+
+-- What types of grammar objects can exist in a grammar?
+GrammarObj.RULE = "rule"
+GrammarObj.TERMINAL = "terminal"
+-- (more to come...)
+
+  function GrammarObj:initialize(name)
+    self.name = name
+    self.definition = nil  -- starts out undefined
+    self.explicit = false
+    self.type = nil
+    self.expected_types = nil
+    self.explicit_offset = nil
+    self.implicit_offsets = {}
+  end
+
+  function GrammarObj:set_expected(types)
+    types = Set:new(types)
+    if not self.expected_types then
+      self.expected_types = types
+    else
+      local intersection = self.expected_types:intersection(types)
+      if intersection:isempty() then
+        if self.definition then
+          error(string.format("Symbol '%s' was previously defined as %s, but its " ..
+                              "use here expects it to be %s.",
+                              self.name, self:type_str(), self:expected_types_str()))
+        else
+          error(string.format("Symbol '%s' was previously referenced as a(n) %s, but " ..
+                              "its use here expects it to be %s.",
+                              self.name, self:expected_types_str(),
+                              self:expected_types_str(types)))
+        end
+      end
+    end
+  end
+
+  function GrammarObj:define(definition, _type, offset, implicit)
+    local explicit = not implicit
+    if self.definition then
+      if self.explicit == false and self.definition == definition and self.type == _type then
+        -- redefinition is ok here.
+      else
+        error(string.format("Redefinition of symbol '%s' at %s (previous definition was at %s).",
+                            self.name, offset:tostring(),
+                            (self.explicit_offset or self.implicit_offsets[1]):tostring()))
+      end
+    elseif self.expected_types and not self.expected_types:contains(_type) then
+      error(string.format("Symbol '%s' defined as %s, but previously used as if it were %s.",
+            self.name, self:type_str(_type), self:expected_types_str()))
+    else
+      self.definition = definition
+      self.type = _type
+      self.expected_types = Set:new({_type})
+    end
+    self.explicit = self.explicit or explicit
+    if explicit then
+      self.explicit_offset = offset
+    else
+      table.insert(self.implicit_offsets, offset)
+    end
+  end
+
+  function GrammarObj:type_str(_type)
+    _type = _type or self.type
+    return "a " .. _type
+  end
+
+  function GrammarObj:expected_types_str(types)
+    types = types or self.expected_types
+    types = types:to_array()
+    local str = "a " .. types[1]
+    if #types > 1 then
+      str = str .. " or " .. types[2]
+    end
+    return str
+  end
+-- class GrammarObj
+
+--[[--------------------------------------------------------------------
+
+  Grammar: the Grammar class itself, which represents a single Gazelle
+  grammar that is parsed from one or more input files, analzed and
+  translated, and finally emitted to output.
+
+--------------------------------------------------------------------]]--
+
 define_class("Grammar")
 function Grammar:initialize()
-  self.rtns = OrderedMap:new()
-  self.terminals = {}
+  -- The symbol table of objects that have been defined or referenced.
+  self.objects = MemoizedObject:new(GrammarObj)
+
+  -- The master IntFAs we build once all IntFAs are combined.
   self.master_intfas = OrderedSet:new()
-  self.start = nil  -- what rule the entire grammar starts on
+
+  -- What rule the entire grammar starts on.
+  self.start = nil
+
+  -- @allow definitions.
   self.allow = {}
-  self.attributes = nil
+
+  -- Once we start processing, we assign all the rtns and terminals
+  -- to separate lists for processing.
+  self.rtns = nil
+  self.terminals = nil
 end
 
--- Add a nonterminal and its associated RTN to the grammar.
--- TODO: how should redefinition be caught and warned/errored?
-function Grammar:add_nonterm(name, rtn, slot_count, text)
+function Grammar:parse_source_string(string)
+  local parser = RTNParser:new()
+  parser:parse(CharStream:new(string), self)
+end
+
+--[[--------------------------------------------------------------------
+
+ The next block of functions are intended for the Gazelle grammar
+ parser to call as they are parsing a Gazelle grammar file.
+
+--------------------------------------------------------------------]]--
+
+function Grammar:get_object(name, expected)
+  local obj = self.objects:get(name)
+  obj:set_expected(expected)
+  return obj
+end
+
+function Grammar:add_nonterm(name, rtn, slot_count, text, offset)
   rtn.name = name
   rtn.slot_count = slot_count
   rtn.text = text
   for state in each(rtn:states()) do
     state.rtn = rtn
   end
-  self.rtns:add(name, rtn)
+  self.objects:get(name):define(rtn, GrammarObj.RULE, offset)
 end
 
--- Add a terminal and its associated IntFA to the grammar.
--- TODO: how should redefinition be caught and warned/errored?
-function Grammar:add_terminal(name, intfa)
-  self.terminals[name] = intfa
+function Grammar:add_terminal(name, string_or_intfa, text, offset)
+  assert(type(name) == "string")
+  assert(string_or_intfa)
+  local obj = self.objects:get(name)
+  obj:define(string_or_intfa, GrammarObj.TERMINAL, offset)
+  return obj
 end
+
+function Grammar:add_implicit_terminal(name, string, offset)
+  assert(type(name) == "string")
+  local obj = self.objects:get(name)
+  obj:define(string, GrammarObj.TERMINAL, offset, true)
+  return obj
+end
+
+--[[--------------------------------------------------------------------
+
+  Methods for analyzing/translating the grammar once it has been
+  fully read from source files.
+
+--------------------------------------------------------------------]]--
+
+function Grammar:process()
+  self:bind_symbols()
+  -- start symbol defaults to the first rule.
+  self.start = self.start or self.rtns:get_key_at_offset(1)
+
+  -- assign priorities to RTN transitions
+  --print_verbose("Assigning RTN transition priorities...")
+  self:assign_priorities()
+
+  -- make the RTNs in the grammar determistic and minimal
+  --print_verbose("Convering RTN NFAs to DFAs...")
+  self:determinize_rtns()
+  self:process_allow()
+  self:canonicalize_properties()
+end
+
+function Grammar:compute_lookahead(max_k)
+  -- Generate GLAs by doing lookahead calculations.
+  -- This annotates every nontrivial state in the grammar with a GLA.
+  --print_verbose("Doing LL(*) lookahead calculations...")
+  compute_lookahead(self, max_k)
+end
+
+-- we now have everything figured out at the RTN and GLA levels.  Now we just
+-- need to figure out how many IntFAs to generate, which terminals each one
+-- should handle, and generate/determinize/minimize those IntFAs.
+
+function Grammar:bind_symbols()
+  -- Ensure that all referenced symbols were defined, and replace the GrammarObj
+  -- objects with the raw values.
+  local objects = {}
+  self.rtns = OrderedMap:new()
+  self.terminals = {}
+  for name, obj in self.objects:get_objects():each() do
+    local definition = obj.definition
+    if not definition then
+      error(string.format("Symbol '%s' was referenced but never defined.", name))
+    end
+    assert(name == obj.name)
+    objects[name] = definition
+    if obj.type == GrammarObj.RULE then
+      self.rtns:add(name, definition)
+    else
+      self.terminals[name] = definition
+    end
+  end
+
+  -- Replace all references to GrammarObj objects with the actual value.
+  for name, rtn in each(self.rtns) do
+    for rtn_state in each(rtn:states()) do
+      local new_transitions = {}
+      for edge_val, dest_state, properties in rtn_state:transitions() do
+        -- This is embarrassingly hacky.  Need to have a more polymorphic way
+        -- of dealing with multiple kinds of edge values.
+        if edge_val == fa.eof or edge_val == fa.e then
+          -- do nothing
+        elseif edge_val.type == GrammarObj.TERMINAL then
+          edge_val = edge_val.name
+        else
+          edge_val = objects[edge_val.name]
+        end
+        table.insert(new_transitions, {edge_val, dest_state, properties})
+      end
+      rtn_state:clear_transitions()
+      for tuple in each(new_transitions) do
+        local edge_val, dest_state, properties = unpack(tuple)
+        rtn_state:add_transition(edge_val, dest_state, properties)
+      end
+    end
+  end
+end
+
 
 function Grammar:add_allow(what_to_allow, start_nonterm, end_nonterms)
   table.insert(self.allow, {what_to_allow, start_nonterm, end_nonterms})
@@ -64,7 +289,7 @@ end
 function Grammar:process_allow()
   for allow in each(self.allow) do
     local what_to_allow, start_nonterm, end_nonterms = unpack(allow)
-    local children_func = function(rule_name)
+    local function children_func(rule_name)
       if not end_nonterms:contains(rule_name) then
         local rtn = self.rtns:get(rule_name)
         if not rtn then
@@ -83,7 +308,8 @@ function Grammar:process_allow()
 
         -- add self-transitions for every state
         for state in each(rtn:states()) do
-          state:add_transition(what_to_allow, state, {name=what_to_allow.name, slotnum=-1})
+          local allow_rtn = self.rtns:get(what_to_allow)
+          state:add_transition(allow_rtn, state, {name=allow_rtn.name, slotnum=-1})
         end
 
         return subrules
@@ -98,18 +324,6 @@ function Grammar:canonicalize_properties()
   for name, rtn in each(self.rtns) do
     for state in each(rtn:states()) do
       state:canonicalize_properties()
-    end
-  end
-end
-
-function Grammar:check_defined()
-  for name, rtn in each(self.rtns) do
-    for rtn_state in each(rtn:states()) do
-      for edge_val in rtn_state:transitions() do
-        if fa.is_nonterm(edge_val) and not self.rtns:contains(edge_val.name) then
-          error(string.format("Rule '%s' was referred to but never defined.", edge_val.name))
-        end
-      end
     end
   end
 end
@@ -136,15 +350,6 @@ function Grammar:get_rtn_states_needing_gla()
     end
   end
   return states
-end
-
-function copy_attributes(rtn, new_rtn)
-  new_rtn.name = rtn.name
-  new_rtn.slot_count = rtn.slot_count
-  new_rtn.text = rtn.text
-  for state in each(new_rtn:states()) do
-    state.rtn = new_rtn
-  end
 end
 
 function Grammar:assign_priorities()
@@ -175,7 +380,7 @@ function Grammar:assign_priorities()
     end
 
     local priorities = {}
-    local children = function(state, stack)
+    local function children(state, stack)
       local reverse_transitions = reverse_epsilon_transitions[state]
       if reverse_transitions then
         local child_states, priority_classes = unpack(reverse_transitions)
@@ -227,6 +432,7 @@ function Grammar:minimize_rtns()
 end
 
 function Grammar:generate_intfas()
+  --print_verbose("Generating lexer DFAs...")
   -- first generate the set of states that need an IntFA: some RTN
   -- states and all nonfinal GLA states.
   local states = self:get_rtn_states_needing_intfa()
@@ -253,6 +459,7 @@ function Grammar:generate_intfas()
         terms:add(edge_val)
       end
     end
+    assert(terms:count() > 0)
     table.insert(state_term_pairs, {state, terms})
   end
 
@@ -299,7 +506,7 @@ function Grammar:get_strings()
   -- sort the strings for deterministic output
   strings = strings:to_array()
   table.sort(strings)
-  strings_ordered_set = OrderedSet:new()
+  local strings_ordered_set = OrderedSet:new()
   for string in each(strings) do
     strings_ordered_set:add(string)
   end
@@ -350,7 +557,7 @@ function Grammar:get_flattened_rtn_list()
   -- create a list of transitions for every state
   for name, rtn in each(rtns) do
     for state in each(rtn.states) do
-      transitions = {}
+      local transitions = {}
       for edge_val, target_state, properties in state:transitions() do
         table.insert(transitions, {edge_val, target_state, properties})
       end
@@ -361,7 +568,7 @@ function Grammar:get_flattened_rtn_list()
       -- 3. nonterminal transitions are sorted by the name of the nonterminal
       -- 4. transitions with the same edge value are sorted by their order
       --    in the list of states (which is stable) (TODO: no it's not, yet)
-      sort_func = function (a, b)
+      local function sort_func(a, b)
         if not fa.is_nonterm(a[1]) and fa.is_nonterm(b[1]) then
           return true
         elseif fa.is_nonterm(a[1]) and not fa.is_nonterm(b[1]) then
@@ -401,6 +608,15 @@ function Grammar:get_flattened_gla_list()
   end
 
   return glas
+end
+
+function copy_attributes(rtn, new_rtn)
+  new_rtn.name = rtn.name
+  new_rtn.slot_count = rtn.slot_count
+  new_rtn.text = rtn.text
+  for state in each(new_rtn:states()) do
+    state.rtn = new_rtn
+  end
 end
 
 -- vim:et:sts=2:sw=2

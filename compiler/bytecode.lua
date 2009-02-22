@@ -40,7 +40,7 @@ BC_GLA_STATE = 0
 BC_GLA_FINAL_STATE = 1
 BC_GLA_TRANSITION = 2
 
-if not print_verbose then
+if not rawget(_G, "print_verbose") then
   function print_verbose(str)
     print(str)
   end
@@ -48,8 +48,8 @@ end
 
 function write_bytecode(grammar, outfilename)
   -- write Bitcode header
-  bc_file = bc.File:new(outfilename, "GH")
-  abbrevs = define_abbrevs(bc_file)
+  local bc_file = bc.File:new(outfilename, "GH")
+  local abbrevs = define_abbrevs(bc_file)
 
   -- Obtain linearized representations of all the DFAs from the Grammar object.
   local strings = grammar:get_strings()
@@ -143,7 +143,7 @@ function emit_intfa(intfa, strings, bc_file, abbrevs)
   -- emit the transitions
   for transition in each(intfa_transitions) do
     local range, target_state = unpack(transition)
-    target_state_offset = intfa_state_offsets[target_state]
+    local target_state_offset = intfa_state_offsets[target_state]
     if range.low == range.high then
       bc_file:write_abbreviated_record(abbrevs.bc_intfa_transition, range.low, target_state_offset)
     else
@@ -275,7 +275,7 @@ end
 
 
 function define_abbrevs(bc_file)
-  abbrevs = {}
+  local abbrevs = {}
 
   -- Enter a BLOCKINFO record to define abbreviations for all our records.
   -- See FILEFORMAT for a description of what all the record types mean.

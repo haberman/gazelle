@@ -341,7 +341,7 @@ function fa_longest_path(fa)
   local longest = 0
   local current_depth = 0
   local seen = Set:new()
-  function dfs_helper(state)
+  local function dfs_helper(state)
     seen:add(state)
     if state.final and current_depth > longest then
       longest = current_depth
