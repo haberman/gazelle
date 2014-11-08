@@ -10,7 +10,7 @@ CFLAGS += -std=c99
 CPPFLAGS := -Iruntime/include
 ifeq ($(shell uname), Darwin)
   CPPFLAGS += -I/usr/include/lua5.1
-  LDFLAGS := -L/usr/local/lib -llua
+  LDFLAGS := -L/usr/local/lib -llua -undefined dynamic_lookup
 else
   CFLAGS += $(strip $(shell pkg-config --silence-errors --cflags lua || pkg-config --cflags lua5.1))
   LDFLAGS := $(strip $(shell pkg-config --silence-errors --libs lua || pkg-config --libs lua5.1))
@@ -53,6 +53,10 @@ $(RTOBJ) $(EXTOBJ): CFLAGS += -fPIC
 
 lang_ext/lua/bc_read_stream.so: lang_ext/lua/bc_read_stream.o \
                                 runtime/bc_read_stream.o
+
+lang_ext/lua/gazelle.so: lang_ext/lua/gazelle.o \
+                         runtime/load_grammar.o \
+                         runtime/parse.o
 
 runtime/libgazelle.a(%.o): %.o
 	$(AR) cr $@ $^

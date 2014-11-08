@@ -40,6 +40,11 @@ struct gazelle_rtn_transition_lua
   struct gzl_rtn_transition *rtn_transition;
 };
 
+static void pushcachekey(lua_State *L) {
+  static char ch;
+  lua_pushlightuserdata(L, &ch);
+}
+
 static void *newobj(lua_State *L, char *type, int size)
 {
   void *ptr = lua_newuserdata(L, size);
@@ -50,9 +55,9 @@ static void *newobj(lua_State *L, char *type, int size)
 
 static bool get_from_cache(lua_State *L, void *ptr)
 {
-  static const luaL_reg no_methods[] = {{NULL, NULL}};
-  luaL_register(L, "gazelle", no_methods);  /* push the table for this module */
-  lua_getfield(L, -1, "ObjectCache"); /* push our object cache */
+  static const luaL_Reg no_methods[] = {{NULL, NULL}};
+  pushcachekey(L);
+  lua_gettable(L, LUA_REGISTRYINDEX); /* push our object cache */
 
   /* attempt to get our stored value */
   lua_pushlightuserdata(L, ptr);
@@ -129,7 +134,7 @@ static int gazelle_load_grammar(lua_State *L)
     return 1;
 }
 
-static const luaL_reg global_functions[] =
+static const luaL_Reg global_functions[] =
 {
   {"load_grammar", gazelle_load_grammar},
   {NULL, NULL}
@@ -178,7 +183,7 @@ static int gazelle_grammar_rtn(lua_State *L)
   return 0;
 }
 
-static const luaL_reg grammar_methods[] =
+static const luaL_Reg grammar_methods[] =
 {
   {"rtns", gazelle_grammar_rtns},
   {"rtn", gazelle_grammar_rtn},
@@ -216,7 +221,7 @@ static int gazelle_rtn_states(lua_State *L)
   return 1;
 }
 
-static const luaL_reg rtn_methods[] =
+static const luaL_Reg rtn_methods[] =
 {
   {"name", gazelle_rtn_name},
   {"num_slots", gazelle_rtn_num_slots},
@@ -278,7 +283,7 @@ static int gazelle_rtn_state_transitions(lua_State *L)
   return 1;
 }
 
-static const luaL_reg rtn_state_methods[] =
+static const luaL_Reg rtn_state_methods[] =
 {
   {"is_final", gazelle_rtn_state_is_final},
   {"transitions", gazelle_rtn_state_transitions},
@@ -289,14 +294,14 @@ static const luaL_reg rtn_state_methods[] =
  * methods for "rtn_transition" objects
  */
 
-static const luaL_reg rtn_transition_methods[] =
+static const luaL_Reg rtn_transition_methods[] =
 {
   {"is_final", gazelle_rtn_state_is_final},
   {"transitions", gazelle_rtn_state_transitions},
   {NULL, NULL}
 };
 
-void register_object(lua_State *L, char *obj_name, const luaL_reg *methods)
+void register_object(lua_State *L, char *obj_name, const luaL_Reg *methods)
 {
   luaL_newmetatable(L, obj_name);
 
@@ -304,7 +309,7 @@ void register_object(lua_State *L, char *obj_name, const luaL_reg *methods)
   lua_pushvalue(L, -1); /* duplicates the metatable */
   lua_setfield(L, -2, "__index");
 
-  luaL_register(L, NULL, methods);
+  setfuncs(L, methods);
 }
 
 int luaopen_gazelle(lua_State *L)
@@ -313,9 +318,12 @@ int luaopen_gazelle(lua_State *L)
   register_object(L, "gazelle.rtn", rtn_methods);
   register_object(L, "gazelle.rtn_state", rtn_state_methods);
 
-  luaL_register(L, "gazelle", global_functions);
+  newlib(L, "gazelle", global_functions);
+
+  /* Initialize object cache. */
+  pushcachekey(L);
   lua_newtable(L);
-  lua_setfield(L, -2, "ObjectCache");
+  lua_settable(L, LUA_REGISTRYINDEX);
 
   return 1;
 }

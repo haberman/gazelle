@@ -50,7 +50,7 @@ TestSet = {}
     end
   end
 
-  function test_contains_one_value(set, val)
+  function _test_contains_one_value(set, val)
     assert_equals(false, set:isempty())
     assert_equals(1, set:count())
     assert_equals({val}, set:to_array())
@@ -64,7 +64,7 @@ TestSet = {}
   function TestSet:test_add_element()
     local set = Set:new()
     set:add(5)
-    test_contains_one_value(set, 5)
+    _test_contains_one_value(set, 5)
   end
 
   function TestSet:test_remove_element()
@@ -73,7 +73,7 @@ TestSet = {}
     set:add(5)
     set:add(val)
     set:remove(5)
-    test_contains_one_value(set, val)
+    _test_contains_one_value(set, val)
   end
 
   function TestSet:test_add_collection()

@@ -63,13 +63,13 @@ static int bc_read_stream_lua_next_record(lua_State *L)
   return 0;
 }
 
-static const luaL_reg global_functions[] =
+static const luaL_Reg global_functions[] =
 {
   {"open", bc_read_stream_lua_open},
   {NULL, NULL}
 };
 
-static const luaL_reg read_stream_methods[] =
+static const luaL_Reg read_stream_methods[] =
 {
   {"next_record", bc_read_stream_lua_next_record},
   {NULL, NULL}
@@ -83,8 +83,9 @@ int luaopen_bc_read_stream(lua_State *L)
   lua_pushvalue(L, -1); /* duplicates the metatable */
   lua_setfield(L, -2, "__index");
 
-  luaL_register(L, NULL, read_stream_methods);
-  luaL_register(L, "bc_read_stream", global_functions);
+  setfuncs(L, read_stream_methods);
+
+  newlib(L, "bc_read_stream", global_functions);
   return 1;
 }
 
