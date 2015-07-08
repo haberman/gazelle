@@ -6,8 +6,6 @@
 
   Routines that test data structures like stacks, queues, etc.
 
-  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "luaunit"

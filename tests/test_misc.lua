@@ -6,8 +6,6 @@
 
   Tests for the functionality in misc.lua.
 
-  Copyright (c) 2009 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "luaunit"

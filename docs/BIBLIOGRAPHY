@@ -48,7 +48,7 @@ Parr, Terence.  The Definitive ANTLR Reference, 2007
    and semantic predicates.
 
 
-Parr, Terence.  ANTLR 3.0 Lookahead Analysis (December 06, 2006 entry)
+Parr, Terence.  ANTLR 3.0 Lookahead Analysis (blog entry from 2006-12-06)
    Available online at http://www.antlr.org/blog/antlr3/lookahead.tml
 
    ANTLR's algorithm for calculating LL(*) lookahead turns out to be quite

@@ -12,8 +12,6 @@
   A compiled Gazelle grammar consists of a bunch of state machines of
   various kinds -- see the manual for more details.
 
-  Copyright (c) 2007-2009 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #ifndef GAZELLE_GRAMMAR

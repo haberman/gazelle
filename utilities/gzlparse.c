@@ -8,8 +8,6 @@
   very minimal at the moment, but the intention is for it to grow
   into a very rich and useful utility for doing all sorts of things.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #include <stdio.h>

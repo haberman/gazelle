@@ -7,8 +7,6 @@
   A parser for our grammar language that builds RTNs representing the
   input grammar.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "misc"

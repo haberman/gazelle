@@ -14,8 +14,6 @@
   The interpreter primarily consists of maintaining the parse stack
   properly and transitioning the frames in response to the input.
 
-  Copyright (c) 2007-2009 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #include <stdio.h>

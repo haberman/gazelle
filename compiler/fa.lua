@@ -27,8 +27,6 @@
   of understanding all the different ways NFAs and DFAs are used throughout
   Gazelle.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "misc"

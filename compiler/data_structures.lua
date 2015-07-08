@@ -7,8 +7,6 @@
   Implementations of useful data structures that we use often.
   Most of these are just useful interfaces around Lua's tables.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "misc"

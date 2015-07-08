@@ -6,8 +6,6 @@
 
   A quick and dirty module for writing files in Bitcode format.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 module("bc", package.seeall)

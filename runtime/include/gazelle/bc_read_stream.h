@@ -8,8 +8,6 @@
   in Bitcode format.  It allows skipping blocks and rewinding to the
   beginning of a block.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #ifndef BITCODE_READ_STREAM

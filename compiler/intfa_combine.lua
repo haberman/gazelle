@@ -11,8 +11,6 @@
   as possible -- only when two terminals conflict is it necessary to
   use different DFAs.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 -- Determine what terminals (if any) conflict with each other.

@@ -9,8 +9,6 @@
   not interpret the meaning of the edges.  It is nice to keep these
   algorithms separate from the FA data structure in fa.lua.
 
-  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 

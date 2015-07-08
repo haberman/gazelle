@@ -6,8 +6,6 @@
 
   These are Lua wrappers for Gazelle.
 
-  Copyright (c) 2007-2008 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #include <gazelle/parse.h>

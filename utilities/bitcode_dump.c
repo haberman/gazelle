@@ -9,8 +9,6 @@
   be extended to dump only selected parts, or to dump it in other,
   more useful formats.
 
-  Copyright (c) 2007 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #include <gazelle/bc_read_stream.h>

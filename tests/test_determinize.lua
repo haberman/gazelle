@@ -6,8 +6,6 @@
 
   Tests for NFA -> DFA conversion.
 
-  Copyright (c) 2009 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "luaunit"

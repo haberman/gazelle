@@ -21,8 +21,6 @@
 
   Finally, it is written out to bytecode by the bytecode emitting step.
 
-  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "data_structures"

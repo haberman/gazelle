@@ -6,8 +6,6 @@
 
   This file presents the public API for parsing text using Gazelle.
 
-  Copyright (c) 2007-2009 Joshua Haberman.  See LICENSE for details.
-
 *********************************************************************/
 
 #ifndef GAZELLE_PARSE

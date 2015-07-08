@@ -6,8 +6,6 @@
 
   Routines that test the generation of IntFAs.
 
-  Copyright (c) 2008 Joshua Haberman.  See LICENSE for details.
-
 --------------------------------------------------------------------]]--
 
 require "luaunit"
